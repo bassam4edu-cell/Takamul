@@ -5,6 +5,11 @@ import path from "path";
 import dotenv from "dotenv";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
+
+// تعريف مسارات النظام لتجنب مشكلة Render
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 dotenv.config();
 
 const sql = neon(process.env.DATABASE_URL!);
@@ -95,7 +100,8 @@ initDb();
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  // تعديل المنفذ ليتوافق مع خوادم Render
+  const PORT = process.env.PORT || 3000;
 
   app.use(express.json());
 
