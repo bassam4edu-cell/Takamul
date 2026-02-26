@@ -3,7 +3,8 @@ import { createServer as createViteServer } from "vite";
 import { neon } from "@neondatabase/serverless";
 import path from "path";
 import dotenv from "dotenv";
-
+import { fileURLToPath } from "url";
+import { dirname } from "path";
 dotenv.config();
 
 const sql = neon(process.env.DATABASE_URL!);
