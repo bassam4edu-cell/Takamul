@@ -101,7 +101,7 @@ initDb();
 async function startServer() {
   const app = express();
   // تعديل المنفذ ليتوافق مع خوادم Render
-  const PORT = process.env.PORT || 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   app.use(express.json());
 
@@ -279,6 +279,62 @@ async function startServer() {
     res.json({ success: true });
   });
 
+  app.post("/api/admin/users/:id/delete", async (req, res) => {
+    const userId = req.params.id;
+    console.log(`[ADMIN] Request to delete user ID: ${userId}`);
+    try {
+      // 1. Delete user grades
+      await sql`DELETE FROM user_grades WHERE user_id = ${userId}`;
+      console.log(`- Deleted grades for user ${userId}`);
+      
+      // 2. Delete referral logs associated with the user (actions they took)
+      await sql`DELETE FROM referral_logs WHERE user_id = ${userId}`;
+      console.log(`- Deleted logs for user ${userId}`);
+      
+      // 3. Handle referrals created by this user
+      const createdReferrals = await sql`SELECT id FROM referrals WHERE teacher_id = ${userId}`;
+      if (createdReferrals.length > 0) {
+        const ids = createdReferrals.map((r: any) => r.id);
+        console.log(`- Found ${ids.length} referrals created by user ${userId}. Deleting logs...`);
+        // Delete logs for these referrals first
+        for (const id of ids) {
+          await sql`DELETE FROM referral_logs WHERE referral_id = ${id}`;
+        }
+        // Delete the referrals themselves
+        await sql`DELETE FROM referrals WHERE teacher_id = ${userId}`;
+        console.log(`- Deleted referrals created by user ${userId}`);
+      }
+
+      // 4. Handle referrals assigned to this user
+      await sql`UPDATE referrals SET assigned_to_id = NULL WHERE assigned_to_id = ${userId}`;
+      console.log(`- Unassigned referrals from user ${userId}`);
+      
+      // 5. Finally delete the user
+      await sql`DELETE FROM users WHERE id = ${userId}`;
+      console.log(`- Successfully deleted user ${userId}`);
+      
+      res.json({ success: true });
+    } catch (err) {
+      console.error(`[ADMIN] User deletion failed for ID ${userId}:`, err);
+      res.status(500).json({ success: false, error: "فشل حذف المستخدم من قاعدة البيانات" });
+    }
+  });
+
+  app.post("/api/admin/users/create", async (req, res) => {
+    const { name, email, password, role } = req.body;
+    try {
+      const existing = await sql`SELECT * FROM users WHERE email = ${email}`;
+      if (existing.length > 0) {
+        return res.status(400).json({ success: false, error: "البريد الإلكتروني موجود مسبقاً" });
+      }
+      await sql`INSERT INTO users (name, email, password, role) VALUES (${name}, ${email}, ${password}, ${role})`;
+      res.json({ success: true });
+    } catch (err) {
+      console.error("User creation failed:", err);
+      res.status(500).json({ success: false, error: "فشل إنشاء المستخدم" });
+    }
+  });
+
   app.post("/api/admin/referrals/:id/update", async (req, res) => {
     const { type, severity, reason, teacher_notes, status } = req.body;
     await sql`
@@ -291,14 +347,78 @@ async function startServer() {
 
   app.post("/api/admin/students/import", async (req, res) => {
     const { students } = req.body; // Expecting array of { name, national_id, grade, section }
+    console.log(`Attempting to import ${students?.length} students`);
     
     try {
+      if (!students || !Array.isArray(students)) {
+        return res.status(400).json({ success: false, error: "Invalid students data" });
+      }
+
       for (const student of students) {
         await sql`INSERT INTO students (name, national_id, grade, section) VALUES (${student.name}, ${student.national_id}, ${student.grade}, ${student.section})`;
       }
+      console.log(`Successfully imported ${students.length} students`);
       res.json({ success: true, count: students.length });
     } catch (err) {
-      res.status(500).json({ success: false, error: "Import failed" });
+      console.error("Import failed:", err);
+      res.status(500).json({ success: false, error: "Import failed: " + (err instanceof Error ? err.message : String(err)) });
+    }
+  });
+
+  app.get("/api/admin/students", async (req, res) => {
+    try {
+      const students = await sql`SELECT * FROM students ORDER BY grade, section, name`;
+      res.json(students);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch students" });
+    }
+  });
+
+  app.post("/api/admin/grades/delete", async (req, res) => {
+    const { grade } = req.body;
+    if (!grade) return res.status(400).json({ error: "Grade is required" });
+
+    try {
+      console.log(`[ADMIN] Request to delete entire grade: ${grade}`);
+      
+      // 1. Find all students in this grade
+      const studentsInGrade = await sql`SELECT id FROM students WHERE grade = ${grade}`;
+      
+      if (studentsInGrade.length > 0) {
+        const studentIds = studentsInGrade.map((s: any) => s.id);
+        
+        // 2. Find all referrals for these students
+        const referrals = await sql`SELECT id FROM referrals WHERE student_id = ANY(${studentIds})`;
+        
+        if (referrals.length > 0) {
+          const refIds = referrals.map((r: any) => r.id);
+          // 3. Delete logs for these referrals
+          await sql`DELETE FROM referral_logs WHERE referral_id = ANY(${refIds})`;
+          // 4. Delete the referrals
+          await sql`DELETE FROM referrals WHERE id = ANY(${refIds})`;
+        }
+        
+        // 5. Delete the students
+        await sql`DELETE FROM students WHERE id = ANY(${studentIds})`;
+      }
+
+      // 6. Remove this grade from user assignments
+      await sql`DELETE FROM user_grades WHERE grade = ${grade}`;
+      
+      console.log(`[ADMIN] Successfully deleted grade ${grade} and all associated data`);
+      res.json({ success: true });
+    } catch (err) {
+      console.error(`[ADMIN] Failed to delete grade ${grade}:`, err);
+      res.status(500).json({ error: "فشل حذف الصف. يرجى المحاولة مرة أخرى." });
+    }
+  });
+
+  app.delete("/api/admin/students/:id", async (req, res) => {
+    try {
+      await sql`DELETE FROM students WHERE id = ${req.params.id}`;
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to delete student" });
     }
   });
 
