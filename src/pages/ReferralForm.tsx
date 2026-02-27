@@ -25,8 +25,11 @@ const ReferralForm: React.FC = () => {
     type: 'behavior',
     severity: 'medium',
     reason: '',
-    teacher_notes: ''
+    teacher_notes: '',
+    remedial_plan: '',
+    remedial_plan_file: ''
   });
+  const [fileError, setFileError] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
@@ -39,6 +42,31 @@ const ReferralForm: React.FC = () => {
   const grades = Array.from(new Set(students.map(s => s.grade)));
   const sections = Array.from(new Set(students.filter(s => s.grade === selectedGrade).map(s => s.section)));
   const filteredStudents = students.filter(s => s.grade === selectedGrade && s.section === selectedSection);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    setFileError('');
+    
+    if (!file) return;
+
+    if (file.type !== 'application/pdf') {
+      setFileError('يرجى اختيار ملف PDF فقط');
+      e.target.value = '';
+      return;
+    }
+
+    if (file.size > 500 * 1024) {
+      setFileError('حجم الملف يجب أن لا يتجاوز 500 كيلوبايت');
+      e.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setFormData({ ...formData, remedial_plan_file: reader.result as string });
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -214,6 +242,31 @@ const ReferralForm: React.FC = () => {
                   className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all resize-none"
                 />
               </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-700 mr-1">الخطة العلاجية (اختياري)</label>
+                <textarea 
+                  rows={4}
+                  placeholder="اكتب الإجراءات التربوية أو الخطة العلاجية التي تم اتخاذها..."
+                  value={formData.remedial_plan}
+                  onChange={(e) => setFormData({...formData, remedial_plan: e.target.value})}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all resize-none"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-700 mr-1">إرفاق ملف الخطة (PDF - بحد أقصى 500KB)</label>
+                <div className="relative">
+                  <input 
+                    type="file"
+                    accept=".pdf"
+                    onChange={handleFileChange}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                  />
+                </div>
+                {fileError && <p className="text-red-500 text-xs mt-1 mr-1">{fileError}</p>}
+                {formData.remedial_plan_file && !fileError && <p className="text-emerald-600 text-xs mt-1 mr-1">تم إرفاق الملف بنجاح</p>}
+              </div>
             </div>
           </div>
         </div>
@@ -222,7 +275,7 @@ const ReferralForm: React.FC = () => {
           <div className="bg-white p-6 rounded-[2rem] card-shadow border border-slate-100 space-y-6">
             <div className="flex items-center gap-3 text-blue-600 font-bold">
               <AlertTriangle size={20} />
-              <span>مستوى الخطورة</span>
+              <span>تكرار المخالفة</span>
             </div>
             
             <div className="space-y-3">
@@ -240,7 +293,7 @@ const ReferralForm: React.FC = () => {
                   }`}
                 >
                   <span className="font-bold">
-                    {s === 'high' ? 'مرتفعة جداً' : s === 'medium' ? 'متوسطة' : 'منخفضة / عادية'}
+                    {s === 'high' ? 'المرة الثالثة فأكثر' : s === 'medium' ? 'المرة الثانية' : 'المرة الأولى'}
                   </span>
                   <div className={`w-4 h-4 rounded-full border-2 ${
                     formData.severity === s ? 'bg-current border-white' : 'border-slate-300'

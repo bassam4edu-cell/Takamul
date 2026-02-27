@@ -17,7 +17,11 @@ import {
   Users,
   Edit2,
   Save,
-  X
+  X,
+  RotateCcw,
+  File,
+  Download,
+  ExternalLink
 } from 'lucide-react';
 import { Referral, ReferralLog } from '../types';
 import { useAuth } from '../App';
@@ -41,8 +45,11 @@ const ReferralDetails: React.FC = () => {
     severity: '',
     reason: '',
     teacher_notes: '',
+    remedial_plan: '',
+    remedial_plan_file: '',
     status: ''
   });
+  const [fileError, setFileError] = useState('');
 
   useEffect(() => {
     fetch(`/api/referrals/${id}`)
@@ -54,11 +61,32 @@ const ReferralDetails: React.FC = () => {
           severity: d.referral.severity,
           reason: d.referral.reason,
           teacher_notes: d.referral.teacher_notes,
+          remedial_plan: d.referral.remedial_plan || '',
+          remedial_plan_file: d.referral.remedial_plan_file || '',
           status: d.referral.status
         });
         setLoading(false);
       });
   }, [id]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    setFileError('');
+    if (!file) return;
+    if (file.type !== 'application/pdf') {
+      setFileError('يرجى اختيار ملف PDF فقط');
+      return;
+    }
+    if (file.size > 500 * 1024) {
+      setFileError('حجم الملف يجب أن لا يتجاوز 500 كيلوبايت');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setEditForm({ ...editForm, remedial_plan_file: reader.result as string });
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleAdminUpdate = async () => {
     setSubmitting(true);
@@ -151,7 +179,7 @@ const ReferralDetails: React.FC = () => {
         </div>
         
         <div className="flex items-center gap-3">
-          {user?.role === 'admin' && (
+          {(user?.role === 'admin' || (user?.role === 'teacher' && referral.status === 'returned_to_teacher')) && (
             <button 
               onClick={() => setIsEditing(!isEditing)}
               className={`no-print px-4 py-2 rounded-2xl text-sm font-bold border flex items-center gap-2 transition-all shadow-sm ${
@@ -178,6 +206,12 @@ const ReferralDetails: React.FC = () => {
             <span className="px-4 py-2 bg-blue-50 text-blue-700 rounded-2xl text-sm font-bold border border-blue-100 flex items-center gap-2">
               <Calendar size={18} />
               موعد جلسة مع ولي الأمر
+            </span>
+          )}
+          {referral.status === 'returned_to_teacher' && (
+            <span className="px-4 py-2 bg-amber-50 text-amber-700 rounded-2xl text-sm font-bold border border-amber-100 flex items-center gap-2">
+              <RotateCcw size={18} />
+              معاد للمعلم لاستكمال النواقص
             </span>
           )}
           {referral.status === 'resolved' && (
@@ -248,9 +282,18 @@ const ReferralDetails: React.FC = () => {
                     referral.severity === 'high' ? 'text-red-600' : 
                     referral.severity === 'medium' ? 'text-amber-600' : 'text-blue-600'
                   }`}>
-                    {referral.severity === 'high' ? 'خطورة مرتفعة' : 
-                     referral.severity === 'medium' ? 'خطورة متوسطة' : 'خطورة منخفضة'}
+                    {referral.severity === 'high' ? 'المرة الثالثة فأكثر' : 
+                     referral.severity === 'medium' ? 'المرة الثانية' : 'المرة الأولى'}
                   </span>
+                  {referral.status === 'returned_to_teacher' && (
+                    <>
+                      <span className="w-1 h-1 bg-slate-300 rounded-full" />
+                      <span className="text-red-600 font-bold flex items-center gap-1">
+                        <AlertCircle size={14} />
+                        بانتظار استكمال النواقص
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -294,6 +337,64 @@ const ReferralDetails: React.FC = () => {
               </div>
             </div>
 
+            <div className="space-y-4 pt-6 border-t border-slate-50">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-wider">
+                  <ShieldAlert size={16} />
+                  <span>الخطة العلاجية / الإجراءات التربوية</span>
+                </div>
+                {!isEditing && referral.remedial_plan_file && (
+                  <div className="flex gap-2">
+                    <a 
+                      href={referral.remedial_plan_file} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 transition-all"
+                    >
+                      <File size={14} />
+                      <span>عرض</span>
+                      <ExternalLink size={12} />
+                    </a>
+                    <a 
+                      href={referral.remedial_plan_file} 
+                      download={`plan_${referral.id}.pdf`}
+                      className="flex items-center gap-1 text-xs font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100 transition-all"
+                    >
+                      <Download size={14} />
+                      <span>تحميل</span>
+                    </a>
+                  </div>
+                )}
+              </div>
+              
+              {isEditing ? (
+                <div className="space-y-4">
+                  <textarea 
+                    rows={3}
+                    value={editForm.remedial_plan}
+                    onChange={(e) => setEditForm({...editForm, remedial_plan: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all resize-none"
+                    placeholder="اكتب الخطة العلاجية أو الإجراءات التي تم اتخاذها..."
+                  />
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 mr-1">تحديث ملف الخطة (PDF - بحد أقصى 500KB)</label>
+                    <input 
+                      type="file"
+                      accept=".pdf"
+                      onChange={handleFileChange}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs focus:ring-2 focus:ring-blue-500/20 outline-none file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                    />
+                    {fileError && <p className="text-red-500 text-[10px] mt-1 mr-1">{fileError}</p>}
+                    {editForm.remedial_plan_file && !fileError && <p className="text-emerald-600 text-[10px] mt-1 mr-1">تم إرفاق الملف بنجاح</p>}
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-blue-50 p-5 rounded-2xl border border-blue-100 text-blue-800 text-sm leading-relaxed">
+                  {referral.remedial_plan || 'لم يتم تسجيل خطة علاجية بعد'}
+                </div>
+              )}
+            </div>
+
             {isEditing && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-6 border-t border-slate-50">
                 <div className="space-y-2">
@@ -310,15 +411,15 @@ const ReferralDetails: React.FC = () => {
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-500 mr-1">مستوى الخطورة</label>
+                  <label className="text-xs font-bold text-slate-500 mr-1">تكرار المخالفة</label>
                   <select 
                     value={editForm.severity}
                     onChange={(e) => setEditForm({...editForm, severity: e.target.value})}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none"
                   >
-                    <option value="low">منخفضة</option>
-                    <option value="medium">متوسطة</option>
-                    <option value="high">مرتفعة</option>
+                    <option value="low">المرة الأولى</option>
+                    <option value="medium">المرة الثانية</option>
+                    <option value="high">المرة الثالثة فأكثر</option>
                   </select>
                 </div>
                 <div className="space-y-2">
@@ -335,15 +436,31 @@ const ReferralDetails: React.FC = () => {
                     <option value="closed">مغلق</option>
                   </select>
                 </div>
-                <div className="md:col-span-3">
+                <div className="md:col-span-3 flex gap-3">
                   <button 
                     onClick={handleAdminUpdate}
                     disabled={submitting}
-                    className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
+                    className={`flex-1 font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2 ${
+                      user?.role === 'teacher' ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-blue-600 text-white hover:bg-blue-700'
+                    }`}
                   >
                     <Save size={18} />
-                    <span>حفظ التعديلات</span>
+                    <span>{user?.role === 'teacher' ? 'حفظ التعديلات فقط' : 'حفظ التعديلات'}</span>
                   </button>
+                  {user?.role === 'teacher' && referral.status === 'returned_to_teacher' && (
+                    <button 
+                      onClick={async () => {
+                        await handleAdminUpdate();
+                        // We need to wait for the state to update or just pass the notes directly
+                        await handleAction('تم استكمال النواقص وإعادة الإرسال للوكيل', 'pending_vp', 'تم تحديث البيانات المطلوبة واستكمال النواقص.');
+                      }}
+                      disabled={submitting}
+                      className="flex-[2] bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-100"
+                    >
+                      <Send size={18} />
+                      <span>حفظ وإرسال للوكيل</span>
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -386,7 +503,8 @@ const ReferralDetails: React.FC = () => {
 
         <div className="space-y-8">
           {((user?.role === 'vice_principal' && referral.status === 'pending_vp') || 
-            (user?.role === 'counselor' && (referral.status === 'pending_counselor' || referral.status === 'scheduled_meeting'))) && (
+            (user?.role === 'counselor' && (referral.status === 'pending_counselor' || referral.status === 'scheduled_meeting')) ||
+            (user?.role === 'teacher' && referral.status === 'returned_to_teacher')) && (
             <motion.div 
               initial={{ x: 20, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
@@ -472,6 +590,14 @@ const ReferralDetails: React.FC = () => {
                           <span>تحويل للموجه</span>
                         </button>
                         <button
+                          onClick={() => handleAction('ارجاع التحويل للمعلم لاستكمال نواقص', 'returned_to_teacher')}
+                          disabled={submitting}
+                          className="w-full bg-amber-500 text-white font-bold py-4 rounded-2xl hover:bg-amber-600 transition-all flex items-center justify-center gap-2 shadow-lg shadow-amber-100"
+                        >
+                          <RotateCcw size={18} />
+                          <span>إرجاع للمعلم (نواقص)</span>
+                        </button>
+                        <button
                           onClick={() => handleAction('إغلاق الحالة مباشرة', 'resolved')}
                           disabled={submitting}
                           className="w-full bg-emerald-600 text-white font-bold py-4 rounded-2xl hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-100"
@@ -503,38 +629,22 @@ const ReferralDetails: React.FC = () => {
                         </button>
                       </>
                     )}
+                    {user?.role === 'teacher' && referral.status === 'returned_to_teacher' && (
+                      <button
+                        onClick={() => handleAction('استكمال النواقص وإعادة الإرسال', 'pending_vp')}
+                        disabled={submitting}
+                        className="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl hover:bg-blue-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-100"
+                      >
+                        <Send size={18} />
+                        <span>استكمال النواقص وإعادة الإرسال</span>
+                      </button>
+                    )}
                   </div>
                 </>
               )}
             </motion.div>
           )}
 
-          <div className="bg-slate-900 p-8 rounded-[2.5rem] text-white space-y-6">
-            <h3 className="font-bold text-lg">معلومات تواصل</h3>
-            <div className="space-y-4">
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center">
-                  <User size={20} className="text-blue-400" />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-400">ولي الأمر</p>
-                  <p className="text-sm font-bold">محمد أحمد العلي</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center">
-                  <MessageSquare size={20} className="text-blue-400" />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-400">رقم التواصل</p>
-                  <p className="text-sm font-bold">050XXXXXXX</p>
-                </div>
-              </div>
-            </div>
-            <button className="w-full bg-white/10 hover:bg-white/20 py-3 rounded-xl text-sm font-bold transition-all">
-              عرض ملف الطالب الكامل
-            </button>
-          </div>
         </div>
       </div>
     </div>

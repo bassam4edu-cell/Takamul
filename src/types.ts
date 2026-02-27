@@ -1,4 +1,4 @@
-export type Role = 'teacher' | 'vice_principal' | 'counselor' | 'admin';
+export type Role = 'teacher' | 'vice_principal' | 'counselor' | 'admin' | 'principal';
 
 export interface User {
   id: number;
@@ -29,7 +29,9 @@ export interface Referral {
   severity: 'low' | 'medium' | 'high';
   reason: string;
   teacher_notes: string;
-  status: 'pending_vp' | 'pending_counselor' | 'scheduled_meeting' | 'resolved' | 'closed';
+  remedial_plan?: string;
+  remedial_plan_file?: string;
+  status: 'pending_vp' | 'pending_counselor' | 'scheduled_meeting' | 'resolved' | 'closed' | 'returned_to_teacher';
   created_at: string;
 }
 

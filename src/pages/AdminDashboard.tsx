@@ -17,8 +17,10 @@ import {
 import { motion } from 'motion/react';
 import * as XLSX from 'xlsx';
 import { User } from '../types';
+import { useAuth } from '../App';
 
 const AdminDashboard: React.FC = () => {
+  const { user } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
@@ -312,7 +314,7 @@ const AdminDashboard: React.FC = () => {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">إدارة النظام</h1>
+          <h1 className="text-2xl font-bold text-slate-900">إدارة النظام - مرحباً بك، {user?.name}</h1>
           <p className="text-slate-500">إدارة صلاحيات المستخدمين واستيراد بيانات الطلاب.</p>
           <button 
             onClick={() => alert('نظام التنبيهات يعمل!')}

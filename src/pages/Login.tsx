@@ -7,7 +7,7 @@ import { motion } from 'motion/react';
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'teacher' | 'vice_principal' | 'counselor' | 'admin'>('teacher');
+  const [role, setRole] = useState<'teacher' | 'vice_principal' | 'counselor' | 'admin' | 'principal'>('teacher');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
@@ -67,19 +67,19 @@ const Login: React.FC = () => {
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2 mr-1">نوع الحساب</label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-1 bg-slate-100 rounded-2xl">
-                {(['teacher', 'vice_principal', 'counselor', 'admin'] as const).map((r) => (
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 p-1 bg-slate-100 rounded-2xl">
+                {(['teacher', 'vice_principal', 'counselor', 'admin', 'principal'] as const).map((r) => (
                   <button
                     key={r}
                     type="button"
                     onClick={() => setRole(r)}
-                    className={`py-2 px-3 rounded-xl text-xs font-medium transition-all ${
+                    className={`py-2 px-3 rounded-xl text-[10px] font-medium transition-all ${
                       role === r 
                         ? 'bg-white text-blue-600 shadow-sm' 
                         : 'text-slate-500 hover:text-slate-700'
                     }`}
                   >
-                    {r === 'teacher' ? 'معلم' : r === 'vice_principal' ? 'وكيل' : r === 'counselor' ? 'موجه' : 'أدمن'}
+                    {r === 'teacher' ? 'معلم' : r === 'vice_principal' ? 'وكيل' : r === 'counselor' ? 'موجه' : r === 'admin' ? 'أدمن' : 'مدير'}
                   </button>
                 ))}
               </div>

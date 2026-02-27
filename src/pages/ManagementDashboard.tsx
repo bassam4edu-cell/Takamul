@@ -32,7 +32,7 @@ const ManagementDashboard: React.FC = () => {
 
   const filteredReferrals = referrals.filter(r => {
     if (filter === 'all') return true;
-    if (filter === 'pending') return r.status.startsWith('pending') || r.status === 'scheduled_meeting';
+    if (filter === 'pending') return r.status.startsWith('pending') || r.status === 'scheduled_meeting' || r.status === 'returned_to_teacher';
     if (filter === 'resolved') return r.status === 'resolved';
     return true;
   });
@@ -48,6 +48,7 @@ const ManagementDashboard: React.FC = () => {
       case 'pending_vp': return <span className="px-3 py-1 bg-red-50 text-red-700 rounded-full text-xs font-medium border border-red-100">بانتظار الوكيل</span>;
       case 'pending_counselor': return <span className="px-3 py-1 bg-amber-50 text-amber-700 rounded-full text-xs font-medium border border-amber-100">بانتظار الموجه</span>;
       case 'scheduled_meeting': return <span className="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-medium border border-blue-100">موعد مع ولي الأمر</span>;
+      case 'returned_to_teacher': return <span className="px-3 py-1 bg-red-50 text-red-700 rounded-full text-xs font-medium border border-red-100">نواقص - بانتظار المعلم</span>;
       case 'resolved': return <span className="px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full text-xs font-medium border border-emerald-100">تم الحل</span>;
       case 'closed': return <span className="px-3 py-1 bg-slate-50 text-slate-700 rounded-full text-xs font-medium border border-slate-100">مغلق</span>;
       default: return null;
@@ -157,8 +158,8 @@ const ManagementDashboard: React.FC = () => {
                           referral.severity === 'high' ? 'text-red-600' : 
                           referral.severity === 'medium' ? 'text-amber-600' : 'text-blue-600'
                         }`}>
-                          {referral.severity === 'high' ? 'خطورة مرتفعة' : 
-                           referral.severity === 'medium' ? 'خطورة متوسطة' : 'خطورة منخفضة'}
+                          {referral.severity === 'high' ? 'المرة الثالثة فأكثر' : 
+                           referral.severity === 'medium' ? 'المرة الثانية' : 'المرة الأولى'}
                         </span>
                       </div>
                     </div>

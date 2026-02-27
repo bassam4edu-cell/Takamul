@@ -47,10 +47,14 @@ async function initDb() {
         severity TEXT, -- 'low', 'medium', 'high'
         reason TEXT,
         teacher_notes TEXT,
+        remedial_plan TEXT,
         status TEXT, -- 'pending_vp', 'pending_counselor', 'resolved', 'closed'
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `;
+
+    await sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS remedial_plan TEXT`;
+    await sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS remedial_plan_file TEXT`;
 
     await sql`
       CREATE TABLE IF NOT EXISTS referral_logs (
@@ -77,6 +81,7 @@ async function initDb() {
       await sql`INSERT INTO users (name, email, password, role) VALUES ('أ. محمد الأحمد', 'teacher@school.edu', 'password', 'teacher')`;
       await sql`INSERT INTO users (name, email, password, role) VALUES ('أ. فهد السالم', 'vp@school.edu', 'password', 'vice_principal')`;
       await sql`INSERT INTO users (name, email, password, role) VALUES ('أ. محمد الفهيد', 'counselor@school.edu', 'password', 'counselor')`;
+      await sql`INSERT INTO users (name, email, password, role) VALUES ('د. خالد المنصور', 'principal@school.edu', 'password', 'principal')`;
       await sql`INSERT INTO users (name, email, password, role) VALUES ('مدير النظام', 'admin@school.edu', 'password', 'admin')`;
 
       await sql`INSERT INTO students (name, national_id, grade, section) VALUES ('أحمد محمد', '1100223344', 'الصف الثالث', 'أ')`;
@@ -91,6 +96,12 @@ async function initDb() {
     if (adminExists.length === 0) {
       await sql`INSERT INTO users (name, email, password, role) VALUES ('مدير النظام', 'admin@school.edu', 'password', 'admin')`;
     }
+
+    // Ensure principal user exists
+    const principalExists = await sql`SELECT * FROM users WHERE role = 'principal'`;
+    if (principalExists.length === 0) {
+      await sql`INSERT INTO users (name, email, password, role) VALUES ('د. خالد المنصور', 'principal@school.edu', 'password', 'principal')`;
+    }
   } catch (err) {
     console.error("Database initialization error:", err);
   }
@@ -103,7 +114,8 @@ async function startServer() {
   // تعديل المنفذ ليتوافق مع خوادم Render
   const PORT = Number(process.env.PORT) || 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: '2mb' }));
+  app.use(express.urlencoded({ limit: '2mb', extended: true }));
 
   // API Routes
   app.post("/api/login", async (req, res) => {
@@ -119,12 +131,35 @@ async function startServer() {
     }
   });
 
+  app.get("/api/admin/performance", async (req, res) => {
+    try {
+      const performance = await sql`
+        SELECT 
+          u.id,
+          u.name, 
+          u.role,
+          COUNT(r.id) as total_resolved,
+          AVG(EXTRACT(EPOCH FROM (l.created_at - r.created_at))/3600) as avg_hours
+        FROM referral_logs l
+        JOIN referrals r ON l.referral_id = r.id
+        JOIN users u ON l.user_id = u.id
+        WHERE (l.action LIKE '%حل%' OR l.action LIKE '%إغلاق%')
+        AND u.role IN ('vice_principal', 'counselor')
+        GROUP BY u.id, u.name, u.role
+      `;
+      res.json(performance);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch performance data" });
+    }
+  });
+
   app.get("/api/referrals", async (req, res) => {
     const userId = req.query.userId as string;
     const userRole = req.query.role as string;
 
     let referrals;
-    if (userId && userRole !== 'admin') {
+    if (userId && userRole !== 'admin' && userRole !== 'principal') {
       const gradesResult = await sql`SELECT grade FROM user_grades WHERE user_id = ${userId}`;
       const grades = gradesResult.map((g: any) => g.grade);
       
@@ -198,14 +233,27 @@ async function startServer() {
   });
 
   app.post("/api/referrals", async (req, res) => {
-    const { student_id, teacher_id, type, severity, reason, teacher_notes } = req.body;
-    const result = await sql`
-      INSERT INTO referrals (student_id, teacher_id, type, severity, reason, teacher_notes, status)
-      VALUES (${student_id}, ${teacher_id}, ${type}, ${severity}, ${reason}, ${teacher_notes}, 'pending_vp')
-      RETURNING id
-    `;
-    
-    res.json({ success: true, id: result[0].id });
+    const { student_id, teacher_id, type, severity, reason, teacher_notes, remedial_plan, remedial_plan_file } = req.body;
+    try {
+      const result = await sql`
+        INSERT INTO referrals (student_id, teacher_id, type, severity, reason, teacher_notes, remedial_plan, remedial_plan_file, status)
+        VALUES (${student_id}, ${teacher_id}, ${type}, ${severity}, ${reason}, ${teacher_notes}, ${remedial_plan}, ${remedial_plan_file}, 'pending_vp')
+        RETURNING id
+      `;
+      
+      const referralId = result[0].id;
+      
+      // Add initial log entry
+      await sql`
+        INSERT INTO referral_logs (referral_id, user_id, action, notes) 
+        VALUES (${referralId}, ${teacher_id}, 'إنشاء التحويل', 'تم إنشاء التحويل وتحويله آلياً إلى وكيل شؤون الطلاب للمراجعة')
+      `;
+      
+      res.json({ success: true, id: referralId });
+    } catch (err) {
+      console.error("Referral creation failed:", err);
+      res.status(500).json({ success: false, error: "Failed to create referral" });
+    }
   });
 
   app.get("/api/referrals/:id", async (req, res) => {
@@ -336,10 +384,10 @@ async function startServer() {
   });
 
   app.post("/api/admin/referrals/:id/update", async (req, res) => {
-    const { type, severity, reason, teacher_notes, status } = req.body;
+    const { type, severity, reason, teacher_notes, remedial_plan, remedial_plan_file, status } = req.body;
     await sql`
       UPDATE referrals 
-      SET type = ${type}, severity = ${severity}, reason = ${reason}, teacher_notes = ${teacher_notes}, status = ${status} 
+      SET type = ${type}, severity = ${severity}, reason = ${reason}, teacher_notes = ${teacher_notes}, remedial_plan = ${remedial_plan}, remedial_plan_file = ${remedial_plan_file}, status = ${status} 
       WHERE id = ${req.params.id}
     `;
     res.json({ success: true });

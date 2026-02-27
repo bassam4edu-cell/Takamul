@@ -30,7 +30,7 @@ const TeacherDashboard: React.FC = () => {
 
   const stats = [
     { label: 'إجمالي التحويلات', value: referrals.length, icon: AlertCircle, color: 'bg-blue-500' },
-    { label: 'قيد المعالجة', value: referrals.filter(r => r.status.startsWith('pending') || r.status === 'scheduled_meeting').length, icon: Clock, color: 'bg-amber-500' },
+    { label: 'قيد المعالجة', value: referrals.filter(r => r.status.startsWith('pending') || r.status === 'scheduled_meeting' || r.status === 'returned_to_teacher').length, icon: Clock, color: 'bg-amber-500' },
     { label: 'تم الحل', value: referrals.filter(r => r.status === 'resolved').length, icon: CheckCircle2, color: 'bg-emerald-500' },
   ];
 
@@ -39,6 +39,7 @@ const TeacherDashboard: React.FC = () => {
       case 'pending_vp': return <span className="px-3 py-1 bg-amber-50 text-amber-700 rounded-full text-xs font-medium border border-amber-100">بانتظار الوكيل</span>;
       case 'pending_counselor': return <span className="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-medium border border-blue-100">بانتظار الموجه</span>;
       case 'scheduled_meeting': return <span className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-xs font-medium border border-indigo-100">موعد مع ولي الأمر</span>;
+      case 'returned_to_teacher': return <span className="px-3 py-1 bg-red-50 text-red-700 rounded-full text-xs font-medium border border-red-100">نواقص - بانتظار المعلم</span>;
       case 'resolved': return <span className="px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full text-xs font-medium border border-emerald-100">تم الحل</span>;
       case 'closed': return <span className="px-3 py-1 bg-slate-50 text-slate-700 rounded-full text-xs font-medium border border-slate-100">مغلق</span>;
       default: return null;
@@ -58,7 +59,7 @@ const TeacherDashboard: React.FC = () => {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">مرحباً بك، أ. محمد</h1>
+          <h1 className="text-2xl font-bold text-slate-900">مرحباً بك، {user?.name}</h1>
           <p className="text-slate-500">إليك نظرة عامة على تحويلات الطلاب الخاصة بك.</p>
         </div>
         <Link 
@@ -147,8 +148,8 @@ const TeacherDashboard: React.FC = () => {
                     </td>
                     <td className="px-6 py-4">
                       <span className={`text-xs font-bold ${getSeverityColor(referral.severity)}`}>
-                        {referral.severity === 'high' ? 'مرتفعة' : 
-                         referral.severity === 'medium' ? 'متوسطة' : 'منخفضة'}
+                        {referral.severity === 'high' ? 'المرة الثالثة فأكثر' : 
+                         referral.severity === 'medium' ? 'المرة الثانية' : 'المرة الأولى'}
                       </span>
                     </td>
                     <td className="px-6 py-4">

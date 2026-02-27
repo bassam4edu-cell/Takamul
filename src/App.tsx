@@ -8,6 +8,7 @@ import ManagementDashboard from './pages/ManagementDashboard';
 import ReferralDetails from './pages/ReferralDetails';
 import Settings from './pages/Settings';
 import AdminDashboard from './pages/AdminDashboard';
+import PrincipalDashboard from './pages/PrincipalDashboard';
 import Layout from './components/Layout';
 
 interface AuthContextType {
@@ -98,6 +99,7 @@ const DashboardSwitcher = () => {
   const { user } = useAuth();
   if (user?.role === 'teacher') return <TeacherDashboard />;
   if (user?.role === 'admin') return <AdminDashboard />;
+  if (user?.role === 'principal') return <PrincipalDashboard />;
   return <ManagementDashboard />;
 };
 
