@@ -82,7 +82,7 @@ const Login: React.FC = () => {
         <div className="max-w-md w-full">
           <div className="mb-10 flex flex-col items-center text-center">
             <img 
-              src="https://upload.wikimedia.org/wikipedia/ar/thumb/a/a2/Ministry_of_Education_Saudi_Arabia.svg/512px-Ministry_of_Education_Saudi_Arabia.svg.png" 
+              src=""https://i.ibb.co/QFwrvnqF/photo-2026-02-20-15-16-20.jpg" 
               alt="شعار وزارة التعليم" 
               className="w-40 h-40 mb-2 object-contain"
               referrerPolicy="no-referrer"
