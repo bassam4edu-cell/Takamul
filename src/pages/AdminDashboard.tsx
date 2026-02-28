@@ -12,7 +12,8 @@ import {
   Edit2,
   Save,
   X,
-  Trash2
+  Trash2,
+  Lock
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import * as XLSX from 'xlsx';
@@ -26,6 +27,8 @@ const AdminDashboard: React.FC = () => {
   const [importing, setImporting] = useState(false);
   const [importSuccess, setImportSuccess] = useState<number | null>(null);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
+  const [editingPasswordUserId, setEditingPasswordUserId] = useState<number | null>(null);
+  const [newPassword, setNewPassword] = useState('');
   const [editForm, setEditForm] = useState({ name: '', email: '' });
   const [allGrades, setAllGrades] = useState<string[]>([]);
   const [students, setStudents] = useState<any[]>([]);
@@ -114,6 +117,25 @@ const AdminDashboard: React.FC = () => {
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const savePasswordUpdate = async (userId: number) => {
+    if (!newPassword) return;
+    try {
+      const res = await fetch(`/api/admin/users/${userId}/password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: newPassword }),
+      });
+      if (res.ok) {
+        setEditingPasswordUserId(null);
+        setNewPassword('');
+        alert('تم تحديث كلمة المرور بنجاح');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('فشل تحديث كلمة المرور');
     }
   };
 
@@ -305,38 +327,49 @@ const AdminDashboard: React.FC = () => {
       case 'teacher': return 'معلم';
       case 'vice_principal': return 'وكيل';
       case 'counselor': return 'موجه';
+      case 'principal': return 'مدير مدرسة';
       case 'admin': return 'مدير نظام';
       default: return role;
     }
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10 pb-12">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">إدارة النظام - مرحباً بك، {user?.name}</h1>
-          <p className="text-slate-500">إدارة صلاحيات المستخدمين واستيراد بيانات الطلاب.</p>
-          <button 
-            onClick={() => alert('نظام التنبيهات يعمل!')}
-            className="mt-2 text-[10px] bg-slate-200 px-2 py-1 rounded"
-          >
-            اختبار التنبيهات
-          </button>
+          <h1 className="text-3xl font-extrabold text-slate-900">لوحة تحكم المسؤول</h1>
+          <p className="text-slate-500 mt-1">إدارة المستخدمين، الطلاب، وإعدادات النظام.</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="bg-white p-2 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-2">
+            <div className="w-10 h-10 bg-primary/5 text-primary rounded-xl flex items-center justify-center">
+              <Shield size={20} />
+            </div>
+            <div className="pl-4">
+              <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">حالة النظام</p>
+              <p className="text-sm font-extrabold text-emerald-600 flex items-center gap-1.5">
+                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                متصل ومستقر
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white rounded-[2.5rem] card-shadow border border-slate-100 overflow-hidden">
-            <div className="p-8 border-b border-slate-100 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Users className="text-blue-600" size={24} />
-                <h2 className="text-xl font-bold text-slate-800">المستخدمون والصلاحيات</h2>
+        <div className="lg:col-span-2 space-y-8">
+          <div className="sts-card overflow-hidden">
+            <div className="p-10 border-b border-slate-50 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-primary/5 text-primary rounded-2xl flex items-center justify-center">
+                  <Users size={24} />
+                </div>
+                <h2 className="text-xl font-extrabold text-slate-800">المستخدمون والصلاحيات</h2>
               </div>
               <div className="flex items-center gap-4">
                 <button 
                   onClick={() => setShowAddUser(!showAddUser)}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20"
+                  className="sts-button-accent px-6 py-3 flex items-center gap-2 shadow-xl shadow-accent/20"
                 >
                   <UserPlus size={18} />
                   <span>إضافة مستخدم</span>
@@ -346,7 +379,7 @@ const AdminDashboard: React.FC = () => {
                   <input 
                     type="text" 
                     placeholder="بحث عن مستخدم..." 
-                    className="bg-slate-50 border border-slate-100 rounded-xl py-2 pr-10 pl-4 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+                    className="bg-slate-50 border border-slate-100 rounded-xl py-2 pr-10 pl-4 text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                   />
                 </div>
               </div>
@@ -356,65 +389,66 @@ const AdminDashboard: React.FC = () => {
               <motion.div 
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: 'auto', opacity: 1 }}
-                className="p-8 bg-slate-50 border-b border-slate-100"
+                className="p-10 bg-slate-50/50 border-b border-slate-50"
               >
-                <form onSubmit={handleAddUser} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 mr-2">الاسم الكامل</label>
+                <form onSubmit={handleAddUser} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-xs font-extrabold text-slate-500 mr-2 uppercase tracking-widest">الاسم الكامل</label>
                     <input 
                       type="text" 
                       required
                       value={newUserForm.name}
                       onChange={(e) => setNewUserForm({...newUserForm, name: e.target.value})}
-                      className="w-full bg-white border border-slate-200 rounded-xl py-2 px-4 text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
+                      className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-sm outline-none focus:ring-2 focus:ring-primary/20 font-bold"
                       placeholder="أ. محمد علي"
                     />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 mr-2">البريد الإلكتروني (اسم المستخدم)</label>
+                  <div className="space-y-2">
+                    <label className="text-xs font-extrabold text-slate-500 mr-2 uppercase tracking-widest">البريد الإلكتروني</label>
                     <input 
                       type="email" 
                       required
                       value={newUserForm.email}
                       onChange={(e) => setNewUserForm({...newUserForm, email: e.target.value})}
-                      className="w-full bg-white border border-slate-200 rounded-xl py-2 px-4 text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
+                      className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-sm outline-none focus:ring-2 focus:ring-primary/20 font-bold"
                       placeholder="user@school.edu"
                     />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 mr-2">كلمة المرور</label>
+                  <div className="space-y-2">
+                    <label className="text-xs font-extrabold text-slate-500 mr-2 uppercase tracking-widest">كلمة المرور</label>
                     <input 
                       type="password" 
                       required
                       value={newUserForm.password}
                       onChange={(e) => setNewUserForm({...newUserForm, password: e.target.value})}
-                      className="w-full bg-white border border-slate-200 rounded-xl py-2 px-4 text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
+                      className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-sm outline-none focus:ring-2 focus:ring-primary/20 font-bold"
                       placeholder="••••••••"
                     />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 mr-2">الصلاحية</label>
-                    <div className="flex items-center gap-2">
+                  <div className="space-y-2">
+                    <label className="text-xs font-extrabold text-slate-500 mr-2 uppercase tracking-widest">الصلاحية</label>
+                    <div className="flex items-center gap-3">
                       <select 
                         value={newUserForm.role}
                         onChange={(e) => setNewUserForm({...newUserForm, role: e.target.value})}
-                        className="flex-1 bg-white border border-slate-200 rounded-xl py-2 px-4 text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
+                        className="flex-1 bg-white border border-slate-200 rounded-xl py-3 px-4 text-sm outline-none focus:ring-2 focus:ring-primary/20 font-bold"
                       >
                         <option value="teacher">معلم</option>
                         <option value="vice_principal">وكيل</option>
                         <option value="counselor">موجه</option>
+                        <option value="principal">مدير مدرسة</option>
                         <option value="admin">مدير نظام</option>
                       </select>
                       <button 
                         type="submit"
-                        className="bg-blue-600 text-white p-2 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20"
+                        className="bg-primary text-white p-3 rounded-xl hover:bg-primary/90 transition-all shadow-lg shadow-primary/20"
                       >
                         <Save size={20} />
                       </button>
                       <button 
                         type="button"
                         onClick={() => setShowAddUser(false)}
-                        className="bg-slate-200 text-slate-600 p-2 rounded-xl hover:bg-slate-300 transition-all"
+                        className="bg-slate-200 text-slate-600 p-3 rounded-xl hover:bg-slate-300 transition-all"
                       >
                         <X size={20} />
                       </button>
@@ -427,77 +461,81 @@ const AdminDashboard: React.FC = () => {
             <div className="overflow-x-auto">
               <table className="w-full text-right">
                 <thead>
-                  <tr className="bg-slate-50/50 text-slate-500 text-xs font-semibold uppercase tracking-wider">
-                    <th className="px-8 py-4">المستخدم</th>
-                    <th className="px-8 py-4">البريد الإلكتروني</th>
-                    <th className="px-8 py-4">الصلاحية</th>
-                    <th className="px-8 py-4">الصفوف المسندة</th>
-                    <th className="px-8 py-4">الإجراءات</th>
+                  <tr className="bg-slate-50/50 text-slate-500 text-[10px] font-extrabold uppercase tracking-widest">
+                    <th className="px-8 py-5">المستخدم</th>
+                    <th className="px-8 py-5">الصلاحية والصفوف</th>
+                    <th className="px-8 py-5">الإجراءات</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-50">
                   {loading ? (
-                    <tr><td colSpan={5} className="px-8 py-10 text-center text-slate-400">جاري التحميل...</td></tr>
+                    <tr><td colSpan={3} className="px-8 py-16 text-center text-slate-400 font-bold">جاري التحميل...</td></tr>
                   ) : (
                     users.map((u) => (
-                      <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-8 py-4">
-                          <div className="flex flex-col gap-1">
-                            {editingUserId === u.id ? (
-                              <input 
-                                type="text"
-                                value={editForm.name}
-                                onChange={(e) => setEditForm({...editForm, name: e.target.value})}
-                                className="w-full bg-slate-50 border border-slate-200 rounded-lg py-1 px-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
-                              />
-                            ) : (
-                              <span className="font-bold text-slate-800">{u.name}</span>
-                            )}
-                            {editingUserId === u.id ? (
-                              <input 
-                                type="email"
-                                value={editForm.email}
-                                onChange={(e) => setEditForm({...editForm, email: e.target.value})}
-                                className="w-full bg-slate-50 border border-slate-200 rounded-lg py-1 px-2 text-xs outline-none focus:ring-2 focus:ring-blue-500/20"
-                              />
-                            ) : (
-                              <span className="text-slate-400 text-xs">{u.email}</span>
-                            )}
+                      <tr key={u.id} className="hover:bg-slate-50/30 transition-colors group">
+                        <td className="px-8 py-6">
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 bg-primary/5 text-primary rounded-xl flex items-center justify-center font-extrabold shadow-sm border border-primary/10">
+                              {u.name.charAt(0)}
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              {editingUserId === u.id ? (
+                                <input 
+                                  type="text"
+                                  value={editForm.name}
+                                  onChange={(e) => setEditForm({...editForm, name: e.target.value})}
+                                  className="bg-white border border-slate-200 rounded-lg py-1.5 px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20 font-bold"
+                                />
+                              ) : (
+                                <span className="font-extrabold text-slate-800">{u.name}</span>
+                              )}
+                              {editingUserId === u.id ? (
+                                <input 
+                                  type="email"
+                                  value={editForm.email}
+                                  onChange={(e) => setEditForm({...editForm, email: e.target.value})}
+                                  className="bg-white border border-slate-200 rounded-lg py-1.5 px-3 text-xs outline-none focus:ring-2 focus:ring-primary/20 font-bold mt-1"
+                                />
+                              ) : (
+                                <span className="text-slate-400 text-xs font-bold">{u.email}</span>
+                              )}
+                            </div>
                           </div>
                         </td>
-                        <td className="px-8 py-4">
-                          <div className="flex flex-col gap-3">
-                            <div className="flex items-center gap-2">
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                        <td className="px-8 py-6">
+                          <div className="flex flex-col gap-4">
+                            <div className="flex items-center gap-3">
+                              <span className={`px-3 py-1 rounded-lg text-[10px] font-extrabold border uppercase tracking-widest ${
                                 u.role === 'admin' ? 'bg-purple-50 text-purple-700 border-purple-100' :
                                 u.role === 'vice_principal' ? 'bg-red-50 text-red-700 border-red-100' :
                                 u.role === 'counselor' ? 'bg-amber-50 text-amber-700 border-amber-100' :
-                                'bg-blue-50 text-blue-700 border-blue-100'
+                                'bg-primary/5 text-primary border-primary/10'
                               }`}>
                                 {getRoleLabel(u.role)}
                               </span>
                               <select 
                                 value={u.role}
                                 onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                                className="bg-slate-50 border border-slate-200 rounded-lg py-1 px-2 text-[10px] focus:ring-2 focus:ring-blue-500/20 outline-none"
+                                className="bg-slate-50 border border-slate-200 rounded-lg py-1 px-2 text-[10px] focus:ring-2 focus:ring-primary/20 outline-none font-bold"
                               >
                                 <option value="teacher">معلم</option>
                                 <option value="vice_principal">وكيل</option>
                                 <option value="counselor">موجه</option>
+                                <option value="principal">مدير مدرسة</option>
                                 <option value="admin">مدير نظام</option>
                               </select>
                             </div>
-                            <div className="space-y-1">
-                              <span className="text-[10px] text-slate-400 font-medium block">الصفوف المسندة:</span>
-                              <div className="flex flex-wrap gap-1 max-w-[250px]">
+                            <div className="space-y-2">
+                              <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest block">الصفوف المسندة:</span>
+                              <div className="flex flex-wrap gap-1.5 max-w-[300px]">
                                 {allGrades.map(g => (
                                   <button
                                     key={g}
                                     onClick={() => toggleGrade(u.id, g, u.assigned_grades || [])}
-                                    className={`px-2 py-0.5 rounded-md text-[9px] font-bold transition-all border ${
+                                    className={`px-2.5 py-1 rounded-lg text-[9px] font-extrabold transition-all border ${
                                       (u.assigned_grades || []).includes(g)
-                                        ? 'bg-blue-600 text-white border-blue-600'
-                                        : 'bg-white text-slate-400 border-slate-200 hover:border-blue-300'
+                                        ? 'bg-primary text-white border-primary shadow-sm'
+                                        : 'bg-white text-slate-400 border-slate-200 hover:border-primary/30'
                                     }`}
                                   >
                                     {g}
@@ -507,49 +545,83 @@ const AdminDashboard: React.FC = () => {
                             </div>
                           </div>
                         </td>
-                        <td className="px-8 py-4">
+                        <td className="px-8 py-6">
                           <div className="flex items-center gap-2">
-                            {editingUserId === u.id ? (
-                              <div className="flex items-center gap-1">
+                            {editingPasswordUserId === u.id ? (
+                              <div className="flex items-center gap-2">
+                                <input 
+                                  type="password"
+                                  placeholder="كلمة المرور الجديدة"
+                                  value={newPassword}
+                                  onChange={(e) => setNewPassword(e.target.value)}
+                                  className="w-40 bg-white border border-slate-200 rounded-xl py-2 px-4 text-xs outline-none focus:ring-2 focus:ring-primary/20 font-bold"
+                                />
+                                <button 
+                                  onClick={() => savePasswordUpdate(u.id)}
+                                  className="p-2.5 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-500/20"
+                                  title="حفظ"
+                                >
+                                  <Save size={16} />
+                                </button>
+                                <button 
+                                  onClick={() => {
+                                    setEditingPasswordUserId(null);
+                                    setNewPassword('');
+                                  }}
+                                  className="p-2.5 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200 transition-all"
+                                  title="إلغاء"
+                                >
+                                  <X size={16} />
+                                </button>
+                              </div>
+                            ) : editingUserId === u.id ? (
+                              <div className="flex items-center gap-2">
                                 <button 
                                   onClick={() => saveUserUpdate(u.id)}
-                                  className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all"
+                                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-xl text-xs font-extrabold hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-500/20"
                                 >
-                                  <Save size={14} />
-                                  <span>حفظ</span>
+                                  <Save size={16} />
+                                  <span>حفظ التغييرات</span>
                                 </button>
                                 <button 
                                   onClick={cancelEditing}
-                                  className="flex items-center gap-1 px-3 py-1.5 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-200 transition-all"
+                                  className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-extrabold hover:bg-slate-200 transition-all"
                                 >
-                                  <X size={14} />
+                                  <X size={16} />
                                   <span>إلغاء</span>
                                 </button>
                               </div>
                             ) : deletingUserId === u.id ? (
-                              <div className="flex items-center gap-1 bg-red-50 p-1 rounded-lg border border-red-100 animate-pulse">
-                                <span className="text-[10px] font-bold text-red-600 px-1">تأكيد؟</span>
+                              <div className="flex items-center gap-2 bg-red-50 p-1.5 rounded-xl border border-red-100 animate-pulse">
+                                <span className="text-[10px] font-extrabold text-red-600 px-2 uppercase tracking-widest">تأكيد الحذف؟</span>
                                 <button 
                                   onClick={() => deleteUser(u.id)}
-                                  className="px-2 py-1 bg-red-600 text-white rounded text-[10px] font-bold hover:bg-red-700"
+                                  className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-[10px] font-extrabold hover:bg-red-700 shadow-sm"
                                 >
                                   نعم
                                 </button>
                                 <button 
                                   onClick={() => setDeletingUserId(null)}
-                                  className="px-2 py-1 bg-slate-200 text-slate-600 rounded text-[10px] font-bold hover:bg-slate-300"
+                                  className="px-3 py-1.5 bg-slate-200 text-slate-600 rounded-lg text-[10px] font-extrabold hover:bg-slate-300"
                                 >
                                   لا
                                 </button>
                               </div>
                             ) : (
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button 
                                   onClick={() => startEditing(u)}
-                                  className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-all"
+                                  className="flex items-center gap-2 px-4 py-2 bg-primary/5 text-primary rounded-xl text-xs font-extrabold hover:bg-primary/10 transition-all"
                                 >
                                   <Edit2 size={14} />
                                   <span>تعديل</span>
+                                </button>
+                                <button 
+                                  onClick={() => setEditingPasswordUserId(u.id)}
+                                  className="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-600 rounded-xl text-xs font-extrabold hover:bg-amber-100 transition-all"
+                                >
+                                  <Lock size={14} />
+                                  <span>كلمة المرور</span>
                                 </button>
                                 <button 
                                   type="button"
@@ -557,9 +629,10 @@ const AdminDashboard: React.FC = () => {
                                     e.preventDefault();
                                     setDeletingUserId(u.id);
                                   }}
-                                  className="px-4 py-2 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700 active:scale-95 transition-all shadow-md"
+                                  className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-xl text-xs font-extrabold hover:bg-red-100 transition-all"
                                 >
-                                  حذف
+                                  <Trash2 size={14} />
+                                  <span>حذف</span>
                                 </button>
                               </div>
                             )}
@@ -573,29 +646,33 @@ const AdminDashboard: React.FC = () => {
             </div>
           </div>
 
-          <div className="bg-white rounded-[2.5rem] card-shadow border border-slate-100 overflow-hidden">
-            <div className="p-8 border-b border-slate-100 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Users className="text-emerald-600" size={24} />
-                <h2 className="text-xl font-bold text-slate-800">إدارة الطلاب</h2>
-                {students.length === 0 && (
-                  <span className="text-xs bg-amber-50 text-amber-600 px-2 py-1 rounded-lg font-bold">لا يوجد بيانات طلاب</span>
-                )}
+          <div className="sts-card overflow-hidden">
+            <div className="p-10 border-b border-slate-50 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-primary/5 text-primary rounded-2xl flex items-center justify-center">
+                  <Users size={24} />
+                </div>
+                <div className="flex flex-col">
+                  <h2 className="text-xl font-extrabold text-slate-800">إدارة الطلاب</h2>
+                  {students.length === 0 && (
+                    <span className="text-[10px] text-amber-600 font-extrabold uppercase tracking-widest">لا يوجد بيانات طلاب</span>
+                  )}
+                </div>
               </div>
               <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                   {deletingGrade === selectedGradeFilter ? (
-                    <div className="flex items-center gap-2 bg-red-50 px-3 py-1 rounded-xl border border-red-100 animate-pulse">
-                      <span className="text-xs font-bold text-red-600">حذف الصف بجميع طلابه؟</span>
+                    <div className="flex items-center gap-3 bg-red-50 px-4 py-2 rounded-2xl border border-red-100 animate-pulse">
+                      <span className="text-xs font-extrabold text-red-600">حذف الصف بجميع طلابه؟</span>
                       <button 
                         onClick={() => deleteGrade(selectedGradeFilter)}
-                        className="bg-red-600 text-white px-3 py-1 rounded-lg text-xs font-bold hover:bg-red-700"
+                        className="bg-red-600 text-white px-4 py-1.5 rounded-xl text-xs font-extrabold hover:bg-red-700 shadow-sm"
                       >
                         نعم
                       </button>
                       <button 
                         onClick={() => setDeletingGrade(null)}
-                        className="bg-slate-200 text-slate-600 px-3 py-1 rounded-lg text-xs font-bold hover:bg-slate-300"
+                        className="bg-slate-200 text-slate-600 px-4 py-1.5 rounded-xl text-xs font-extrabold hover:bg-slate-300"
                       >
                         لا
                       </button>
@@ -604,11 +681,11 @@ const AdminDashboard: React.FC = () => {
                     selectedGradeFilter && (
                       <button 
                         onClick={() => setDeletingGrade(selectedGradeFilter)}
-                        className="flex items-center gap-2 px-3 py-2 bg-red-50 text-red-600 rounded-xl text-xs font-bold hover:bg-red-100 transition-all"
+                        className="flex items-center gap-2 px-4 py-3 bg-red-50 text-red-600 rounded-2xl text-xs font-extrabold hover:bg-red-100 transition-all border border-red-100"
                         title="حذف هذا الصف بالكامل"
                       >
-                        <Trash2 size={14} />
-                        <span>حذف الصف بالكامل</span>
+                        <Trash2 size={16} />
+                        <span>حذف الصف</span>
                       </button>
                     )
                   )}
@@ -619,7 +696,7 @@ const AdminDashboard: React.FC = () => {
                       setSelectedSectionFilter('');
                       setDeletingGrade(null);
                     }}
-                    className="bg-slate-50 border border-slate-100 rounded-xl py-2 px-4 text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
+                    className="bg-slate-50 border border-slate-100 rounded-2xl py-3 px-5 text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all font-bold"
                   >
                     <option value="">اختر الصف</option>
                     {Array.from(new Set(students.map(s => s.grade).filter(Boolean))).sort().map(grade => (
@@ -631,7 +708,7 @@ const AdminDashboard: React.FC = () => {
                     value={selectedSectionFilter}
                     onChange={(e) => setSelectedSectionFilter(e.target.value)}
                     disabled={!selectedGradeFilter}
-                    className="bg-slate-50 border border-slate-100 rounded-xl py-2 px-4 text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all disabled:opacity-50"
+                    className="bg-slate-50 border border-slate-100 rounded-2xl py-3 px-5 text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all disabled:opacity-50 font-bold"
                   >
                     <option value="">اختر الفصل</option>
                     {selectedGradeFilter && Array.from(new Set(
@@ -645,13 +722,13 @@ const AdminDashboard: React.FC = () => {
                   </select>
                 </div>
                 <div className="relative">
-                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
                   <input 
                     type="text" 
                     placeholder="بحث عن طالب..." 
                     value={studentSearch}
                     onChange={(e) => setStudentSearch(e.target.value)}
-                    className="bg-slate-50 border border-slate-100 rounded-xl py-2 pr-10 pl-4 text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
+                    className="bg-slate-50 border border-slate-100 rounded-2xl py-3 pr-12 pl-5 text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all font-bold"
                   />
                 </div>
               </div>
@@ -660,14 +737,14 @@ const AdminDashboard: React.FC = () => {
             <div className="overflow-x-auto">
               <table className="w-full text-right">
                 <thead>
-                  <tr className="bg-slate-50/50 text-slate-500 text-xs font-semibold uppercase tracking-wider">
-                    <th className="px-8 py-4">الطالب</th>
-                    <th className="px-8 py-4">رقم الهوية</th>
-                    <th className="px-8 py-4">الصف / الفصل</th>
-                    <th className="px-8 py-4">الإجراءات</th>
+                  <tr className="bg-slate-50/50 text-slate-500 text-[10px] font-extrabold uppercase tracking-widest">
+                    <th className="px-8 py-5">الطالب</th>
+                    <th className="px-8 py-5">رقم الهوية</th>
+                    <th className="px-8 py-5">الصف / الفصل</th>
+                    <th className="px-8 py-5">الإجراءات</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-50">
                   {(() => {
                     const filteredStudents = students.filter(s => {
                       const matchesSearch = studentSearch 
@@ -686,10 +763,12 @@ const AdminDashboard: React.FC = () => {
                     if (filteredStudents.length === 0) {
                       return (
                         <tr>
-                          <td colSpan={4} className="px-8 py-12 text-center">
-                            <div className="flex flex-col items-center gap-2 text-slate-400">
-                              <AlertCircle size={40} className="opacity-20" />
-                              <p className="text-sm font-medium">
+                          <td colSpan={4} className="px-8 py-20 text-center">
+                            <div className="flex flex-col items-center gap-4 text-slate-300">
+                              <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center border border-slate-100">
+                                <AlertCircle size={40} className="opacity-50" />
+                              </div>
+                              <p className="text-sm font-extrabold uppercase tracking-widest">
                                 {!selectedGradeFilter && !studentSearch ? 'يرجى اختيار الصف والفصل لعرض الطلاب' : 
                                  selectedGradeFilter && !selectedSectionFilter ? 'يرجى اختيار الفصل' :
                                  'لا يوجد طلاب يطابقون البحث'}
@@ -701,32 +780,37 @@ const AdminDashboard: React.FC = () => {
                     }
 
                     return filteredStudents.map((s) => (
-                      <tr key={s.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-8 py-4">
-                          {editingStudentId === s.id ? (
-                            <input 
-                              type="text"
-                              value={studentEditForm.name}
-                              onChange={(e) => setStudentEditForm({...studentEditForm, name: e.target.value})}
-                              className="w-full bg-slate-50 border border-slate-200 rounded-lg py-1 px-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500/20"
-                            />
-                          ) : (
-                            <span className="font-bold text-slate-800">{s.name}</span>
-                          )}
+                      <tr key={s.id} className="hover:bg-slate-50/30 transition-colors group">
+                        <td className="px-8 py-6">
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 bg-primary/5 text-primary rounded-xl flex items-center justify-center font-extrabold shadow-sm border border-primary/10">
+                              {s.name.charAt(0)}
+                            </div>
+                            {editingStudentId === s.id ? (
+                              <input 
+                                type="text"
+                                value={studentEditForm.name}
+                                onChange={(e) => setStudentEditForm({...studentEditForm, name: e.target.value})}
+                                className="bg-white border border-slate-200 rounded-lg py-1.5 px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20 font-bold"
+                              />
+                            ) : (
+                              <span className="font-extrabold text-slate-800">{s.name}</span>
+                            )}
+                          </div>
                         </td>
-                        <td className="px-8 py-4">
+                        <td className="px-8 py-6">
                           {editingStudentId === s.id ? (
                             <input 
                               type="text"
                               value={studentEditForm.national_id}
                               onChange={(e) => setStudentEditForm({...studentEditForm, national_id: e.target.value})}
-                              className="w-full bg-slate-50 border border-slate-200 rounded-lg py-1 px-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500/20"
+                              className="bg-white border border-slate-200 rounded-lg py-1.5 px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20 font-bold"
                             />
                           ) : (
-                            <span className="text-slate-500 text-sm">{s.national_id}</span>
+                            <span className="text-slate-500 text-sm font-bold">{s.national_id}</span>
                           )}
                         </td>
-                        <td className="px-8 py-4">
+                        <td className="px-8 py-6">
                           {editingStudentId === s.id ? (
                             <div className="flex gap-2">
                               <input 
@@ -734,59 +818,61 @@ const AdminDashboard: React.FC = () => {
                                 placeholder="الصف"
                                 value={studentEditForm.grade}
                                 onChange={(e) => setStudentEditForm({...studentEditForm, grade: e.target.value})}
-                                className="w-20 bg-slate-50 border border-slate-200 rounded-lg py-1 px-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500/20"
+                                className="w-24 bg-white border border-slate-200 rounded-lg py-1.5 px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20 font-bold"
                               />
                               <input 
                                 type="text"
                                 placeholder="الفصل"
                                 value={studentEditForm.section}
                                 onChange={(e) => setStudentEditForm({...studentEditForm, section: e.target.value})}
-                                className="w-20 bg-slate-50 border border-slate-200 rounded-lg py-1 px-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500/20"
+                                className="w-24 bg-white border border-slate-200 rounded-lg py-1.5 px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20 font-bold"
                               />
                             </div>
                           ) : (
-                            <div className="flex items-center gap-2">
-                              <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded text-xs font-bold">{s.grade}</span>
-                              <span className="px-2 py-1 bg-emerald-50 text-emerald-600 rounded text-xs font-bold">{s.section}</span>
+                            <div className="flex items-center gap-3">
+                              <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-extrabold uppercase tracking-widest">{s.grade}</span>
+                              <span className="px-3 py-1 bg-primary/5 text-primary rounded-lg text-[10px] font-extrabold uppercase tracking-widest">{s.section}</span>
                             </div>
                           )}
                         </td>
-                        <td className="px-8 py-4">
+                        <td className="px-8 py-6">
                           <div className="flex items-center gap-2">
                             {editingStudentId === s.id ? (
-                              <div className="flex items-center gap-1">
+                              <div className="flex items-center gap-2">
                                 <button 
                                   onClick={() => saveStudentUpdate(s.id)}
-                                  className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
+                                  className="p-2.5 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-500/20"
                                   title="حفظ"
                                 >
                                   <Save size={16} />
                                 </button>
                                 <button 
                                   onClick={() => setEditingStudentId(null)}
-                                  className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                  className="p-2.5 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200 transition-all"
                                   title="إلغاء"
                                 >
                                   <X size={16} />
                                 </button>
                               </div>
                             ) : (
-                              <>
+                              <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button 
                                   onClick={() => startEditingStudent(s)}
-                                  className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                  className="flex items-center gap-2 px-4 py-2 bg-primary/5 text-primary rounded-xl text-xs font-extrabold hover:bg-primary/10 transition-all"
                                   title="تعديل"
                                 >
                                   <Edit2 size={16} />
+                                  <span>تعديل</span>
                                 </button>
                                 <button 
                                   onClick={() => deleteStudent(s.id)}
-                                  className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                  className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-xl text-xs font-extrabold hover:bg-red-100 transition-all"
                                   title="حذف"
                                 >
                                   <Trash2 size={16} />
+                                  <span>حذف</span>
                                 </button>
-                              </>
+                              </div>
                             )}
                           </div>
                         </td>
@@ -799,14 +885,16 @@ const AdminDashboard: React.FC = () => {
           </div>
         </div>
 
-        <div className="space-y-6">
-          <div className="bg-white p-8 rounded-[2.5rem] card-shadow border border-slate-100 space-y-6">
-            <div className="flex items-center gap-3 text-blue-600 font-bold text-lg">
-              <FileSpreadsheet size={24} />
-              <span>استيراد الطلاب (Excel)</span>
+        <div className="space-y-8">
+          <div className="sts-card p-10 space-y-8">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-primary/5 text-primary rounded-2xl flex items-center justify-center">
+                <FileSpreadsheet size={24} />
+              </div>
+              <h2 className="text-xl font-extrabold text-slate-800">استيراد الطلاب (Excel)</h2>
             </div>
             
-            <p className="text-sm text-slate-500 leading-relaxed">
+            <p className="text-sm text-slate-500 leading-relaxed font-bold">
               يمكنك رفع ملف Excel يحتوي على قائمة الطلاب. تأكد من وجود أعمدة باسم "الاسم"، "رقم الهوية"، "الصف"، و "الفصل".
             </p>
 
@@ -821,14 +909,14 @@ const AdminDashboard: React.FC = () => {
               />
               <label 
                 htmlFor="excel-upload"
-                className={`w-full flex flex-col items-center justify-center gap-4 p-10 border-2 border-dashed border-slate-200 rounded-[2rem] cursor-pointer hover:bg-slate-50 hover:border-blue-400 transition-all ${importing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`w-full flex flex-col items-center justify-center gap-6 p-12 border-2 border-dashed border-slate-200 rounded-[2.5rem] cursor-pointer hover:bg-slate-50 hover:border-primary/50 transition-all group ${importing ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center">
-                  <Upload size={32} />
+                <div className="w-20 h-20 bg-primary/5 text-primary rounded-3xl flex items-center justify-center group-hover:scale-110 transition-transform shadow-sm border border-primary/10">
+                  <Upload size={36} />
                 </div>
                 <div className="text-center">
-                  <p className="font-bold text-slate-800">{importing ? 'جاري الرفع...' : 'اضغط لرفع الملف'}</p>
-                  <p className="text-xs text-slate-400 mt-1">XLSX, XLS (حتى 5MB)</p>
+                  <p className="font-extrabold text-slate-800 text-lg">{importing ? 'جاري الرفع...' : 'اضغط لرفع الملف'}</p>
+                  <p className="text-xs text-slate-400 mt-2 font-bold uppercase tracking-widest">XLSX, XLS (حتى 5MB)</p>
                 </div>
               </label>
             </div>
@@ -837,31 +925,42 @@ const AdminDashboard: React.FC = () => {
               <motion.div 
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl flex items-center gap-3 text-emerald-700"
+                className="bg-emerald-50 border border-emerald-100 p-6 rounded-2xl flex items-center gap-4 text-emerald-700"
               >
-                <CheckCircle2 size={20} />
-                <p className="text-sm font-bold">تم استيراد {importSuccess} طالب بنجاح!</p>
+                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm">
+                  <CheckCircle2 size={24} />
+                </div>
+                <p className="text-sm font-extrabold">تم استيراد {importSuccess} طالب بنجاح!</p>
               </motion.div>
             )}
           </div>
 
-          <div className="bg-slate-900 p-8 rounded-[2.5rem] text-white space-y-6">
-            <div className="flex items-center gap-3">
-              <Shield className="text-blue-400" size={24} />
-              <h3 className="font-bold text-lg">تنبيهات الأمان</h3>
-            </div>
-            <div className="space-y-4">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="text-amber-400 shrink-0" size={18} />
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  تغيير صلاحيات المستخدمين يؤثر فوراً على قدرتهم على الوصول للبيانات الحساسة.
-                </p>
+          <div className="bg-slate-900 p-10 rounded-[2.5rem] text-white space-y-8 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-bl-[5rem] -mr-8 -mt-8" />
+            <div className="relative z-10">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center">
+                  <Shield className="text-primary" size={24} />
+                </div>
+                <h3 className="font-extrabold text-xl">تنبيهات الأمان</h3>
               </div>
-              <div className="flex items-start gap-3">
-                <AlertCircle className="text-amber-400 shrink-0" size={18} />
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  عند استيراد الطلاب، سيتم إضافة الأسماء الجديدة إلى قاعدة البيانات الحالية.
-                </p>
+              <div className="space-y-6">
+                <div className="flex items-start gap-4">
+                  <div className="w-8 h-8 bg-amber-500/10 rounded-lg flex items-center justify-center shrink-0">
+                    <AlertCircle className="text-amber-500" size={18} />
+                  </div>
+                  <p className="text-sm text-slate-400 font-bold leading-relaxed">
+                    تغيير صلاحيات المستخدمين يؤثر فوراً على قدرتهم على الوصول للبيانات الحساسة.
+                  </p>
+                </div>
+                <div className="flex items-start gap-4">
+                  <div className="w-8 h-8 bg-amber-500/10 rounded-lg flex items-center justify-center shrink-0">
+                    <AlertCircle className="text-amber-500" size={18} />
+                  </div>
+                  <p className="text-sm text-slate-400 font-bold leading-relaxed">
+                    عند استيراد الطلاب، سيتم إضافة الأسماء الجديدة إلى قاعدة البيانات الحالية.
+                  </p>
+                </div>
               </div>
             </div>
           </div>

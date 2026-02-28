@@ -24,6 +24,10 @@ const Settings: React.FC = () => {
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (user?.role !== 'admin') {
+      alert('عذراً، لا تملك الصلاحية لتعديل البيانات. يرجى مراجعة المسؤول.');
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch(`/api/admin/users/${user?.id}/update`, {
@@ -48,12 +52,17 @@ const Settings: React.FC = () => {
     {
       title: 'الحساب والأمان',
       items: [
-        { 
+        ...(user?.role === 'admin' ? [{ 
           icon: UserIcon, 
           label: 'تعديل الملف الشخصي', 
           desc: 'الاسم، البريد الإلكتروني، الصورة الشخصية',
           onClick: () => setIsEditingProfile(true)
-        },
+        }] : [{
+          icon: UserIcon, 
+          label: 'عرض الملف الشخصي', 
+          desc: 'الاسم، البريد الإلكتروني (للتعديل يرجى مراجعة المسؤول)',
+          onClick: () => setIsEditingProfile(true)
+        }]),
         { icon: Lock, label: 'كلمة المرور', desc: 'تحديث كلمة المرور وإعدادات الأمان' },
         { icon: Shield, label: 'الخصوصية', desc: 'إدارة ظهور البيانات والصلاحيات' },
       ]
@@ -87,7 +96,9 @@ const Settings: React.FC = () => {
           className="bg-white rounded-[2rem] card-shadow border border-slate-100 p-8 space-y-6"
         >
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-slate-800">تعديل الملف الشخصي</h2>
+            <h2 className="text-xl font-bold text-slate-800">
+              {user?.role === 'admin' ? 'تعديل الملف الشخصي' : 'عرض الملف الشخصي'}
+            </h2>
             <button onClick={() => setIsEditingProfile(false)} className="text-slate-400 hover:text-slate-600">
               <X size={24} />
             </button>
@@ -98,9 +109,10 @@ const Settings: React.FC = () => {
               <input 
                 type="text"
                 required
+                disabled={user?.role !== 'admin'}
                 value={profileForm.name}
                 onChange={(e) => setProfileForm({...profileForm, name: e.target.value})}
-                className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none"
+                className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none disabled:opacity-70"
               />
             </div>
             <div className="space-y-2">
@@ -108,19 +120,28 @@ const Settings: React.FC = () => {
               <input 
                 type="email"
                 required
+                disabled={user?.role !== 'admin'}
                 value={profileForm.email}
                 onChange={(e) => setProfileForm({...profileForm, email: e.target.value})}
-                className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none"
+                className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none disabled:opacity-70"
               />
             </div>
-            <button 
-              type="submit"
-              disabled={saving}
-              className="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl hover:bg-blue-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-100"
-            >
-              <Save size={20} />
-              <span>{saving ? 'جاري الحفظ...' : 'حفظ التغييرات'}</span>
-            </button>
+            {user?.role === 'admin' && (
+              <button 
+                type="submit"
+                disabled={saving}
+                className="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl hover:bg-blue-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-100"
+              >
+                <Save size={20} />
+                <span>{saving ? 'جاري الحفظ...' : 'حفظ التغييرات'}</span>
+              </button>
+            )}
+            {user?.role !== 'admin' && (
+              <div className="p-4 bg-amber-50 text-amber-700 rounded-2xl text-xs font-bold border border-amber-100 flex items-center gap-3">
+                <Shield size={18} />
+                <span>لتعديل بياناتك، يرجى التواصل مع مدير النظام.</span>
+              </div>
+            )}
           </form>
         </motion.div>
       ) : (
@@ -161,8 +182,11 @@ const Settings: React.FC = () => {
         </div>
       )}
 
-      <div className="pt-8 border-t border-slate-200 flex items-center justify-between text-slate-400 text-xs">
-        <p>© 2024 نظام تحويل الطلاب - الإصدار 1.0.0</p>
+      <div className="pt-8 border-t border-slate-200 flex items-center justify-between text-slate-400 text-[10px] font-bold">
+        <div className="space-y-1">
+          <p>© 2026 نظام تحويل الطلاب - الإصدار 1.0.0</p>
+          <p className="text-primary/60">برمجة: بسام غربي العنزي</p>
+        </div>
         <div className="flex items-center gap-4">
           <a href="#" className="hover:text-slate-600">سياسة الخصوصية</a>
           <a href="#" className="hover:text-slate-600">شروط الاستخدام</a>

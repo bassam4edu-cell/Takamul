@@ -56,50 +56,55 @@ const TeacherDashboard: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10 pb-12">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">مرحباً بك، {user?.name}</h1>
-          <p className="text-slate-500">إليك نظرة عامة على تحويلات الطلاب الخاصة بك.</p>
+          <h1 className="text-3xl font-extrabold text-slate-900">مرحباً بك، {user?.name}</h1>
+          <p className="text-slate-500 mt-1">إليك نظرة عامة على تحويلات الطلاب الخاصة بك.</p>
         </div>
         <Link 
           to="/referral/new"
-          className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-lg shadow-blue-200 transition-all"
+          className="sts-button-accent px-8 py-4 flex items-center gap-3 shadow-xl shadow-accent/20"
         >
-          <Plus size={20} />
+          <Plus size={22} />
           <span>تحويل جديد</span>
         </Link>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {stats.map((stat, i) => (
           <motion.div 
             key={stat.label}
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: i * 0.1 }}
-            className="bg-white p-6 rounded-3xl card-shadow border border-slate-100 flex items-center gap-4"
+            className="sts-card p-8 group relative overflow-hidden"
           >
-            <div className={`${stat.color} w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-slate-100`}>
-              <stat.icon size={24} />
-            </div>
-            <div>
-              <p className="text-sm text-slate-500 font-medium">{stat.label}</p>
-              <p className="text-2xl font-bold text-slate-900">{stat.value}</p>
+            <div className={`absolute top-0 right-0 w-24 h-24 ${stat.color.replace('bg-', 'bg-')}/5 rounded-bl-[5rem] -mr-8 -mt-8 transition-all group-hover:scale-110`} />
+            <div className="relative z-10 flex items-center gap-6">
+              <div className={`${stat.color} w-16 h-16 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-slate-100`}>
+                <stat.icon size={32} />
+              </div>
+              <div>
+                <p className="text-sm text-slate-500 font-bold mb-1 uppercase tracking-wider">{stat.label}</p>
+                <p className="text-4xl font-extrabold text-slate-900">{stat.value}</p>
+              </div>
             </div>
           </motion.div>
         ))}
       </div>
 
-      <div className="bg-white rounded-3xl card-shadow border border-slate-100 overflow-hidden">
-        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-800">آخر التحويلات</h2>
-          <div className="flex items-center gap-2">
-            <button className="p-2 text-slate-500 hover:bg-slate-50 rounded-xl transition-colors">
-              <Filter size={18} />
-            </button>
-            <button className="p-2 text-slate-500 hover:bg-slate-50 rounded-xl transition-colors">
-              <Search size={18} />
+      <div className="sts-card overflow-hidden">
+        <div className="p-10 border-b border-slate-50 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-primary/5 text-primary rounded-xl flex items-center justify-center">
+              <Search size={22} />
+            </div>
+            <h2 className="text-xl font-extrabold text-slate-800">آخر التحويلات</h2>
+          </div>
+          <div className="flex items-center gap-4">
+            <button className="p-3 text-slate-400 hover:text-primary hover:bg-slate-50 rounded-xl transition-all">
+              <Filter size={20} />
             </button>
           </div>
         </div>
@@ -107,68 +112,65 @@ const TeacherDashboard: React.FC = () => {
         <div className="overflow-x-auto">
           <table className="w-full text-right">
             <thead>
-              <tr className="bg-slate-50/50 text-slate-500 text-xs font-semibold uppercase tracking-wider">
-                <th className="px-6 py-4">الطالب</th>
-                <th className="px-6 py-4">نوع التحويل</th>
-                <th className="px-6 py-4">الخطورة</th>
-                <th className="px-6 py-4">الحالة</th>
-                <th className="px-6 py-4">التاريخ</th>
-                <th className="px-6 py-4"></th>
+              <tr className="bg-slate-50/50 text-slate-400 text-[10px] font-extrabold uppercase tracking-widest">
+                <th className="px-10 py-5">الطالب</th>
+                <th className="px-10 py-5">نوع التحويل</th>
+                <th className="px-10 py-5">تكرار المخالفة</th>
+                <th className="px-10 py-5">الحالة</th>
+                <th className="px-10 py-5">التاريخ</th>
+                <th className="px-10 py-5"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-50">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-10 text-center text-slate-400">جاري تحميل البيانات...</td>
+                  <td colSpan={6} className="px-10 py-12 text-center text-slate-400 font-medium">جاري تحميل البيانات...</td>
                 </tr>
               ) : referrals.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-10 text-center text-slate-400">لا توجد تحويلات حالياً</td>
+                  <td colSpan={6} className="px-10 py-12 text-center text-slate-400 font-medium">لا توجد تحويلات حالياً</td>
                 </tr>
               ) : (
                 referrals.map((referral) => (
-                  <tr key={referral.id} className="hover:bg-slate-50/50 transition-colors group">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center font-bold text-sm">
+                  <tr key={referral.id} className="hover:bg-slate-50/30 transition-colors group">
+                    <td className="px-10 py-6">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center text-primary font-extrabold text-lg border border-slate-200">
                           {referral.student_name.charAt(0)}
                         </div>
                         <div>
-                          <p className="text-sm font-bold text-slate-800">{referral.student_name}</p>
-                          <p className="text-xs text-slate-500">{referral.student_grade} - {referral.student_section}</p>
+                          <p className="text-sm font-extrabold text-slate-800">{referral.student_name}</p>
+                          <p className="text-[10px] text-slate-400 font-bold">{referral.student_grade} - {referral.student_section}</p>
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <span className="text-sm text-slate-700">
+                    <td className="px-10 py-6">
+                      <span className="text-sm font-bold text-slate-600">
                         {referral.type === 'behavior' ? 'سلوكي' : 
                          referral.type === 'academic' ? 'أكاديمي' : 
                          referral.type === 'attendance' ? 'غياب' : 'زي مدرسي'}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
-                      <span className={`text-xs font-bold ${getSeverityColor(referral.severity)}`}>
+                    <td className="px-10 py-6">
+                      <span className={`text-sm font-bold ${getSeverityColor(referral.severity)}`}>
                         {referral.severity === 'high' ? 'المرة الثالثة فأكثر' : 
                          referral.severity === 'medium' ? 'المرة الثانية' : 'المرة الأولى'}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-10 py-6">
                       {getStatusBadge(referral.status)}
                     </td>
-                    <td className="px-6 py-4 text-sm text-slate-500">
+                    <td className="px-10 py-6 text-sm font-bold text-slate-400">
                       {new Date(referral.created_at).toLocaleDateString('ar-SA')}
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-end gap-2">
+                    <td className="px-10 py-6 text-left">
+                      <div className="flex items-center justify-end gap-3">
                         <Link 
                           to={`/referral/${referral.id}`}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors opacity-0 group-hover:opacity-100"
+                          className="p-3 text-slate-300 hover:text-primary hover:bg-primary/5 rounded-xl transition-all"
                         >
-                          <ArrowUpRight size={18} />
+                          <ArrowUpRight size={22} />
                         </Link>
-                        <button className="p-2 text-slate-400 hover:bg-slate-50 rounded-xl transition-colors">
-                          <MoreVertical size={18} />
-                        </button>
                       </div>
                     </td>
                   </tr>

@@ -21,7 +21,9 @@ import {
   RotateCcw,
   File,
   Download,
-  ExternalLink
+  ExternalLink,
+  Upload,
+  Info
 } from 'lucide-react';
 import { Referral, ReferralLog } from '../types';
 import { useAuth } from '../App';
@@ -154,35 +156,40 @@ const ReferralDetails: React.FC = () => {
     await handleAction('تحديد موعد جلسة مع ولي الأمر', 'scheduled_meeting', notes);
   };
 
-  if (loading || !data) return <div className="p-12 text-center">جاري التحميل...</div>;
+  if (loading || !data) return (
+    <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4">
+      <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+      <p className="text-slate-400 font-extrabold uppercase tracking-widest text-xs">جاري تحميل تفاصيل التحويل...</p>
+    </div>
+  );
 
   const { referral, logs } = data;
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+    <div className="max-w-6xl mx-auto space-y-10 pb-12">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="flex items-center gap-6">
           <button 
             onClick={() => navigate(-1)}
-            className="p-2 text-slate-400 hover:bg-white hover:text-slate-600 rounded-xl transition-all border border-transparent hover:border-slate-200"
+            className="w-12 h-12 flex items-center justify-center text-slate-400 hover:bg-white hover:text-primary rounded-2xl transition-all border border-transparent hover:border-slate-100 shadow-sm"
           >
-            <ChevronRight size={24} />
+            <ChevronRight size={28} />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">تفاصيل التحويل #{referral.id}</h1>
-            <div className="flex items-center gap-2 text-sm text-slate-500">
-              <span>تم الإنشاء في {new Date(referral.created_at).toLocaleString('ar-SA')}</span>
+            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">تفاصيل التحويل #{referral.id}</h1>
+            <div className="flex items-center gap-3 text-sm text-slate-500 mt-1 font-bold">
+              <span className="flex items-center gap-1.5"><Clock size={14} /> {new Date(referral.created_at).toLocaleString('ar-SA')}</span>
               <span className="w-1 h-1 bg-slate-300 rounded-full" />
-              <span>بواسطة {referral.teacher_name}</span>
+              <span className="flex items-center gap-1.5"><User size={14} /> {referral.teacher_name}</span>
             </div>
           </div>
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 no-print">
           {(user?.role === 'admin' || (user?.role === 'teacher' && referral.status === 'returned_to_teacher')) && (
             <button 
               onClick={() => setIsEditing(!isEditing)}
-              className={`no-print px-4 py-2 rounded-2xl text-sm font-bold border flex items-center gap-2 transition-all shadow-sm ${
+              className={`px-5 py-3 rounded-2xl text-xs font-extrabold border flex items-center gap-2 transition-all shadow-sm ${
                 isEditing ? 'bg-red-50 text-red-700 border-red-100' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
               }`}
             >
@@ -191,27 +198,27 @@ const ReferralDetails: React.FC = () => {
             </button>
           )}
           {referral.status === 'pending_vp' && (
-            <span className="px-4 py-2 bg-red-50 text-red-700 rounded-2xl text-sm font-bold border border-red-100 flex items-center gap-2">
+            <span className="px-5 py-3 bg-red-50 text-red-700 rounded-2xl text-xs font-extrabold border border-red-100 flex items-center gap-2 uppercase tracking-widest">
               <ShieldAlert size={18} />
               بانتظار مراجعة الوكيل
             </span>
           )}
           {referral.status === 'pending_counselor' && (
-            <span className="px-4 py-2 bg-amber-50 text-amber-700 rounded-2xl text-sm font-bold border border-amber-100 flex items-center gap-2">
+            <span className="px-5 py-3 bg-amber-50 text-amber-700 rounded-2xl text-xs font-extrabold border border-amber-100 flex items-center gap-2 uppercase tracking-widest">
               <Clock size={18} />
               قيد المتابعة مع الموجه
             </span>
           )}
           {referral.status === 'scheduled_meeting' && (
-            <span className="px-4 py-2 bg-blue-50 text-blue-700 rounded-2xl text-sm font-bold border border-blue-100 flex items-center gap-2">
+            <span className="px-5 py-3 bg-primary/5 text-primary rounded-2xl text-xs font-extrabold border border-primary/10 flex items-center gap-2 uppercase tracking-widest">
               <Calendar size={18} />
               موعد جلسة مع ولي الأمر
             </span>
           )}
           {referral.status === 'returned_to_teacher' && (
-            <span className="px-4 py-2 bg-amber-50 text-amber-700 rounded-2xl text-sm font-bold border border-amber-100 flex items-center gap-2">
+            <span className="px-5 py-3 bg-amber-50 text-amber-700 rounded-2xl text-xs font-extrabold border border-amber-100 flex items-center gap-2 uppercase tracking-widest">
               <RotateCcw size={18} />
-              معاد للمعلم لاستكمال النواقص
+              معاد للمعلم للنواقص
             </span>
           )}
           {referral.status === 'resolved' && (
@@ -222,12 +229,12 @@ const ReferralDetails: React.FC = () => {
                   window.focus();
                   window.print();
                 }}
-                className="no-print px-4 py-2 bg-white text-slate-700 rounded-2xl text-sm font-bold border border-slate-200 flex items-center gap-2 hover:bg-slate-50 transition-all shadow-sm"
+                className="px-5 py-3 bg-white text-slate-700 rounded-2xl text-xs font-extrabold border border-slate-200 flex items-center gap-2 hover:bg-slate-50 transition-all shadow-sm"
               >
                 <Printer size={18} />
                 طباعة التقرير
               </button>
-              <span className="px-4 py-2 bg-emerald-50 text-emerald-700 rounded-2xl text-sm font-bold border border-emerald-100 flex items-center gap-2">
+              <span className="px-5 py-3 bg-emerald-50 text-emerald-700 rounded-2xl text-xs font-extrabold border border-emerald-100 flex items-center gap-2 uppercase tracking-widest">
                 <CheckCircle2 size={18} />
                 تمت المعالجة والحل
               </span>
@@ -263,32 +270,32 @@ const ReferralDetails: React.FC = () => {
         }
       `}} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-8">
-          <div className="bg-white p-8 rounded-[2.5rem] card-shadow border border-slate-100 space-y-8">
-            <div className="flex items-center gap-6 pb-8 border-b border-slate-50">
-              <div className="w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center text-white text-3xl font-bold shadow-xl shadow-blue-100">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+        <div className="lg:col-span-2 space-y-10">
+          <div className="sts-card p-10 space-y-10">
+            <div className="flex items-center gap-6 pb-10 border-b border-slate-50">
+              <div className="w-24 h-24 bg-primary text-white rounded-[2rem] flex items-center justify-center text-4xl font-extrabold shadow-2xl shadow-primary/20 border-4 border-white">
                 {referral.student_name.charAt(0)}
               </div>
-              <div>
-                <h2 className="text-2xl font-bold text-slate-900 mb-1">{referral.student_name}</h2>
-                <div className="flex items-center gap-4 text-slate-500">
-                  <span className="flex items-center gap-1">
-                    <User size={16} />
+              <div className="space-y-2">
+                <h2 className="text-3xl font-extrabold text-slate-900">{referral.student_name}</h2>
+                <div className="flex flex-wrap items-center gap-4 text-slate-500">
+                  <span className="flex items-center gap-2 font-bold bg-slate-100 px-3 py-1 rounded-xl text-xs">
+                    <User size={16} className="text-primary" />
                     {referral.student_grade} - الفصل {referral.student_section}
                   </span>
-                  <span className="w-1 h-1 bg-slate-300 rounded-full" />
-                  <span className={`font-bold ${
-                    referral.severity === 'high' ? 'text-red-600' : 
-                    referral.severity === 'medium' ? 'text-amber-600' : 'text-blue-600'
+                  <span className="w-1.5 h-1.5 bg-slate-200 rounded-full" />
+                  <span className={`font-extrabold text-xs px-3 py-1 rounded-xl border uppercase tracking-widest ${
+                    referral.severity === 'high' ? 'bg-red-50 text-red-600 border-red-100' : 
+                    referral.severity === 'medium' ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-primary/5 text-primary border-primary/10'
                   }`}>
                     {referral.severity === 'high' ? 'المرة الثالثة فأكثر' : 
                      referral.severity === 'medium' ? 'المرة الثانية' : 'المرة الأولى'}
                   </span>
                   {referral.status === 'returned_to_teacher' && (
                     <>
-                      <span className="w-1 h-1 bg-slate-300 rounded-full" />
-                      <span className="text-red-600 font-bold flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 bg-slate-200 rounded-full" />
+                      <span className="text-red-600 font-extrabold text-xs flex items-center gap-2 bg-red-50 px-3 py-1 rounded-xl border border-red-100 uppercase tracking-widest">
                         <AlertCircle size={14} />
                         بانتظار استكمال النواقص
                       </span>
@@ -298,10 +305,12 @@ const ReferralDetails: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
               <div className="space-y-4">
-                <div className="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-wider">
-                  <FileText size={16} />
+                <div className="flex items-center gap-3 text-slate-400 text-[10px] font-extrabold uppercase tracking-widest">
+                  <div className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400">
+                    <FileText size={16} />
+                  </div>
                   <span>سبب التحويل</span>
                 </div>
                 {isEditing ? (
@@ -309,17 +318,19 @@ const ReferralDetails: React.FC = () => {
                     type="text"
                     value={editForm.reason}
                     onChange={(e) => setEditForm({...editForm, reason: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+                    className="sts-input"
                   />
                 ) : (
-                  <p className="text-slate-800 font-medium leading-relaxed bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                  <p className="text-slate-800 font-extrabold leading-relaxed bg-slate-50/50 p-6 rounded-2xl border border-slate-100 text-lg">
                     {referral.reason}
                   </p>
                 )}
               </div>
               <div className="space-y-4">
-                <div className="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-wider">
-                  <MessageSquare size={16} />
+                <div className="flex items-center gap-3 text-slate-400 text-[10px] font-extrabold uppercase tracking-widest">
+                  <div className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400">
+                    <MessageSquare size={16} />
+                  </div>
                   <span>ملاحظات المعلم</span>
                 </div>
                 {isEditing ? (
@@ -327,29 +338,31 @@ const ReferralDetails: React.FC = () => {
                     rows={3}
                     value={editForm.teacher_notes}
                     onChange={(e) => setEditForm({...editForm, teacher_notes: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all resize-none"
+                    className="sts-input resize-none"
                   />
                 ) : (
-                  <p className="text-slate-600 leading-relaxed bg-slate-50 p-4 rounded-2xl border border-slate-100 italic">
+                  <p className="text-slate-600 font-bold leading-relaxed bg-slate-50/50 p-6 rounded-2xl border border-slate-100 italic">
                     "{referral.teacher_notes || 'لا توجد ملاحظات إضافية'}"
                   </p>
                 )}
               </div>
             </div>
 
-            <div className="space-y-4 pt-6 border-t border-slate-50">
+            <div className="space-y-6 pt-10 border-t border-slate-50">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-wider">
-                  <ShieldAlert size={16} />
+                <div className="flex items-center gap-3 text-slate-400 text-[10px] font-extrabold uppercase tracking-widest">
+                  <div className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400">
+                    <ShieldAlert size={16} />
+                  </div>
                   <span>الخطة العلاجية / الإجراءات التربوية</span>
                 </div>
                 {!isEditing && referral.remedial_plan_file && (
-                  <div className="flex gap-2">
+                  <div className="flex gap-3">
                     <a 
                       href={referral.remedial_plan_file} 
                       target="_blank" 
                       rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 transition-all"
+                      className="flex items-center gap-2 text-[10px] font-extrabold text-primary hover:text-primary-light bg-primary/5 px-4 py-2 rounded-xl border border-primary/10 transition-all uppercase tracking-widest"
                     >
                       <File size={14} />
                       <span>عرض</span>
@@ -358,7 +371,7 @@ const ReferralDetails: React.FC = () => {
                     <a 
                       href={referral.remedial_plan_file} 
                       download={`plan_${referral.id}.pdf`}
-                      className="flex items-center gap-1 text-xs font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100 transition-all"
+                      className="flex items-center gap-2 text-[10px] font-extrabold text-emerald-600 hover:text-emerald-700 bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-100 transition-all uppercase tracking-widest"
                     >
                       <Download size={14} />
                       <span>تحميل</span>
@@ -368,41 +381,47 @@ const ReferralDetails: React.FC = () => {
               </div>
               
               {isEditing ? (
-                <div className="space-y-4">
+                <div className="space-y-6">
                   <textarea 
-                    rows={3}
+                    rows={4}
                     value={editForm.remedial_plan}
                     onChange={(e) => setEditForm({...editForm, remedial_plan: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all resize-none"
+                    className="sts-input resize-none"
                     placeholder="اكتب الخطة العلاجية أو الإجراءات التي تم اتخاذها..."
                   />
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 mr-1">تحديث ملف الخطة (PDF - بحد أقصى 500KB)</label>
-                    <input 
-                      type="file"
-                      accept=".pdf"
-                      onChange={handleFileChange}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs focus:ring-2 focus:ring-blue-500/20 outline-none file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                    />
-                    {fileError && <p className="text-red-500 text-[10px] mt-1 mr-1">{fileError}</p>}
-                    {editForm.remedial_plan_file && !fileError && <p className="text-emerald-600 text-[10px] mt-1 mr-1">تم إرفاق الملف بنجاح</p>}
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-extrabold text-slate-500 mr-1 uppercase tracking-widest">تحديث ملف الخطة (PDF - بحد أقصى 500KB)</label>
+                    <div className="relative border-2 border-dashed border-slate-200 rounded-2xl p-6 bg-slate-50/30 hover:border-primary/50 transition-all text-center">
+                      <input 
+                        type="file"
+                        accept=".pdf"
+                        onChange={handleFileChange}
+                        className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                      />
+                      <div className="flex flex-col items-center gap-2">
+                        <Upload size={24} className="text-slate-400" />
+                        <span className="text-xs font-bold text-slate-600">انقر أو اسحب الملف هنا</span>
+                      </div>
+                    </div>
+                    {fileError && <p className="text-red-500 text-[10px] mt-1 mr-1 font-extrabold">{fileError}</p>}
+                    {editForm.remedial_plan_file && !fileError && <p className="text-emerald-600 text-[10px] mt-1 mr-1 font-extrabold">تم إرفاق الملف بنجاح</p>}
                   </div>
                 </div>
               ) : (
-                <div className="bg-blue-50 p-5 rounded-2xl border border-blue-100 text-blue-800 text-sm leading-relaxed">
+                <div className="bg-primary/5 p-8 rounded-3xl border border-primary/10 text-primary font-bold text-lg leading-relaxed shadow-inner">
                   {referral.remedial_plan || 'لم يتم تسجيل خطة علاجية بعد'}
                 </div>
               )}
             </div>
 
             {isEditing && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-6 border-t border-slate-50">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-500 mr-1">نوع التحويل</label>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-10 border-t border-slate-50">
+                <div className="space-y-3">
+                  <label className="text-[10px] font-extrabold text-slate-500 mr-1 uppercase tracking-widest">نوع التحويل</label>
                   <select 
                     value={editForm.type}
                     onChange={(e) => setEditForm({...editForm, type: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 text-sm focus:ring-2 focus:ring-primary/20 outline-none font-bold"
                   >
                     <option value="behavior">سلوكي</option>
                     <option value="academic">أكاديمي</option>
@@ -410,24 +429,24 @@ const ReferralDetails: React.FC = () => {
                     <option value="uniform">زي مدرسي</option>
                   </select>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-500 mr-1">تكرار المخالفة</label>
+                <div className="space-y-3">
+                  <label className="text-[10px] font-extrabold text-slate-500 mr-1 uppercase tracking-widest">تكرار المخالفة</label>
                   <select 
                     value={editForm.severity}
                     onChange={(e) => setEditForm({...editForm, severity: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 text-sm focus:ring-2 focus:ring-primary/20 outline-none font-bold"
                   >
                     <option value="low">المرة الأولى</option>
                     <option value="medium">المرة الثانية</option>
                     <option value="high">المرة الثالثة فأكثر</option>
                   </select>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-500 mr-1">الحالة</label>
+                <div className="space-y-3">
+                  <label className="text-[10px] font-extrabold text-slate-500 mr-1 uppercase tracking-widest">الحالة</label>
                   <select 
                     value={editForm.status}
                     onChange={(e) => setEditForm({...editForm, status: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 text-sm focus:ring-2 focus:ring-primary/20 outline-none font-bold"
                   >
                     <option value="pending_vp">بانتظار الوكيل</option>
                     <option value="pending_counselor">بانتظار الموجه</option>
@@ -436,28 +455,27 @@ const ReferralDetails: React.FC = () => {
                     <option value="closed">مغلق</option>
                   </select>
                 </div>
-                <div className="md:col-span-3 flex gap-3">
+                <div className="md:col-span-3 flex gap-4">
                   <button 
                     onClick={handleAdminUpdate}
                     disabled={submitting}
-                    className={`flex-1 font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2 ${
-                      user?.role === 'teacher' ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'bg-blue-600 text-white hover:bg-blue-700'
+                    className={`flex-1 font-extrabold py-4 rounded-2xl transition-all flex items-center justify-center gap-3 shadow-lg ${
+                      user?.role === 'teacher' ? 'bg-slate-100 text-slate-700 hover:bg-slate-200' : 'sts-button-primary'
                     }`}
                   >
-                    <Save size={18} />
+                    <Save size={20} />
                     <span>{user?.role === 'teacher' ? 'حفظ التعديلات فقط' : 'حفظ التعديلات'}</span>
                   </button>
                   {user?.role === 'teacher' && referral.status === 'returned_to_teacher' && (
                     <button 
                       onClick={async () => {
                         await handleAdminUpdate();
-                        // We need to wait for the state to update or just pass the notes directly
                         await handleAction('تم استكمال النواقص وإعادة الإرسال للوكيل', 'pending_vp', 'تم تحديث البيانات المطلوبة واستكمال النواقص.');
                       }}
                       disabled={submitting}
-                      className="flex-[2] bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-100"
+                      className="flex-[2] sts-button-accent flex items-center justify-center gap-3"
                     >
-                      <Send size={18} />
+                      <Send size={20} />
                       <span>حفظ وإرسال للوكيل</span>
                     </button>
                   )}
@@ -466,33 +484,48 @@ const ReferralDetails: React.FC = () => {
             )}
           </div>
 
-          <div className="bg-white p-8 rounded-[2.5rem] card-shadow border border-slate-100 space-y-6">
-            <div className="flex items-center gap-3 text-slate-800 font-bold text-lg">
-              <History size={20} className="text-blue-600" />
-              <span>سجل الإجراءات</span>
+          <div className="sts-card p-10 space-y-10">
+            <div className="flex items-center gap-4 text-slate-800 font-extrabold text-xl border-b border-slate-50 pb-6">
+              <div className="w-10 h-10 bg-primary/5 text-primary rounded-xl flex items-center justify-center">
+                <History size={22} />
+              </div>
+              <span className="uppercase tracking-widest">سجل الإجراءات</span>
             </div>
             
-            <div className="relative space-y-8 pr-4">
-              <div className="absolute right-4 top-2 bottom-2 w-0.5 bg-slate-100" />
+            <div className="relative space-y-10 pr-6">
+              <div className="absolute right-6 top-2 bottom-2 w-1 bg-slate-50 rounded-full" />
               
               {logs.length === 0 ? (
-                <p className="text-slate-400 text-center py-4">لا توجد إجراءات مسجلة بعد</p>
+                <div className="flex flex-col items-center gap-4 py-10 text-slate-300">
+                  <AlertCircle size={48} className="opacity-20" />
+                  <p className="font-extrabold uppercase tracking-widest text-xs">لا توجد إجراءات مسجلة بعد</p>
+                </div>
               ) : (
                 logs.map((log, i) => (
-                  <div key={log.id} className="relative pr-10">
-                    <div className="absolute right-[-5px] top-1.5 w-3 h-3 rounded-full bg-blue-600 border-4 border-white shadow-sm z-10" />
-                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-2">
+                  <div key={log.id} className="relative pr-12">
+                    <div className="absolute right-[-10px] top-2 w-5 h-5 rounded-full bg-primary border-4 border-white shadow-lg z-10" />
+                    <div className="bg-slate-50/50 p-6 rounded-3xl border border-slate-100 space-y-4 hover:border-primary/20 transition-all group">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-slate-800">{log.user_name}</span>
-                          <span className="text-xs px-2 py-0.5 bg-white border border-slate-200 rounded-md text-slate-500">
-                            {log.user_role === 'teacher' ? 'معلم' : log.user_role === 'vice_principal' ? 'وكيل' : 'موجه'}
-                          </span>
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-primary font-extrabold shadow-sm border border-slate-100">
+                            {log.user_name.charAt(0)}
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="font-extrabold text-slate-800">{log.user_name}</span>
+                            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">
+                              {log.user_role === 'teacher' ? 'معلم' : log.user_role === 'vice_principal' ? 'وكيل' : log.user_role === 'counselor' ? 'موجه' : 'مدير'}
+                            </span>
+                          </div>
                         </div>
-                        <span className="text-xs text-slate-400">{new Date(log.created_at).toLocaleString('ar-SA')}</span>
+                        <div className="flex items-center gap-2 text-[10px] text-slate-400 font-extrabold uppercase tracking-widest bg-white px-3 py-1 rounded-lg border border-slate-100">
+                          <Clock size={12} />
+                          {new Date(log.created_at).toLocaleString('ar-SA')}
+                        </div>
                       </div>
-                      <p className="text-blue-700 font-bold text-sm">{log.action}</p>
-                      <p className="text-slate-600 text-sm leading-relaxed">{log.notes}</p>
+                      <div className="space-y-2">
+                        <p className="text-primary font-extrabold text-sm uppercase tracking-widest">{log.action}</p>
+                        <p className="text-slate-600 text-sm font-bold leading-relaxed bg-white p-4 rounded-2xl border border-slate-50">{log.notes}</p>
+                      </div>
                     </div>
                   </div>
                 ))
@@ -501,63 +534,65 @@ const ReferralDetails: React.FC = () => {
           </div>
         </div>
 
-        <div className="space-y-8">
+        <div className="space-y-10 sticky top-10">
           {((user?.role === 'vice_principal' && referral.status === 'pending_vp') || 
             (user?.role === 'counselor' && (referral.status === 'pending_counselor' || referral.status === 'scheduled_meeting')) ||
             (user?.role === 'teacher' && referral.status === 'returned_to_teacher')) && (
             <motion.div 
               initial={{ x: 20, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
-              className="bg-white p-8 rounded-[2.5rem] card-shadow border border-slate-100 space-y-6 sticky top-8"
+              className="sts-card p-10 space-y-8"
             >
-              <div className="flex items-center gap-3 text-slate-800 font-bold text-lg">
-                <Send size={20} className="text-blue-600" />
-                <span>اتخاذ إجراء</span>
+              <div className="flex items-center gap-4 text-slate-800 font-extrabold text-xl border-b border-slate-50 pb-6">
+                <div className="w-10 h-10 bg-primary/5 text-primary rounded-xl flex items-center justify-center">
+                  <Send size={22} />
+                </div>
+                <span className="uppercase tracking-widest">اتخاذ إجراء</span>
               </div>
 
               {showMeetingInputs ? (
-                <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-500 mr-1">التاريخ</label>
+                <div className="space-y-6 animate-in fade-in slide-in-from-top-2">
+                  <div className="grid grid-cols-1 gap-6">
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-extrabold text-slate-500 mr-1 uppercase tracking-widest">تاريخ الجلسة</label>
                       <input 
                         type="date" 
                         value={meetingDate}
                         onChange={(e) => setMeetingDate(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none"
+                        className="sts-input"
                       />
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-500 mr-1">الوقت</label>
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-extrabold text-slate-500 mr-1 uppercase tracking-widest">الوقت</label>
                       <input 
                         type="time" 
                         value={meetingTime}
                         onChange={(e) => setMeetingTime(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none"
+                        className="sts-input"
                       />
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 mr-1">ملاحظات الموعد</label>
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-extrabold text-slate-500 mr-1 uppercase tracking-widest">ملاحظات الموعد</label>
                     <textarea 
                       rows={3}
                       placeholder="اكتب تفاصيل الموعد أو سبب الجلسة..."
                       value={actionNotes}
                       onChange={(e) => setActionNotes(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all resize-none"
+                      className="sts-input resize-none"
                     />
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col gap-3">
                     <button
                       onClick={handleScheduleMeeting}
                       disabled={submitting}
-                      className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition-all text-sm"
+                      className="w-full sts-button-primary"
                     >
                       تأكيد الموعد
                     </button>
                     <button
                       onClick={() => setShowMeetingInputs(false)}
-                      className="px-4 bg-slate-100 text-slate-600 font-bold py-3 rounded-xl hover:bg-slate-200 transition-all text-sm"
+                      className="w-full py-4 bg-slate-100 text-slate-600 font-extrabold rounded-2xl hover:bg-slate-200 transition-all text-xs uppercase tracking-widest"
                     >
                       إلغاء
                     </button>
@@ -566,43 +601,43 @@ const ReferralDetails: React.FC = () => {
               ) : (
                 <>
                   <div className="space-y-4">
-                    <label className="text-sm font-semibold text-slate-700 mr-1">
+                    <label className="text-[10px] font-extrabold text-slate-500 mr-1 uppercase tracking-widest">
                       {referral.status === 'scheduled_meeting' ? 'نتائج اللقاء مع ولي الأمر' : 'ملاحظات الإجراء'}
                     </label>
                     <textarea 
-                      rows={4}
+                      rows={5}
                       placeholder={referral.status === 'scheduled_meeting' ? "اكتب ما تم خلال اللقاء والاتفاق مع ولي الأمر..." : "اكتب تفاصيل الإجراء المتخذ أو التوجيهات..."}
                       value={actionNotes}
                       onChange={(e) => setActionNotes(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all resize-none"
+                      className="sts-input resize-none"
                     />
                   </div>
 
-                  <div className="space-y-3">
+                  <div className="space-y-4 pt-4">
                     {user?.role === 'vice_principal' && (
                       <>
                         <button
                           onClick={() => handleAction('تحويل للموجه الطلابي', 'pending_counselor')}
                           disabled={submitting}
-                          className="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl hover:bg-blue-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-100"
+                          className="w-full sts-button-primary flex items-center justify-center gap-3"
                         >
-                          <ArrowRightLeft size={18} />
+                          <ArrowRightLeft size={20} />
                           <span>تحويل للموجه</span>
                         </button>
                         <button
                           onClick={() => handleAction('ارجاع التحويل للمعلم لاستكمال نواقص', 'returned_to_teacher')}
                           disabled={submitting}
-                          className="w-full bg-amber-500 text-white font-bold py-4 rounded-2xl hover:bg-amber-600 transition-all flex items-center justify-center gap-2 shadow-lg shadow-amber-100"
+                          className="w-full sts-button-accent flex items-center justify-center gap-3"
                         >
-                          <RotateCcw size={18} />
+                          <RotateCcw size={20} />
                           <span>إرجاع للمعلم (نواقص)</span>
                         </button>
                         <button
                           onClick={() => handleAction('إغلاق الحالة مباشرة', 'resolved')}
                           disabled={submitting}
-                          className="w-full bg-emerald-600 text-white font-bold py-4 rounded-2xl hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-100"
+                          className="w-full py-4 bg-emerald-600 text-white font-extrabold rounded-2xl hover:bg-emerald-700 transition-all flex items-center justify-center gap-3 shadow-lg shadow-emerald-600/20"
                         >
-                          <CheckCircle2 size={18} />
+                          <CheckCircle2 size={20} />
                           <span>معالجة وإغلاق</span>
                         </button>
                       </>
@@ -613,18 +648,18 @@ const ReferralDetails: React.FC = () => {
                           <button
                             onClick={() => setShowMeetingInputs(true)}
                             disabled={submitting}
-                            className="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl hover:bg-blue-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-100"
+                            className="w-full sts-button-primary flex items-center justify-center gap-3"
                           >
-                            <Users size={18} />
+                            <Users size={20} />
                             <span>تحديد جلسة مع ولي الأمر</span>
                           </button>
                         )}
                         <button
                           onClick={() => handleAction(referral.status === 'scheduled_meeting' ? 'إتمام اللقاء والمعالجة' : 'تمت دراسة الحالة ووضع خطة علاجية', 'resolved')}
                           disabled={submitting}
-                          className="w-full bg-emerald-600 text-white font-bold py-4 rounded-2xl hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-100"
+                          className="w-full py-4 bg-emerald-600 text-white font-extrabold rounded-2xl hover:bg-emerald-700 transition-all flex items-center justify-center gap-3 shadow-lg shadow-emerald-600/20"
                         >
-                          <CheckCircle2 size={18} />
+                          <CheckCircle2 size={20} />
                           <span>{referral.status === 'scheduled_meeting' ? 'إتمام اللقاء وإغلاق الحالة' : 'إتمام المعالجة'}</span>
                         </button>
                       </>
@@ -633,9 +668,9 @@ const ReferralDetails: React.FC = () => {
                       <button
                         onClick={() => handleAction('استكمال النواقص وإعادة الإرسال', 'pending_vp')}
                         disabled={submitting}
-                        className="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl hover:bg-blue-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-100"
+                        className="w-full sts-button-primary flex items-center justify-center gap-3"
                       >
-                        <Send size={18} />
+                        <Send size={20} />
                         <span>استكمال النواقص وإعادة الإرسال</span>
                       </button>
                     )}
@@ -645,6 +680,18 @@ const ReferralDetails: React.FC = () => {
             </motion.div>
           )}
 
+          <div className="bg-slate-900 p-10 rounded-[2.5rem] text-white space-y-6 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-bl-[5rem] -mr-8 -mt-8" />
+            <div className="relative z-10">
+              <div className="flex items-center gap-3 mb-6">
+                <Info className="text-primary" size={24} />
+                <h3 className="font-extrabold text-lg">إرشادات النظام</h3>
+              </div>
+              <p className="text-sm text-slate-400 font-bold leading-relaxed">
+                يتم توثيق كافة الإجراءات المتخذة في سجل النظام آلياً. يرجى التأكد من دقة الملاحظات المسجلة حيث تعتبر مرجعاً رسمياً للحالة.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </div>

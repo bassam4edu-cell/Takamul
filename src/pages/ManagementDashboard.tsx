@@ -56,61 +56,67 @@ const ManagementDashboard: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10 pb-12">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">مرحباً بك، {user?.name}</h1>
-          <p className="text-slate-500">لديك {referrals.filter(r => r.status === 'pending_vp').length} تحويلات جديدة تتطلب انتباهك.</p>
+          <h1 className="text-3xl font-extrabold text-slate-900">مرحباً بك، {user?.name}</h1>
+          <p className="text-slate-500 mt-1">لديك {referrals.filter(r => r.status === 'pending_vp').length} تحويلات جديدة تتطلب انتباهك.</p>
         </div>
-        <div className="flex items-center gap-3 bg-white p-1 rounded-2xl border border-slate-200 card-shadow">
+        <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border border-slate-100 shadow-sm">
           <button 
             onClick={() => setFilter('all')}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${filter === 'all' ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${filter === 'all' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-slate-400 hover:text-primary hover:bg-slate-50'}`}
           >
             الكل
           </button>
           <button 
             onClick={() => setFilter('pending')}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${filter === 'pending' ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${filter === 'pending' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-slate-400 hover:text-primary hover:bg-slate-50'}`}
           >
             قيد المعالجة
           </button>
           <button 
             onClick={() => setFilter('resolved')}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${filter === 'resolved' ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${filter === 'resolved' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-slate-400 hover:text-primary hover:bg-slate-50'}`}
           >
             تم الحل
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {stats.map((stat, i) => (
           <motion.div 
             key={stat.label}
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: i * 0.1 }}
-            className="bg-white p-6 rounded-3xl card-shadow border border-slate-100 flex items-center gap-4"
+            className="sts-card p-8 group relative overflow-hidden"
           >
-            <div className={`${stat.color} w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-slate-100`}>
-              <stat.icon size={24} />
-            </div>
-            <div>
-              <p className="text-sm text-slate-500 font-medium">{stat.label}</p>
-              <p className="text-2xl font-bold text-slate-900">{stat.value}</p>
+            <div className={`absolute top-0 right-0 w-24 h-24 ${stat.color.replace('bg-', 'bg-')}/5 rounded-bl-[5rem] -mr-8 -mt-8 transition-all group-hover:scale-110`} />
+            <div className="relative z-10 flex items-center gap-6">
+              <div className={`${stat.color} w-16 h-16 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-slate-100`}>
+                <stat.icon size={32} />
+              </div>
+              <div>
+                <p className="text-sm text-slate-500 font-bold mb-1 uppercase tracking-wider">{stat.label}</p>
+                <p className="text-4xl font-extrabold text-slate-900">{stat.value}</p>
+              </div>
             </div>
           </motion.div>
         ))}
       </div>
 
-      <div className="bg-white rounded-[2.5rem] card-shadow border border-slate-100 overflow-hidden">
-        <div className="p-8 border-b border-slate-100 flex items-center justify-between">
+      <div className="sts-card overflow-hidden">
+        <div className="p-10 border-b border-slate-50 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <h2 className="text-xl font-bold text-slate-800">إدارة التحويلات</h2>
-            <div className="h-6 w-px bg-slate-200" />
-            <div className="flex items-center gap-2 text-slate-500 text-sm">
-              <Calendar size={16} />
+            <div className="w-10 h-10 bg-primary/5 text-primary rounded-xl flex items-center justify-center">
+              <Search size={22} />
+            </div>
+            <h2 className="text-xl font-extrabold text-slate-800">إدارة التحويلات</h2>
+            <div className="h-6 w-px bg-slate-100" />
+            <div className="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-wider">
+              <Calendar size={18} />
               <span>{new Date().toLocaleDateString('ar-SA', { month: 'long', year: 'numeric' })}</span>
             </div>
           </div>
@@ -119,44 +125,44 @@ const ManagementDashboard: React.FC = () => {
             <input 
               type="text" 
               placeholder="بحث..." 
-              className="bg-slate-50 border border-slate-100 rounded-xl py-2 pr-10 pl-4 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+              className="bg-slate-50 border border-slate-100 rounded-xl py-2 pr-10 pl-4 text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
             />
           </div>
         </div>
 
-        <div className="p-4">
-          <div className="grid grid-cols-1 gap-4">
+        <div className="p-8">
+          <div className="grid grid-cols-1 gap-6">
             {loading ? (
-              <div className="p-12 text-center text-slate-400">جاري التحميل...</div>
+              <div className="p-12 text-center text-slate-400 font-medium">جاري التحميل...</div>
             ) : filteredReferrals.length === 0 ? (
-              <div className="p-12 text-center text-slate-400">لا توجد تحويلات مطابقة للفلتر</div>
+              <div className="p-12 text-center text-slate-400 font-medium">لا توجد تحويلات مطابقة للفلتر</div>
             ) : (
               filteredReferrals.map((referral) => (
                 <Link 
                   key={referral.id}
                   to={`/referral/${referral.id}`}
-                  className="group bg-slate-50/50 hover:bg-white p-6 rounded-3xl border border-transparent hover:border-slate-200 hover:shadow-xl hover:shadow-slate-100 transition-all flex items-center justify-between"
+                  className="group bg-slate-50/30 hover:bg-white p-8 rounded-[2rem] border border-transparent hover:border-slate-100 hover:shadow-2xl hover:shadow-slate-200/50 transition-all flex items-center justify-between"
                 >
-                  <div className="flex items-center gap-6">
-                    <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center text-blue-600 font-bold text-xl shadow-sm border border-slate-100">
+                  <div className="flex items-center gap-8">
+                    <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-primary font-extrabold text-2xl shadow-sm border border-slate-100 group-hover:scale-110 transition-transform">
                       {referral.student_name.charAt(0)}
                     </div>
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-3">
-                        <h3 className="font-bold text-slate-800 text-lg">{referral.student_name}</h3>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-4">
+                        <h3 className="font-extrabold text-slate-800 text-xl">{referral.student_name}</h3>
                         {getStatusBadge(referral.status)}
                       </div>
-                      <div className="flex items-center gap-4 text-sm text-slate-500">
-                        <span className="flex items-center gap-1">
-                          <Users size={14} />
+                      <div className="flex items-center gap-6 text-sm text-slate-400 font-bold uppercase tracking-wider">
+                        <span className="flex items-center gap-2">
+                          <Users size={16} />
                           {referral.student_grade} - {referral.student_section}
                         </span>
-                        <span className="w-1 h-1 bg-slate-300 rounded-full" />
+                        <span className="w-1.5 h-1.5 bg-slate-200 rounded-full" />
                         <span>المعلم: {referral.teacher_name}</span>
-                        <span className="w-1 h-1 bg-slate-300 rounded-full" />
-                        <span className={`font-medium ${
-                          referral.severity === 'high' ? 'text-red-600' : 
-                          referral.severity === 'medium' ? 'text-amber-600' : 'text-blue-600'
+                        <span className="w-1.5 h-1.5 bg-slate-200 rounded-full" />
+                        <span className={`${
+                          referral.severity === 'high' ? 'text-red-500' : 
+                          referral.severity === 'medium' ? 'text-amber-500' : 'text-primary'
                         }`}>
                           {referral.severity === 'high' ? 'المرة الثالثة فأكثر' : 
                            referral.severity === 'medium' ? 'المرة الثانية' : 'المرة الأولى'}
@@ -165,13 +171,13 @@ const ManagementDashboard: React.FC = () => {
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-6">
                     <div className="text-right">
-                      <p className="text-xs text-slate-400 mb-1">تاريخ التحويل</p>
-                      <p className="text-sm font-medium text-slate-700">{new Date(referral.created_at).toLocaleDateString('ar-SA')}</p>
+                      <p className="text-[10px] text-slate-400 mb-1 font-extrabold uppercase tracking-widest">تاريخ التحويل</p>
+                      <p className="text-sm font-extrabold text-slate-700">{new Date(referral.created_at).toLocaleDateString('ar-SA')}</p>
                     </div>
-                    <div className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600 transition-all">
-                      <ChevronLeft size={20} />
+                    <div className="w-12 h-12 rounded-2xl bg-white border border-slate-100 flex items-center justify-center text-slate-300 group-hover:bg-primary group-hover:text-white group-hover:border-primary group-hover:rotate-12 transition-all shadow-sm">
+                      <ChevronLeft size={24} />
                     </div>
                   </div>
                 </Link>
