@@ -13,7 +13,7 @@ const Logo: React.FC<LogoProps> = ({ className = "w-12 h-12", showText = false, 
   return (
     <div className={`flex flex-col items-center gap-4 ${className}`}>
       <img 
-        src="https://ibb.co/KjvFx7Qj" 
+        src="https://i.ibb.co/QFwrvnqF/photo-2026-02-20-15-16-20.jpg" 
         alt="شعار وزارة التعليم" 
         className="w-full h-full object-contain"
         referrerPolicy="no-referrer"
