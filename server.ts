@@ -120,14 +120,36 @@ async function startServer() {
   // API Routes
   app.post("/api/login", async (req, res) => {
     const { email, password, role } = req.body;
-    const users = await sql`SELECT * FROM users WHERE email = ${email} AND password = ${password} AND role = ${role}`;
-    const user = users[0];
-    if (user) {
+    console.log(`[LOGIN] Attempt for email: ${email}, role: ${role}`);
+    
+    try {
+      // البحث عن المستخدم بالبريد الإلكتروني فقط أولاً للتأكد من وجوده
+      const users = await sql`SELECT * FROM users WHERE email = ${email}`;
+      const user = users[0];
+      
+      if (!user) {
+        console.log(`[LOGIN] User not found: ${email}`);
+        return res.status(401).json({ success: false, message: "البريد الإلكتروني غير مسجل" });
+      }
+
+      if (user.password !== password) {
+        console.log(`[LOGIN] Incorrect password for: ${email}`);
+        return res.status(401).json({ success: false, message: "كلمة المرور غير صحيحة" });
+      }
+
+      if (user.role !== role) {
+        console.log(`[LOGIN] Role mismatch for: ${email}. Expected: ${user.role}, Got: ${role}`);
+        return res.status(401).json({ success: false, message: "نوع الحساب المختار غير صحيح لهذا المستخدم" });
+      }
+
       const gradesResult = await sql`SELECT grade FROM user_grades WHERE user_id = ${user.id}`;
       const grades = gradesResult.map((g: any) => g.grade);
+      
+      console.log(`[LOGIN] Success for: ${email}`);
       res.json({ success: true, user: { ...user, assigned_grades: grades } });
-    } else {
-      res.status(401).json({ success: false, message: "Invalid credentials" });
+    } catch (err) {
+      console.error("[LOGIN] Error:", err);
+      res.status(500).json({ success: false, message: "حدث خطأ في السيرفر" });
     }
   });
 
@@ -324,6 +346,12 @@ async function startServer() {
   app.post("/api/admin/users/:id/update", async (req, res) => {
     const { name, email } = req.body;
     await sql`UPDATE users SET name = ${name}, email = ${email} WHERE id = ${req.params.id}`;
+    res.json({ success: true });
+  });
+
+  app.post("/api/admin/users/:id/password", async (req, res) => {
+    const { password } = req.body;
+    await sql`UPDATE users SET password = ${password} WHERE id = ${req.params.id}`;
     res.json({ success: true });
   });
 
