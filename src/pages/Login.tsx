@@ -181,7 +181,7 @@ const Login: React.FC = () => {
                 <button className="text-xs font-bold text-slate-400 hover:text-primary transition-colors">نسيت كلمة المرور</button>
               </div>
               <div className="text-[10px] text-slate-400 space-y-1">
-                <p>© 2026 نظام تحويل الطلاب الذكي. جميع الحقوق محفوظة.</p>
+                <p>© 2026 نظام تحويل الطلاب الذكي -v7- جميع الحقوق محفوظة.</p>
                 <p className="font-bold text-primary/60">برمجة: بسام غربي العنزي</p>
               </div>
             </div>
