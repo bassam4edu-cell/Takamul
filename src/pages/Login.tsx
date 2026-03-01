@@ -66,7 +66,7 @@ const Login: React.FC = () => {
           transition={{ duration: 0.8, ease: "easeOut" }}
           className="relative z-10 flex flex-col items-center text-center"
         >
-          <Logo className="w-48 h-48 mb-4" light />
+          <Logo className="w-48 h-48 mb-4" light variant="login" />
           <h2 className="text-white font-extrabold text-2xl mb-8">ثانوية أم القرى بالخرج</h2>
           <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-4">نظام تحويل طالب</h1>
           <p className="text-white/80 text-lg md:text-xl font-medium tracking-wide">Student Transfer System</p>
@@ -82,7 +82,7 @@ const Login: React.FC = () => {
         <div className="max-w-md w-full">
           <div className="mb-10 flex flex-col items-center text-center">
             <img 
-              src=""https://i.ibb.co/QFwrvnqF/photo-2026-02-20-15-16-20.jpg" 
+              src="https://upload.wikimedia.org/wikipedia/ar/thumb/a/a2/Ministry_of_Education_Saudi_Arabia.svg/512px-Ministry_of_Education_Saudi_Arabia.svg.png" 
               alt="شعار وزارة التعليم" 
               className="w-40 h-40 mb-2 object-contain"
               referrerPolicy="no-referrer"

@@ -141,25 +141,25 @@ const ManagementDashboard: React.FC = () => {
                 <Link 
                   key={referral.id}
                   to={`/referral/${referral.id}`}
-                  className="group bg-slate-50/30 hover:bg-white p-8 rounded-[2rem] border border-transparent hover:border-slate-100 hover:shadow-2xl hover:shadow-slate-200/50 transition-all flex items-center justify-between"
+                  className="group bg-slate-50/30 hover:bg-white p-6 md:p-8 rounded-[2rem] border border-transparent hover:border-slate-100 hover:shadow-2xl hover:shadow-slate-200/50 transition-all flex flex-col md:flex-row md:items-center justify-between gap-6"
                 >
-                  <div className="flex items-center gap-8">
-                    <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-primary font-extrabold text-2xl shadow-sm border border-slate-100 group-hover:scale-110 transition-transform">
+                  <div className="flex items-center gap-4 md:gap-8">
+                    <div className="w-12 h-12 md:w-16 md:h-16 bg-white rounded-2xl flex items-center justify-center text-primary font-extrabold text-xl md:text-2xl shadow-sm border border-slate-100 group-hover:scale-110 transition-transform shrink-0">
                       {referral.student_name.charAt(0)}
                     </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-4">
-                        <h3 className="font-extrabold text-slate-800 text-xl">{referral.student_name}</h3>
+                    <div className="space-y-1 md:space-y-2">
+                      <div className="flex flex-wrap items-center gap-2 md:gap-4">
+                        <h3 className="font-extrabold text-slate-800 text-lg md:text-xl">{referral.student_name}</h3>
                         {getStatusBadge(referral.status)}
                       </div>
-                      <div className="flex items-center gap-6 text-sm text-slate-400 font-bold uppercase tracking-wider">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] md:text-sm text-slate-400 font-bold uppercase tracking-wider">
                         <span className="flex items-center gap-2">
-                          <Users size={16} />
+                          <Users size={14} className="md:w-4 md:h-4" />
                           {referral.student_grade} - {referral.student_section}
                         </span>
-                        <span className="w-1.5 h-1.5 bg-slate-200 rounded-full" />
+                        <span className="hidden md:block w-1.5 h-1.5 bg-slate-200 rounded-full" />
                         <span>المعلم: {referral.teacher_name}</span>
-                        <span className="w-1.5 h-1.5 bg-slate-200 rounded-full" />
+                        <span className="hidden md:block w-1.5 h-1.5 bg-slate-200 rounded-full" />
                         <span className={`${
                           referral.severity === 'high' ? 'text-red-500' : 
                           referral.severity === 'medium' ? 'text-amber-500' : 'text-primary'
@@ -171,13 +171,13 @@ const ManagementDashboard: React.FC = () => {
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-6">
+                  <div className="flex items-center justify-between md:justify-end gap-6 border-t md:border-t-0 pt-4 md:pt-0 border-slate-100">
                     <div className="text-right">
-                      <p className="text-[10px] text-slate-400 mb-1 font-extrabold uppercase tracking-widest">تاريخ التحويل</p>
-                      <p className="text-sm font-extrabold text-slate-700">{new Date(referral.created_at).toLocaleDateString('ar-SA')}</p>
+                      <p className="text-[9px] md:text-[10px] text-slate-400 mb-1 font-extrabold uppercase tracking-widest">تاريخ التحويل</p>
+                      <p className="text-xs md:text-sm font-extrabold text-slate-700">{new Date(referral.created_at).toLocaleDateString('ar-SA')}</p>
                     </div>
-                    <div className="w-12 h-12 rounded-2xl bg-white border border-slate-100 flex items-center justify-center text-slate-300 group-hover:bg-primary group-hover:text-white group-hover:border-primary group-hover:rotate-12 transition-all shadow-sm">
-                      <ChevronLeft size={24} />
+                    <div className="w-10 h-10 md:w-12 md:h-12 rounded-2xl bg-white border border-slate-100 flex items-center justify-center text-slate-300 group-hover:bg-primary group-hover:text-white group-hover:border-primary group-hover:rotate-12 transition-all shadow-sm">
+                      <ChevronLeft size={20} className="md:w-6 md:h-6" />
                     </div>
                   </div>
                 </Link>

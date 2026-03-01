@@ -55,6 +55,7 @@ async function initDb() {
 
     await sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS remedial_plan TEXT`;
     await sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS remedial_plan_file TEXT`;
+    await sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS evidence_file TEXT`;
 
     await sql`
       CREATE TABLE IF NOT EXISTS referral_logs (
@@ -67,11 +68,26 @@ async function initDb() {
       )
     `;
 
+    await sql`ALTER TABLE referral_logs ADD COLUMN IF NOT EXISTS evidence_file TEXT`;
+    await sql`ALTER TABLE referral_logs ADD COLUMN IF NOT EXISTS evidence_text TEXT`;
+
     await sql`
       CREATE TABLE IF NOT EXISTS user_grades (
         user_id INTEGER REFERENCES users(id),
         grade TEXT,
         PRIMARY KEY (user_id, grade)
+      )
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id SERIAL PRIMARY KEY,
+        sender_id INTEGER REFERENCES users(id),
+        recipient_id INTEGER REFERENCES users(id),
+        message TEXT,
+        referral_id INTEGER REFERENCES referrals(id),
+        is_read BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `;
 
@@ -267,9 +283,21 @@ async function startServer() {
       
       // Add initial log entry
       await sql`
-        INSERT INTO referral_logs (referral_id, user_id, action, notes) 
-        VALUES (${referralId}, ${teacher_id}, 'إنشاء التحويل', 'تم إنشاء التحويل وتحويله آلياً إلى وكيل شؤون الطلاب للمراجعة')
+        INSERT INTO referral_logs (referral_id, user_id, action, notes, evidence_text, evidence_file) 
+        VALUES (${referralId}, ${teacher_id}, 'إنشاء التحويل', 'تم إنشاء التحويل وتحويله آلياً إلى وكيل شؤون الطلاب للمراجعة', ${remedial_plan}, ${remedial_plan_file})
       `;
+
+      // Notify Vice Principals and Principals
+      const student = await sql`SELECT name FROM students WHERE id = ${student_id}`;
+      const recipients = await sql`SELECT id FROM users WHERE role IN ('vice_principal', 'principal')`;
+      const teacher = await sql`SELECT name FROM users WHERE id = ${teacher_id}`;
+      
+      for (const recipient of recipients) {
+        await sql`
+          INSERT INTO notifications (sender_id, recipient_id, message, referral_id)
+          VALUES (${teacher_id}, ${recipient.id}, ${`تحويل جديد للطالب: ${student[0].name} من قبل ${teacher[0].name}`}, ${referralId})
+        `;
+      }
       
       res.json({ success: true, id: referralId });
     } catch (err) {
@@ -288,6 +316,9 @@ async function startServer() {
       WHERE r.id = ${id}
     `;
 
+    const studentId = referralResult[0].student_id;
+    const studentReferralsCount = await sql`SELECT COUNT(*) as count FROM referrals WHERE student_id = ${studentId}`;
+
     const logs = await sql`
       SELECT l.*, u.name as user_name, u.role as user_role
       FROM referral_logs l
@@ -296,19 +327,182 @@ async function startServer() {
       ORDER BY l.created_at DESC
     `;
 
-    res.json({ referral: referralResult[0], logs });
+    res.json({ referral: referralResult[0], logs, studentReferralsCount: parseInt(studentReferralsCount[0].count) });
   });
 
   app.post("/api/referrals/:id/action", async (req, res) => {
-    const { user_id, action, notes, status } = req.body;
+    const { user_id, action, notes, status, evidence_file, evidence_text } = req.body;
     const referralId = req.params.id;
 
     try {
-      await sql`UPDATE referrals SET status = ${status} WHERE id = ${referralId}`;
-      await sql`INSERT INTO referral_logs (referral_id, user_id, action, notes) VALUES (${referralId}, ${user_id}, ${action}, ${notes})`;
+      if (evidence_file) {
+        await sql`UPDATE referrals SET status = ${status}, evidence_file = ${evidence_file} WHERE id = ${referralId}`;
+      } else {
+        await sql`UPDATE referrals SET status = ${status} WHERE id = ${referralId}`;
+      }
+      await sql`INSERT INTO referral_logs (referral_id, user_id, action, notes, evidence_file, evidence_text) VALUES (${referralId}, ${user_id}, ${action}, ${notes}, ${evidence_file}, ${evidence_text})`;
+
+      // Notification Logic
+      const referral = await sql`SELECT teacher_id, student_id FROM referrals WHERE id = ${referralId}`;
+      const student = await sql`SELECT name FROM students WHERE id = ${referral[0].student_id}`;
+      const actor = await sql`SELECT name, role FROM users WHERE id = ${user_id}`;
+
+      // 1. If evidence added by VP -> Notify Teacher
+      if (actor[0].role === 'vice_principal' && (evidence_file || evidence_text)) {
+        await sql`
+          INSERT INTO notifications (sender_id, recipient_id, message, referral_id)
+          VALUES (${user_id}, ${referral[0].teacher_id}, ${`تم إضافة شواهد جديدة لتحويل الطالب: ${student[0].name}`}, ${referralId})
+        `;
+      }
+
+      // 2. If status changed to pending_counselor -> Notify Counselors
+      if (status === 'pending_counselor') {
+        const counselors = await sql`SELECT id FROM users WHERE role = 'counselor'`;
+        for (const counselor of counselors) {
+          await sql`
+            INSERT INTO notifications (sender_id, recipient_id, message, referral_id)
+            VALUES (${user_id}, ${counselor.id}, ${`تم تصعيد حالة الطالب: ${student[0].name} للمرشد الطلابي`}, ${referralId})
+          `;
+        }
+      }
+
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ success: false, error: "Action failed" });
+    }
+  });
+
+  app.get("/api/referrals/:id/evidence", async (req, res) => {
+    const { id } = req.params;
+    const { userId, role } = req.query;
+
+    try {
+      const referralResult = await sql`
+        SELECT r.teacher_id, r.remedial_plan, r.evidence_file, r.remedial_plan_file
+        FROM referrals r
+        WHERE r.id = ${id}
+      `;
+
+      if (referralResult.length === 0) {
+        return res.status(404).json({ error: "Referral not found" });
+      }
+
+      const referral = referralResult[0];
+
+      // Permission check: Teacher can only see their own referrals
+      if (role === 'teacher' && referral.teacher_id !== parseInt(userId as string)) {
+        return res.status(403).json({ error: "Unauthorized access to evidence" });
+      }
+
+      res.json({
+        text: referral.remedial_plan,
+        file: referral.evidence_file || referral.remedial_plan_file
+      });
+    } catch (err) {
+      console.error("Failed to fetch evidence:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.get("/api/notifications", async (req, res) => {
+    const { userId } = req.query;
+    try {
+      const notifications = await sql`
+        SELECT n.*, u.name as sender_name
+        FROM notifications n
+        LEFT JOIN users u ON n.sender_id = u.id
+        WHERE n.recipient_id = ${userId}
+        ORDER BY n.created_at DESC
+        LIMIT 20
+      `;
+      res.json(notifications);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch notifications" });
+    }
+  });
+
+  app.post("/api/notifications/:id/read", async (req, res) => {
+    const { id } = req.params;
+    try {
+      await sql`UPDATE notifications SET is_read = TRUE WHERE id = ${id}`;
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to mark notification as read" });
+    }
+  });
+
+  app.post("/api/notifications/read-all", async (req, res) => {
+    const { userId } = req.body;
+    try {
+      await sql`UPDATE notifications SET is_read = TRUE WHERE recipient_id = ${userId}`;
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to mark all notifications as read" });
+    }
+  });
+
+  app.get("/api/reports/top-students", async (req, res) => {
+    try {
+      const data = await sql`
+        SELECT s.name, s.grade, COUNT(r.id) as referral_count
+        FROM students s
+        JOIN referrals r ON s.id = r.student_id
+        GROUP BY s.id, s.name, s.grade
+        ORDER BY referral_count DESC
+        LIMIT 10
+      `;
+      res.json(data);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch top students" });
+    }
+  });
+
+  app.get("/api/reports/referral-status", async (req, res) => {
+    try {
+      const data = await sql`
+        SELECT r.id, s.name as student_name, s.grade as student_grade, u.name as teacher_name, 
+               r.status, r.reason, r.remedial_plan,
+               (r.remedial_plan IS NOT NULL AND r.remedial_plan != '') as has_text,
+               (r.evidence_file IS NOT NULL OR r.remedial_plan_file IS NOT NULL) as has_file
+        FROM referrals r
+        JOIN students s ON r.student_id = s.id
+        JOIN users u ON r.teacher_id = u.id
+        ORDER BY r.created_at DESC
+      `;
+      res.json(data);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch referral status" });
+    }
+  });
+
+  app.get("/api/reports/teacher-stats", async (req, res) => {
+    try {
+      const data = await sql`
+        SELECT u.name, COUNT(r.id) as referral_count
+        FROM users u
+        JOIN referrals r ON u.id = r.teacher_id
+        GROUP BY u.id, u.name
+        ORDER BY referral_count DESC
+      `;
+      res.json(data);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch teacher stats" });
+    }
+  });
+
+  app.get("/api/students/:id/referrals", async (req, res) => {
+    try {
+      const studentId = req.params.id;
+      const referrals = await sql`
+        SELECT r.*, u.name as teacher_name
+        FROM referrals r
+        JOIN users u ON r.teacher_id = u.id
+        WHERE r.student_id = ${studentId}
+        ORDER BY r.created_at DESC
+      `;
+      res.json(referrals);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch student referrals" });
     }
   });
 

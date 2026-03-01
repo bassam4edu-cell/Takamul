@@ -4,16 +4,22 @@ interface LogoProps {
   className?: string;
   showText?: boolean;
   light?: boolean;
+  variant?: 'login' | 'internal';
 }
 
-const Logo: React.FC<LogoProps> = ({ className = "w-12 h-12", showText = false, light = false }) => {
+const Logo: React.FC<LogoProps> = ({ className = "w-12 h-12", showText = false, light = false, variant = 'internal' }) => {
   const primaryColor = light ? "#FFFFFF" : "#006847";
   const secondaryColor = light ? "rgba(255,255,255,0.8)" : "#00855c";
+
+  // Using different logo files for login vs internal UI as requested
+  const logoUrl = variant === 'login' 
+    ? "https://upload.wikimedia.org/wikipedia/ar/thumb/a/a2/Ministry_of_Education_Saudi_Arabia.svg/512px-Ministry_of_Education_Saudi_Arabia.svg.png"
+    : "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/Ministry_of_Education_Saudi_Arabia_Logo.svg/512px-Ministry_of_Education_Saudi_Arabia_Logo.svg.png";
 
   return (
     <div className={`flex flex-col items-center gap-4 ${className}`}>
       <img 
-        src="https://i.ibb.co/ZzPTFG3y/222.png" 
+        src={logoUrl} 
         alt="شعار وزارة التعليم" 
         className="w-full h-full object-contain"
         referrerPolicy="no-referrer"

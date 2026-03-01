@@ -45,6 +45,12 @@ const Sidebar: React.FC = () => {
       roles: ['admin']
     },
     { 
+      title: 'التقارير الإحصائية', 
+      path: '/reports', 
+      icon: BarChart3,
+      roles: ['principal', 'admin']
+    },
+    { 
       title: 'الإعدادات', 
       path: '/settings', 
       icon: Settings,

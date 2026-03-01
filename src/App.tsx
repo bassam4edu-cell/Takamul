@@ -6,6 +6,8 @@ import TeacherDashboard from './pages/TeacherDashboard';
 import ReferralForm from './pages/ReferralForm';
 import ManagementDashboard from './pages/ManagementDashboard';
 import ReferralDetails from './pages/ReferralDetails';
+import StudentProfile from './pages/StudentProfile';
+import Reports from './pages/Reports';
 import Settings from './pages/Settings';
 import AdminDashboard from './pages/AdminDashboard';
 import PrincipalDashboard from './pages/PrincipalDashboard';
@@ -82,6 +84,8 @@ const App: React.FC = () => {
               </ProtectedRoute>
             } />
             <Route path="referral/:id" element={<ReferralDetails />} />
+            <Route path="student/:id" element={<StudentProfile />} />
+            <Route path="reports" element={<Reports />} />
             <Route path="settings" element={<Settings />} />
             <Route path="admin" element={
               <ProtectedRoute allowedRoles={['admin']}>

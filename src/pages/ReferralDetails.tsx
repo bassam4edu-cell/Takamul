@@ -23,7 +23,8 @@ import {
   Download,
   ExternalLink,
   Upload,
-  Info
+  Info,
+  Image as ImageIcon
 } from 'lucide-react';
 import { Referral, ReferralLog } from '../types';
 import { useAuth } from '../App';
@@ -34,7 +35,7 @@ const ReferralDetails: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   
-  const [data, setData] = useState<{ referral: Referral, logs: ReferralLog[] } | null>(null);
+  const [data, setData] = useState<{ referral: Referral, logs: ReferralLog[], studentReferralsCount: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionNotes, setActionNotes] = useState('');
   const [meetingDate, setMeetingDate] = useState('');
@@ -42,6 +43,8 @@ const ReferralDetails: React.FC = () => {
   const [showMeetingInputs, setShowMeetingInputs] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [evidenceFile, setEvidenceFile] = useState<string | null>(null);
+  const [evidenceError, setEvidenceError] = useState('');
   const [editForm, setEditForm] = useState({
     type: '',
     severity: '',
@@ -111,11 +114,38 @@ const ReferralDetails: React.FC = () => {
     }
   };
 
+  const handleEvidenceFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    setEvidenceError('');
+    if (!file) return;
+    if (file.type !== 'application/pdf' && !file.type.startsWith('image/')) {
+      setEvidenceError('يرجى اختيار ملف PDF أو صورة فقط');
+      return;
+    }
+    if (file.size > 1024 * 1024) {
+      setEvidenceError('حجم الملف يجب أن لا يتجاوز 1 ميجابايت');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setEvidenceFile(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleAction = async (action: string, status: string, customNotes?: string) => {
     const finalNotes = customNotes || actionNotes;
     if (!finalNotes.trim()) {
       alert('يرجى كتابة ملاحظات الإجراء');
       return;
+    }
+
+    // Validation for Vice Principal: Evidence is mandatory for forwarding or closing
+    if (user?.role === 'vice_principal' && (status === 'pending_counselor' || status === 'resolved')) {
+      if (!evidenceFile) {
+        alert('يجب رفع شاهد/دليل الإجراء (ملف توثيقي) قبل إتمام هذه العملية');
+        return;
+      }
     }
     
     setSubmitting(true);
@@ -127,7 +157,9 @@ const ReferralDetails: React.FC = () => {
           user_id: user?.id,
           action,
           notes: finalNotes,
-          status
+          status,
+          evidence_file: evidenceFile || (user?.role === 'teacher' ? editForm.remedial_plan_file : null),
+          evidence_text: user?.role === 'teacher' ? editForm.remedial_plan : null
         }),
       });
 
@@ -163,23 +195,40 @@ const ReferralDetails: React.FC = () => {
     </div>
   );
 
-  const { referral, logs } = data;
+  const { referral, logs, studentReferralsCount } = data;
+  const isFirstReferral = studentReferralsCount === 1;
 
   return (
     <div className="max-w-6xl mx-auto space-y-10 pb-12">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="flex items-center gap-6">
+      {/* First Referral Warning for VP */}
+      {user?.role === 'vice_principal' && isFirstReferral && referral.status === 'pending_vp' && (
+        <motion.div 
+          initial={{ y: -20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          className="bg-amber-50 border-r-4 border-amber-500 p-6 rounded-2xl flex items-center gap-4 shadow-sm"
+        >
+          <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center">
+            <AlertCircle size={24} />
+          </div>
+          <div>
+            <h4 className="font-black text-amber-800">تنبيه: هذه هي المرة الأولى للطالب</h4>
+            <p className="text-amber-700 text-sm font-bold">بناءً على سجل النظام، هذا هو أول تحويل مسجل لهذا الطالب. يرجى اتخاذ الإجراءات التربوية الأولية.</p>
+          </div>
+        </motion.div>
+      )}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+        <div className="flex items-center gap-4 md:gap-6">
           <button 
             onClick={() => navigate(-1)}
-            className="w-12 h-12 flex items-center justify-center text-slate-400 hover:bg-white hover:text-primary rounded-2xl transition-all border border-transparent hover:border-slate-100 shadow-sm"
+            className="w-10 h-10 md:w-12 md:h-12 flex items-center justify-center text-slate-400 hover:bg-white hover:text-primary rounded-2xl transition-all border border-transparent hover:border-slate-100 shadow-sm shrink-0"
           >
-            <ChevronRight size={28} />
+            <ChevronRight size={24} className="md:w-7 md:h-7" />
           </button>
           <div>
-            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">تفاصيل التحويل #{referral.id}</h1>
-            <div className="flex items-center gap-3 text-sm text-slate-500 mt-1 font-bold">
+            <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">تفاصيل التحويل #{referral.id}</h1>
+            <div className="flex flex-wrap items-center gap-3 text-[10px] md:text-sm text-slate-500 mt-1 font-bold">
               <span className="flex items-center gap-1.5"><Clock size={14} /> {new Date(referral.created_at).toLocaleString('ar-SA')}</span>
-              <span className="w-1 h-1 bg-slate-300 rounded-full" />
+              <span className="hidden md:block w-1 h-1 bg-slate-300 rounded-full" />
               <span className="flex items-center gap-1.5"><User size={14} /> {referral.teacher_name}</span>
             </div>
           </div>
@@ -189,7 +238,7 @@ const ReferralDetails: React.FC = () => {
           {(user?.role === 'admin' || (user?.role === 'teacher' && referral.status === 'returned_to_teacher')) && (
             <button 
               onClick={() => setIsEditing(!isEditing)}
-              className={`px-5 py-3 rounded-2xl text-xs font-extrabold border flex items-center gap-2 transition-all shadow-sm ${
+              className={`px-4 md:px-5 py-3 rounded-2xl text-[10px] md:text-xs font-extrabold border flex items-center gap-2 transition-all shadow-sm ${
                 isEditing ? 'bg-red-50 text-red-700 border-red-100' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
               }`}
             >
@@ -270,39 +319,42 @@ const ReferralDetails: React.FC = () => {
         }
       `}} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-        <div className="lg:col-span-2 space-y-10">
-          <div className="sts-card p-10 space-y-10">
-            <div className="flex items-center gap-6 pb-10 border-b border-slate-50">
-              <div className="w-24 h-24 bg-primary text-white rounded-[2rem] flex items-center justify-center text-4xl font-extrabold shadow-2xl shadow-primary/20 border-4 border-white">
-                {referral.student_name.charAt(0)}
-              </div>
-              <div className="space-y-2">
-                <h2 className="text-3xl font-extrabold text-slate-900">{referral.student_name}</h2>
-                <div className="flex flex-wrap items-center gap-4 text-slate-500">
-                  <span className="flex items-center gap-2 font-bold bg-slate-100 px-3 py-1 rounded-xl text-xs">
-                    <User size={16} className="text-primary" />
-                    {referral.student_grade} - الفصل {referral.student_section}
-                  </span>
-                  <span className="w-1.5 h-1.5 bg-slate-200 rounded-full" />
-                  <span className={`font-extrabold text-xs px-3 py-1 rounded-xl border uppercase tracking-widest ${
-                    referral.severity === 'high' ? 'bg-red-50 text-red-600 border-red-100' : 
-                    referral.severity === 'medium' ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-primary/5 text-primary border-primary/10'
-                  }`}>
-                    {referral.severity === 'high' ? 'المرة الثالثة فأكثر' : 
-                     referral.severity === 'medium' ? 'المرة الثانية' : 'المرة الأولى'}
-                  </span>
-                  {referral.status === 'returned_to_teacher' && (
-                    <>
-                      <span className="w-1.5 h-1.5 bg-slate-200 rounded-full" />
-                      <span className="text-red-600 font-extrabold text-xs flex items-center gap-2 bg-red-50 px-3 py-1 rounded-xl border border-red-100 uppercase tracking-widest">
-                        <AlertCircle size={14} />
-                        بانتظار استكمال النواقص
-                      </span>
-                    </>
-                  )}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 md:gap-10">
+        <div className="lg:col-span-2 space-y-8 md:space-y-10">
+          <div className="sts-card p-6 md:p-10 space-y-8 md:space-y-10">
+            <div className="flex flex-col md:flex-row md:items-center justify-between pb-8 md:pb-10 border-b border-slate-50 gap-6">
+              <div className="flex items-center gap-4 md:gap-6">
+                <div className="w-16 h-16 md:w-24 md:h-24 bg-primary text-white rounded-[1.5rem] md:rounded-[2rem] flex items-center justify-center text-2xl md:text-4xl font-extrabold shadow-2xl shadow-primary/20 border-4 border-white shrink-0">
+                  {referral.student_name.charAt(0)}
+                </div>
+                <div className="space-y-1 md:space-y-2">
+                  <h2 className="text-xl md:text-3xl font-extrabold text-slate-900">{referral.student_name}</h2>
+                  <div className="flex flex-wrap items-center gap-2 md:gap-4 text-slate-500">
+                    <span className="flex items-center gap-2 font-bold bg-slate-100 px-3 py-1 rounded-xl text-[10px] md:text-xs">
+                      <User size={14} className="text-primary" />
+                      {referral.student_grade} - الفصل {referral.student_section}
+                    </span>
+                    <span className="hidden md:block w-1.5 h-1.5 bg-slate-200 rounded-full" />
+                    <span className={`font-extrabold text-[10px] md:text-xs px-3 py-1 rounded-xl border uppercase tracking-widest ${
+                      referral.severity === 'high' ? 'bg-red-50 text-red-600 border-red-100' : 
+                      referral.severity === 'medium' ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-primary/5 text-primary border-primary/10'
+                    }`}>
+                      {referral.severity === 'high' ? 'المرة الثالثة فأكثر' : 
+                       referral.severity === 'medium' ? 'المرة الثانية' : 'المرة الأولى'}
+                    </span>
+                  </div>
                 </div>
               </div>
+              {['vice_principal', 'counselor', 'principal', 'admin'].includes(user?.role || '') && (
+                <button 
+                  onClick={() => navigate(`/student/${referral.student_id}`)}
+                  className="flex items-center justify-center gap-2 text-primary font-black text-xs md:text-sm bg-primary/5 px-4 md:px-6 py-3 rounded-2xl border border-primary/10 hover:bg-primary/10 transition-all w-full md:w-auto"
+                >
+                  <User size={16} md:size={18} />
+                  <span>عرض ملف الطالب</span>
+                  <ExternalLink size={12} md:size={14} />
+                </button>
+              )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
@@ -525,6 +577,53 @@ const ReferralDetails: React.FC = () => {
                       <div className="space-y-2">
                         <p className="text-primary font-extrabold text-sm uppercase tracking-widest">{log.action}</p>
                         <p className="text-slate-600 text-sm font-bold leading-relaxed bg-white p-4 rounded-2xl border border-slate-50">{log.notes}</p>
+                        
+                        {/* Evidence in Log */}
+                        {(log.evidence_text || log.evidence_file) && (
+                          <div className="mt-4 pt-4 border-t border-slate-100 space-y-4">
+                            <div className="flex items-center gap-2 text-[10px] font-black text-primary uppercase tracking-widest">
+                              <ShieldAlert size={12} />
+                              <span>الشواهد المرفقة مع هذا الإجراء</span>
+                            </div>
+                            
+                            {log.evidence_text && (
+                              <div className="p-5 bg-primary/5 rounded-2xl border border-primary/10 text-sm font-bold text-slate-700 leading-relaxed shadow-inner">
+                                {log.evidence_text}
+                              </div>
+                            )}
+                            
+                            {log.evidence_file && (
+                              <div className="flex items-center justify-between p-5 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all">
+                                <div className="flex items-center gap-4">
+                                  <div className="w-12 h-12 bg-slate-50 text-primary rounded-xl flex items-center justify-center border border-slate-100">
+                                    {log.evidence_file.startsWith('data:image/') ? <ImageIcon size={22} /> : <FileText size={22} />}
+                                  </div>
+                                  <div className="flex flex-col">
+                                    <span className="text-xs font-black text-slate-800 uppercase tracking-widest">شاهد مرفق</span>
+                                    <span className="text-[10px] font-bold text-slate-400">انقر للمعاينة أو التحميل</span>
+                                  </div>
+                                </div>
+                                <div className="flex gap-3">
+                                  <a 
+                                    href={log.evidence_file} 
+                                    download={`evidence-${log.id}.png`}
+                                    className="w-10 h-10 flex items-center justify-center bg-primary text-white rounded-xl hover:bg-primary-dark transition-all shadow-lg shadow-primary/20"
+                                    title="تحميل الملف"
+                                  >
+                                    <Download size={18} />
+                                  </a>
+                                  <button 
+                                    onClick={() => window.open(log.evidence_file, '_blank')}
+                                    className="w-10 h-10 flex items-center justify-center bg-white text-slate-400 border border-slate-100 rounded-xl hover:text-primary hover:border-primary/20 transition-all"
+                                    title="فتح في نافذة جديدة"
+                                  >
+                                    <ExternalLink size={18} />
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -615,32 +714,61 @@ const ReferralDetails: React.FC = () => {
 
                   <div className="space-y-4 pt-4">
                     {user?.role === 'vice_principal' && (
-                      <>
-                        <button
-                          onClick={() => handleAction('تحويل للموجه الطلابي', 'pending_counselor')}
-                          disabled={submitting}
-                          className="w-full sts-button-primary flex items-center justify-center gap-3"
-                        >
-                          <ArrowRightLeft size={20} />
-                          <span>تحويل للموجه</span>
-                        </button>
-                        <button
-                          onClick={() => handleAction('ارجاع التحويل للمعلم لاستكمال نواقص', 'returned_to_teacher')}
-                          disabled={submitting}
-                          className="w-full sts-button-accent flex items-center justify-center gap-3"
-                        >
-                          <RotateCcw size={20} />
-                          <span>إرجاع للمعلم (نواقص)</span>
-                        </button>
-                        <button
-                          onClick={() => handleAction('إغلاق الحالة مباشرة', 'resolved')}
-                          disabled={submitting}
-                          className="w-full py-4 bg-emerald-600 text-white font-extrabold rounded-2xl hover:bg-emerald-700 transition-all flex items-center justify-center gap-3 shadow-lg shadow-emerald-600/20"
-                        >
-                          <CheckCircle2 size={20} />
-                          <span>معالجة وإغلاق</span>
-                        </button>
-                      </>
+                      <div className="space-y-6">
+                        {/* Evidence Upload for VP */}
+                        <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                            <Upload size={14} />
+                            شاهد/دليل الإجراء (إلزامي للتحويل أو الإغلاق)
+                          </label>
+                          <div className="relative border-2 border-dashed border-slate-300 rounded-xl p-4 bg-white hover:border-primary/50 transition-all text-center">
+                            <input 
+                              type="file"
+                              accept=".pdf,image/*"
+                              onChange={handleEvidenceFileChange}
+                              className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                            />
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="text-xs font-bold text-slate-600">
+                                {evidenceFile ? 'تم اختيار الملف بنجاح' : 'انقر لرفع شاهد الإجراء'}
+                              </span>
+                            </div>
+                          </div>
+                          {evidenceError && <p className="text-red-500 text-[10px] font-bold">{evidenceError}</p>}
+                        </div>
+
+                        <div className="flex flex-col gap-3">
+                          {/* Hide Forward button if it's the first referral */}
+                          {!isFirstReferral && (
+                            <button
+                              onClick={() => handleAction('تحويل للموجه الطلابي', 'pending_counselor')}
+                              disabled={submitting}
+                              className="w-full sts-button-primary flex items-center justify-center gap-3"
+                            >
+                              <ArrowRightLeft size={20} />
+                              <span>تحويل للموجه</span>
+                            </button>
+                          )}
+                          
+                          <button
+                            onClick={() => handleAction('ارجاع التحويل للمعلم لاستكمال نواقص', 'returned_to_teacher')}
+                            disabled={submitting}
+                            className="w-full sts-button-accent flex items-center justify-center gap-3"
+                          >
+                            <RotateCcw size={20} />
+                            <span>إرجاع للمعلم (نواقص)</span>
+                          </button>
+                          
+                          <button
+                            onClick={() => handleAction('إغلاق الحالة مباشرة', 'resolved')}
+                            disabled={submitting}
+                            className="w-full py-4 bg-emerald-600 text-white font-extrabold rounded-2xl hover:bg-emerald-700 transition-all flex items-center justify-center gap-3 shadow-lg shadow-emerald-600/20"
+                          >
+                            <CheckCircle2 size={20} />
+                            <span>معالجة وإغلاق</span>
+                          </button>
+                        </div>
+                      </div>
                     )}
                     {user?.role === 'counselor' && (
                       <>

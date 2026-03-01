@@ -135,18 +135,18 @@ const ReferralForm: React.FC = () => {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-        <div className="lg:col-span-2 space-y-10">
-          <div className="sts-card p-10 space-y-10">
-            <div className="space-y-8">
-              <div className="flex items-center gap-4 text-primary font-extrabold border-b border-slate-50 pb-6">
-                <div className="w-10 h-10 bg-primary/5 rounded-xl flex items-center justify-center">
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-8 md:gap-10">
+        <div className="lg:col-span-2 space-y-8 md:col-span-1">
+          <div className="sts-card p-6 md:p-10 space-y-8 md:space-y-10">
+            <div className="space-y-6 md:space-y-8">
+              <div className="flex items-center gap-4 text-primary font-extrabold border-b border-slate-50 pb-4 md:pb-6">
+                <div className="w-10 h-10 bg-primary/5 rounded-xl flex items-center justify-center shrink-0">
                   <User size={22} />
                 </div>
-                <span className="text-lg uppercase tracking-widest">بيانات الطالب</span>
+                <span className="text-base md:text-lg uppercase tracking-widest">بيانات الطالب</span>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
                 <div className="space-y-3">
                   <label className="text-xs font-extrabold text-slate-500 mr-2 uppercase tracking-widest">الصف الدراسي</label>
                   <select 
@@ -217,12 +217,12 @@ const ReferralForm: React.FC = () => {
               </div>
             </div>
 
-            <div className="space-y-8">
-              <div className="flex items-center gap-4 text-primary font-extrabold border-b border-slate-50 pb-6">
-                <div className="w-10 h-10 bg-primary/5 rounded-xl flex items-center justify-center">
+            <div className="space-y-6 md:space-y-8">
+              <div className="flex items-center gap-4 text-primary font-extrabold border-b border-slate-50 pb-4 md:pb-6">
+                <div className="w-10 h-10 bg-primary/5 rounded-xl flex items-center justify-center shrink-0">
                   <FileText size={22} />
                 </div>
-                <span className="text-lg uppercase tracking-widest">تفاصيل الحالة</span>
+                <span className="text-base md:text-lg uppercase tracking-widest">تفاصيل الحالة</span>
               </div>
 
               <div className="space-y-3">
@@ -286,13 +286,13 @@ const ReferralForm: React.FC = () => {
           </div>
         </div>
 
-        <div className="space-y-10 sticky top-8">
-          <div className="sts-card p-10 space-y-8">
-            <div className="flex items-center gap-4 text-primary font-extrabold border-b border-slate-50 pb-6">
-              <div className="w-10 h-10 bg-primary/5 rounded-xl flex items-center justify-center">
+        <div className="space-y-8 md:space-y-10 lg:sticky lg:top-8">
+          <div className="sts-card p-6 md:p-10 space-y-6 md:space-y-8">
+            <div className="flex items-center gap-4 text-primary font-extrabold border-b border-slate-50 pb-4 md:pb-6">
+              <div className="w-10 h-10 bg-primary/5 rounded-xl flex items-center justify-center shrink-0">
                 <AlertTriangle size={22} />
               </div>
-              <span className="text-lg uppercase tracking-widest">تكرار المخالفة</span>
+              <span className="text-base md:text-lg uppercase tracking-widest">تكرار المخالفة</span>
             </div>
             
             <div className="space-y-4">

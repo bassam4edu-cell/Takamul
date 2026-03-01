@@ -43,5 +43,7 @@ export interface ReferralLog {
   user_role: Role;
   action: string;
   notes: string;
+  evidence_file?: string;
+  evidence_text?: string;
   created_at: string;
 }

@@ -1,6 +1,7 @@
 import React from 'react';
-import { Bell, Search, User as UserIcon, Settings, HelpCircle } from 'lucide-react';
+import { Search, User as UserIcon, Settings, HelpCircle } from 'lucide-react';
 import { useAuth } from '../App';
+import NotificationBell from './NotificationBell';
 
 const Header: React.FC = () => {
   const { user } = useAuth();
@@ -17,9 +18,16 @@ const Header: React.FC = () => {
   };
 
   return (
-    <header className="h-24 bg-white/80 backdrop-blur-xl border-b border-slate-50 flex items-center justify-between px-10 z-10 sticky top-0">
-      <div className="flex items-center gap-6 flex-1 max-w-2xl">
-        <div className="relative w-full group">
+    <header className="h-20 lg:h-24 bg-white/80 backdrop-blur-xl border-b border-slate-50 flex items-center justify-between px-4 lg:px-10 z-10 sticky top-0">
+      <div className="flex items-center gap-4 lg:gap-6 flex-1 max-w-2xl">
+        <div className="lg:hidden">
+          <img 
+            src="https://upload.wikimedia.org/wikipedia/ar/thumb/a/a2/Ministry_of_Education_Saudi_Arabia.svg/512px-Ministry_of_Education_Saudi_Arabia.svg.png" 
+            alt="Logo" 
+            className="w-10 h-10 object-contain"
+          />
+        </div>
+        <div className="relative w-full group hidden md:block">
           <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors" size={20} />
           <input 
             type="text" 
@@ -37,10 +45,7 @@ const Header: React.FC = () => {
           <button className="p-3 text-slate-400 hover:text-primary hover:bg-slate-50 rounded-xl transition-all relative">
             <Settings size={22} />
           </button>
-          <button className="relative p-3 text-slate-400 hover:text-primary hover:bg-slate-50 rounded-xl transition-all">
-            <Bell size={22} />
-            <span className="absolute top-3 right-3 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white shadow-sm"></span>
-          </button>
+          <NotificationBell />
         </div>
 
         <div className="flex items-center gap-4 pr-4">
