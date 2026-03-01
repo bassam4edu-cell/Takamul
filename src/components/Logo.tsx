@@ -13,8 +13,8 @@ const Logo: React.FC<LogoProps> = ({ className = "w-12 h-12", showText = false, 
 
   // Using different logo files for login vs internal UI as requested
   const logoUrl = variant === 'login' 
-    ? "https://upload.wikimedia.org/wikipedia/ar/thumb/a/a2/Ministry_of_Education_Saudi_Arabia.svg/512px-Ministry_of_Education_Saudi_Arabia.svg.png"
-    : "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/Ministry_of_Education_Saudi_Arabia_Logo.svg/512px-Ministry_of_Education_Saudi_Arabia_Logo.svg.png";
+    ? "https://i.ibb.co/ZzPTFG3y/222.png"
+    : "https://i.ibb.co/QFwrvnqF/photo-2026-02-20-15-16-20.jpg";
 
   return (
     <div className={`flex flex-col items-center gap-4 ${className}`}>
