@@ -200,23 +200,235 @@ const ReferralDetails: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto space-y-10 pb-12">
-      {/* First Referral Warning for VP */}
-      {user?.role === 'vice_principal' && isFirstReferral && referral.status === 'pending_vp' && (
-        <motion.div 
-          initial={{ y: -20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          className="bg-amber-50 border-r-4 border-amber-500 p-6 rounded-2xl flex items-center gap-4 shadow-sm"
-        >
-          <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center">
-            <AlertCircle size={24} />
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media print {
+          .no-print, aside, header, button, .sticky, .no-print-area {
+            display: none !important;
+          }
+          body, main {
+            background: white !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            direction: rtl;
+          }
+          .max-w-6xl {
+            max-width: 100% !important;
+            width: 100% !important;
+          }
+          .sts-card {
+            box-shadow: none !important;
+            border: none !important;
+            padding: 0 !important;
+          }
+          .print-report {
+            display: block !important;
+            padding: 10mm;
+          }
+          .print-section {
+            margin-bottom: 20px;
+            border: 1px solid #000;
+          }
+          .print-section-header {
+            background-color: #f1f5f9 !important;
+            border-bottom: 1px solid #000;
+            padding: 8px 12px;
+            font-weight: bold;
+            font-size: 14px;
+          }
+          .print-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+          }
+          .print-cell {
+            padding: 8px 12px;
+            border-bottom: 1px solid #eee;
+            border-left: 1px solid #eee;
+            font-size: 12px;
+          }
+          .print-cell:last-child {
+            border-left: none;
+          }
+          .print-label {
+            font-weight: bold;
+            color: #475569;
+            margin-left: 8px;
+          }
+          .print-full-cell {
+            padding: 12px;
+            font-size: 12px;
+            line-height: 1.6;
+          }
+          @page {
+            size: A4 portrait;
+            margin: 10mm;
+          }
+        }
+        .print-report {
+          display: none;
+        }
+      `}} />
+
+      {/* Official Print Report (Visible only on print) */}
+      <div className="print-report font-sans">
+        {/* Print Header */}
+        <div className="flex justify-between items-center mb-10 border-b-2 border-black pb-6">
+          <div className="text-center space-y-1">
+            <img 
+              src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/Ministry_of_Education_Saudi_Arabia_Logo.svg/512px-Ministry_of_Education_Saudi_Arabia_Logo.svg.png" 
+              alt="شعار الوزارة" 
+              className="w-20 h-20 object-contain mx-auto mb-2"
+              referrerPolicy="no-referrer"
+            />
+            <p className="text-xs font-black">المملكة العربية السعودية</p>
+            <p className="text-[10px] font-bold">وزارة التعليم</p>
+            <p className="text-[10px] font-bold">إدارة التعليم بالخرج</p>
+            <p className="text-[10px] font-bold">ثانوية أم القرى</p>
           </div>
-          <div>
-            <h4 className="font-black text-amber-800">تنبيه: هذه هي المرة الأولى للطالب</h4>
-            <p className="text-amber-700 text-sm font-bold">بناءً على سجل النظام، هذا هو أول تحويل مسجل لهذا الطالب. يرجى اتخاذ الإجراءات التربوية الأولية.</p>
+          <div className="text-center">
+            <h1 className="text-xl font-black mb-2">تقرير حالة طالب تفصيلي</h1>
+            <p className="text-sm font-bold text-slate-600">رقم الحالة: #{referral.id}</p>
+            <p className="text-xs font-bold text-slate-500 mt-2">تاريخ التقرير: {new Date().toLocaleDateString('ar-SA')}</p>
           </div>
-        </motion.div>
-      )}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+          <div className="text-center">
+            <img 
+              src="https://upload.wikimedia.org/wikipedia/ar/thumb/a/a2/Saudi_Vision_2030_logo.svg/512px-Saudi_Vision_2030_logo.svg.png" 
+              alt="شعار الرؤية" 
+              className="w-20 h-20 object-contain mx-auto"
+              referrerPolicy="no-referrer"
+            />
+          </div>
+        </div>
+
+        {/* Section 1: Student Data */}
+        <div className="print-section">
+          <div className="print-section-header">أولاً: بيانات الطالب الأساسية</div>
+          <div className="print-grid">
+            <div className="print-cell"><span className="print-label">اسم الطالب:</span> {referral.student_name}</div>
+            <div className="print-cell"><span className="print-label">رقم الحالة:</span> #{referral.id}</div>
+            <div className="print-cell"><span className="print-label">الصف الدراسي:</span> {referral.student_grade}</div>
+            <div className="print-cell"><span className="print-label">الفصل:</span> {referral.student_section}</div>
+            <div className="print-cell"><span className="print-label">تاريخ التحويل:</span> {new Date(referral.created_at).toLocaleDateString('ar-SA')}</div>
+            <div className="print-cell"><span className="print-label">وقت التحويل:</span> {new Date(referral.created_at).toLocaleTimeString('ar-SA')}</div>
+          </div>
+        </div>
+
+        {/* Section 2: Teacher Statement */}
+        <div className="print-section">
+          <div className="print-section-header">ثانياً: إفادة المعلم المحيل</div>
+          <div className="print-grid">
+            <div className="print-cell"><span className="print-label">اسم المعلم:</span> {referral.teacher_name}</div>
+            <div className="print-cell"><span className="print-label">نوع المشكلة:</span> {
+              referral.type === 'behavior' ? 'سلوكية' : 
+              referral.type === 'academic' ? 'ضعف دراسي' : 
+              referral.type === 'attendance' ? 'غياب وتأخر' : 'زي مدرسي'
+            }</div>
+          </div>
+          <div className="print-full-cell">
+            <p className="font-bold mb-2">وصف المشكلة:</p>
+            <p>{referral.reason}</p>
+            {referral.teacher_notes && (
+              <div className="mt-4">
+                <p className="font-bold mb-1 italic text-slate-600">ملاحظات إضافية:</p>
+                <p className="italic text-slate-600">"{referral.teacher_notes}"</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Section 3: Vice Principal Actions */}
+        <div className="print-section">
+          <div className="print-section-header">ثالثاً: إجراءات وكيل شؤون الطلاب</div>
+          {logs.filter(l => l.user_role === 'vice_principal').length > 0 ? (
+            logs.filter(l => l.user_role === 'vice_principal').map((log, idx) => (
+              <div key={idx} className="border-b border-slate-200 last:border-0 p-4">
+                <div className="flex justify-between mb-2 text-[10px] font-bold text-slate-500">
+                  <span>الإجراء: {log.action}</span>
+                  <span>التاريخ: {new Date(log.created_at).toLocaleString('ar-SA')}</span>
+                </div>
+                <p className="text-xs leading-relaxed">{log.notes}</p>
+                {(log.evidence_text || log.evidence_file) && (
+                  <div className="mt-2 text-[10px] font-bold text-primary italic">
+                    {log.evidence_text && <span>شاهد نصي: {log.evidence_text.substring(0, 50)}...</span>}
+                    {log.evidence_file && <span className="mr-4">يوجد ملف شاهد مرفق بالنظام</span>}
+                  </div>
+                )}
+              </div>
+            ))
+          ) : (
+            <div className="p-4 text-xs text-slate-400 italic">لا توجد إجراءات مسجلة للوكيل بعد.</div>
+          )}
+        </div>
+
+        {/* Section 4: Counselor Intervention */}
+        <div className="print-section">
+          <div className="print-section-header">رابعاً: تدخل المرشد الطلابي / الموجه</div>
+          {logs.filter(l => l.user_role === 'counselor').length > 0 ? (
+            logs.filter(l => l.user_role === 'counselor').map((log, idx) => (
+              <div key={idx} className="border-b border-slate-200 last:border-0 p-4">
+                <div className="flex justify-between mb-2 text-[10px] font-bold text-slate-500">
+                  <span>الإجراء: {log.action}</span>
+                  <span>التاريخ: {new Date(log.created_at).toLocaleString('ar-SA')}</span>
+                </div>
+                <p className="text-xs leading-relaxed">{log.notes}</p>
+              </div>
+            ))
+          ) : (
+            <div className="p-4 text-xs text-slate-400 italic">لا توجد تدخلات مسجلة للمرشد بعد.</div>
+          )}
+          {referral.status === 'resolved' && (
+            <div className="p-4 bg-emerald-50/50 border-t border-slate-200">
+              <p className="text-xs font-bold text-emerald-700">الحالة النهائية: تم إغلاق الحالة ومعالجتها تربوياً.</p>
+            </div>
+          )}
+        </div>
+
+        {/* Print Signatures */}
+        <div className="mt-20 grid grid-cols-4 gap-4 text-center">
+          <div className="space-y-8">
+            <p className="font-black text-xs">المعلم المحيل</p>
+            <div className="h-px bg-slate-300 w-full"></div>
+            <p className="text-[10px] font-bold">{referral.teacher_name}</p>
+          </div>
+          <div className="space-y-8">
+            <p className="font-black text-xs">وكيل شؤون الطلاب</p>
+            <div className="h-px bg-slate-300 w-full"></div>
+            <p className="text-[10px] font-bold">أ. فهد السالم</p>
+          </div>
+          <div className="space-y-8">
+            <p className="font-black text-xs">الموجه الطلابي</p>
+            <div className="h-px bg-slate-300 w-full"></div>
+            <p className="text-[10px] font-bold">أ. محمد الفهيد</p>
+          </div>
+          <div className="space-y-8">
+            <p className="font-black text-xs">مدير المدرسة</p>
+            <div className="h-px bg-slate-300 w-full"></div>
+            <p className="text-[10px] font-bold">د. خالد المنصور</p>
+          </div>
+        </div>
+
+        <div className="mt-10 text-center text-[8px] text-slate-400 border-t pt-4">
+          تم استخراج هذا التقرير آلياً من نظام تحويل الطلاب - ثانوية أم القرى بالخرج
+        </div>
+      </div>
+
+      <div className="no-print space-y-10">
+        {/* First Referral Warning for VP */}
+        {user?.role === 'vice_principal' && isFirstReferral && referral.status === 'pending_vp' && (
+          <motion.div 
+            initial={{ y: -20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className="bg-amber-50 border-r-4 border-amber-500 p-6 rounded-2xl flex items-center gap-4 shadow-sm"
+          >
+            <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center">
+              <AlertCircle size={24} />
+            </div>
+            <div>
+              <h4 className="font-black text-amber-800">تنبيه: هذه هي المرة الأولى للطالب</h4>
+              <p className="text-amber-700 text-sm font-bold">بناءً على سجل النظام، هذا هو أول تحويل مسجل لهذا الطالب. يرجى اتخاذ الإجراءات التربوية الأولية.</p>
+            </div>
+          </motion.div>
+        )}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
         <div className="flex items-center gap-4 md:gap-6">
           <button 
             onClick={() => navigate(-1)}
@@ -246,6 +458,19 @@ const ReferralDetails: React.FC = () => {
               {isEditing ? 'إلغاء التعديل' : 'تعديل التحويل'}
             </button>
           )}
+          
+          <button 
+            type="button"
+            onClick={() => {
+              window.focus();
+              window.print();
+            }}
+            className="px-5 py-3 bg-white text-slate-700 rounded-2xl text-xs font-extrabold border border-slate-200 flex items-center gap-2 hover:bg-slate-50 transition-all shadow-sm"
+          >
+            <Printer size={18} />
+            طباعة التقرير التفصيلي
+          </button>
+
           {referral.status === 'pending_vp' && (
             <span className="px-5 py-3 bg-red-50 text-red-700 rounded-2xl text-xs font-extrabold border border-red-100 flex items-center gap-2 uppercase tracking-widest">
               <ShieldAlert size={18} />
@@ -272,17 +497,6 @@ const ReferralDetails: React.FC = () => {
           )}
           {referral.status === 'resolved' && (
             <div className="flex items-center gap-3">
-              <button 
-                type="button"
-                onClick={() => {
-                  window.focus();
-                  window.print();
-                }}
-                className="px-5 py-3 bg-white text-slate-700 rounded-2xl text-xs font-extrabold border border-slate-200 flex items-center gap-2 hover:bg-slate-50 transition-all shadow-sm"
-              >
-                <Printer size={18} />
-                طباعة التقرير
-              </button>
               <span className="px-5 py-3 bg-emerald-50 text-emerald-700 rounded-2xl text-xs font-extrabold border border-emerald-100 flex items-center gap-2 uppercase tracking-widest">
                 <CheckCircle2 size={18} />
                 تمت المعالجة والحل
@@ -294,30 +508,214 @@ const ReferralDetails: React.FC = () => {
 
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
-          .no-print, aside, header, button, .sticky {
+          .no-print, aside, header, button, .sticky, .no-print-area {
             display: none !important;
           }
           body, main {
             background: white !important;
             margin: 0 !important;
             padding: 0 !important;
+            direction: rtl;
           }
           .max-w-6xl {
             max-width: 100% !important;
             width: 100% !important;
           }
-          .card-shadow {
+          .sts-card {
             box-shadow: none !important;
-            border: 1px solid #eee !important;
+            border: none !important;
+            padding: 0 !important;
           }
-          .lg\\:grid-cols-3 {
+          .print-report {
             display: block !important;
+            padding: 10mm;
           }
-          .lg\\:col-span-2 {
-            width: 100% !important;
+          .print-section {
+            margin-bottom: 20px;
+            border: 1px solid #000;
+          }
+          .print-section-header {
+            background-color: #f1f5f9 !important;
+            border-bottom: 1px solid #000;
+            padding: 8px 12px;
+            font-weight: bold;
+            font-size: 14px;
+          }
+          .print-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+          }
+          .print-cell {
+            padding: 8px 12px;
+            border-bottom: 1px solid #eee;
+            border-left: 1px solid #eee;
+            font-size: 12px;
+          }
+          .print-cell:last-child {
+            border-left: none;
+          }
+          .print-label {
+            font-weight: bold;
+            color: #475569;
+            margin-left: 8px;
+          }
+          .print-full-cell {
+            padding: 12px;
+            font-size: 12px;
+            line-height: 1.6;
+          }
+          @page {
+            size: A4 portrait;
+            margin: 10mm;
           }
         }
+        .print-report {
+          display: none;
+        }
       `}} />
+
+      {/* Official Print Report (Visible only on print) */}
+      <div className="print-report font-sans">
+        {/* Print Header */}
+        <div className="flex justify-between items-center mb-10 border-b-2 border-black pb-6">
+          <div className="text-center space-y-1">
+            <img 
+              src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/Ministry_of_Education_Saudi_Arabia_Logo.svg/512px-Ministry_of_Education_Saudi_Arabia_Logo.svg.png" 
+              alt="شعار الوزارة" 
+              className="w-20 h-20 object-contain mx-auto mb-2"
+              referrerPolicy="no-referrer"
+            />
+            <p className="text-xs font-black">المملكة العربية السعودية</p>
+            <p className="text-[10px] font-bold">وزارة التعليم</p>
+            <p className="text-[10px] font-bold">إدارة التعليم بالخرج</p>
+            <p className="text-[10px] font-bold">ثانوية أم القرى</p>
+          </div>
+          <div className="text-center">
+            <h1 className="text-xl font-black mb-2">تقرير حالة طالب تفصيلي</h1>
+            <p className="text-sm font-bold text-slate-600">رقم الحالة: #{referral.id}</p>
+            <p className="text-xs font-bold text-slate-500 mt-2">تاريخ التقرير: {new Date().toLocaleDateString('ar-SA')}</p>
+          </div>
+          <div className="text-center">
+            <img 
+              src="https://upload.wikimedia.org/wikipedia/ar/thumb/a/a2/Saudi_Vision_2030_logo.svg/512px-Saudi_Vision_2030_logo.svg.png" 
+              alt="شعار الرؤية" 
+              className="w-20 h-20 object-contain mx-auto"
+              referrerPolicy="no-referrer"
+            />
+          </div>
+        </div>
+
+        {/* Section 1: Student Data */}
+        <div className="print-section">
+          <div className="print-section-header">أولاً: بيانات الطالب الأساسية</div>
+          <div className="print-grid">
+            <div className="print-cell"><span className="print-label">اسم الطالب:</span> {referral.student_name}</div>
+            <div className="print-cell"><span className="print-label">رقم الحالة:</span> #{referral.id}</div>
+            <div className="print-cell"><span className="print-label">الصف الدراسي:</span> {referral.student_grade}</div>
+            <div className="print-cell"><span className="print-label">الفصل:</span> {referral.student_section}</div>
+            <div className="print-cell"><span className="print-label">تاريخ التحويل:</span> {new Date(referral.created_at).toLocaleDateString('ar-SA')}</div>
+            <div className="print-cell"><span className="print-label">وقت التحويل:</span> {new Date(referral.created_at).toLocaleTimeString('ar-SA')}</div>
+          </div>
+        </div>
+
+        {/* Section 2: Teacher Statement */}
+        <div className="print-section">
+          <div className="print-section-header">ثانياً: إفادة المعلم المحيل</div>
+          <div className="print-grid">
+            <div className="print-cell"><span className="print-label">اسم المعلم:</span> {referral.teacher_name}</div>
+            <div className="print-cell"><span className="print-label">نوع المشكلة:</span> {
+              referral.type === 'behavior' ? 'سلوكية' : 
+              referral.type === 'academic' ? 'ضعف دراسي' : 
+              referral.type === 'attendance' ? 'غياب وتأخر' : 'زي مدرسي'
+            }</div>
+          </div>
+          <div className="print-full-cell">
+            <p className="font-bold mb-2">وصف المشكلة:</p>
+            <p>{referral.reason}</p>
+            {referral.teacher_notes && (
+              <div className="mt-4">
+                <p className="font-bold mb-1 italic text-slate-600">ملاحظات إضافية:</p>
+                <p className="italic text-slate-600">"{referral.teacher_notes}"</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Section 3: Vice Principal Actions */}
+        <div className="print-section">
+          <div className="print-section-header">ثالثاً: إجراءات وكيل شؤون الطلاب</div>
+          {logs.filter(l => l.user_role === 'vice_principal').length > 0 ? (
+            logs.filter(l => l.user_role === 'vice_principal').map((log, idx) => (
+              <div key={idx} className="border-b border-slate-200 last:border-0 p-4">
+                <div className="flex justify-between mb-2 text-[10px] font-bold text-slate-500">
+                  <span>الإجراء: {log.action}</span>
+                  <span>التاريخ: {new Date(log.created_at).toLocaleString('ar-SA')}</span>
+                </div>
+                <p className="text-xs leading-relaxed">{log.notes}</p>
+                {(log.evidence_text || log.evidence_file) && (
+                  <div className="mt-2 text-[10px] font-bold text-primary italic">
+                    {log.evidence_text && <span>شاهد نصي: {log.evidence_text.substring(0, 50)}...</span>}
+                    {log.evidence_file && <span className="mr-4">يوجد ملف شاهد مرفق بالنظام</span>}
+                  </div>
+                )}
+              </div>
+            ))
+          ) : (
+            <div className="p-4 text-xs text-slate-400 italic">لا توجد إجراءات مسجلة للوكيل بعد.</div>
+          )}
+        </div>
+
+        {/* Section 4: Counselor Intervention */}
+        <div className="print-section">
+          <div className="print-section-header">رابعاً: تدخل المرشد الطلابي / الموجه</div>
+          {logs.filter(l => l.user_role === 'counselor').length > 0 ? (
+            logs.filter(l => l.user_role === 'counselor').map((log, idx) => (
+              <div key={idx} className="border-b border-slate-200 last:border-0 p-4">
+                <div className="flex justify-between mb-2 text-[10px] font-bold text-slate-500">
+                  <span>الإجراء: {log.action}</span>
+                  <span>التاريخ: {new Date(log.created_at).toLocaleString('ar-SA')}</span>
+                </div>
+                <p className="text-xs leading-relaxed">{log.notes}</p>
+              </div>
+            ))
+          ) : (
+            <div className="p-4 text-xs text-slate-400 italic">لا توجد تدخلات مسجلة للمرشد بعد.</div>
+          )}
+          {referral.status === 'resolved' && (
+            <div className="p-4 bg-emerald-50/50 border-t border-slate-200">
+              <p className="text-xs font-bold text-emerald-700">الحالة النهائية: تم إغلاق الحالة ومعالجتها تربوياً.</p>
+            </div>
+          )}
+        </div>
+
+        {/* Print Signatures */}
+        <div className="mt-20 grid grid-cols-4 gap-4 text-center">
+          <div className="space-y-8">
+            <p className="font-black text-xs">المعلم المحيل</p>
+            <div className="h-px bg-slate-300 w-full"></div>
+            <p className="text-[10px] font-bold">{referral.teacher_name}</p>
+          </div>
+          <div className="space-y-8">
+            <p className="font-black text-xs">وكيل شؤون الطلاب</p>
+            <div className="h-px bg-slate-300 w-full"></div>
+            <p className="text-[10px] font-bold">أ. فهد السالم</p>
+          </div>
+          <div className="space-y-8">
+            <p className="font-black text-xs">الموجه الطلابي</p>
+            <div className="h-px bg-slate-300 w-full"></div>
+            <p className="text-[10px] font-bold">أ. محمد الفهيد</p>
+          </div>
+          <div className="space-y-8">
+            <p className="font-black text-xs">مدير المدرسة</p>
+            <div className="h-px bg-slate-300 w-full"></div>
+            <p className="text-[10px] font-bold">د. خالد المنصور</p>
+          </div>
+        </div>
+
+        <div className="mt-10 text-center text-[8px] text-slate-400 border-t pt-4">
+          تم استخراج هذا التقرير آلياً من نظام تحويل الطلاب - ثانوية أم القرى بالخرج
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 md:gap-10">
         <div className="lg:col-span-2 space-y-8 md:space-y-10">
@@ -823,7 +1221,8 @@ const ReferralDetails: React.FC = () => {
         </div>
       </div>
     </div>
-  );
+  </div>
+);
 };
 
 export default ReferralDetails;
