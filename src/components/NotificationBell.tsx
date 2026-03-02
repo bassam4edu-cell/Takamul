@@ -152,10 +152,10 @@ const NotificationBell: React.FC = () => {
 
             <div className="p-4 border-t border-slate-50 bg-slate-50/30 text-center">
               <button 
-                onClick={() => { setIsOpen(false); navigate('/reports'); }}
+                onClick={() => { setIsOpen(false); navigate('/notifications'); }}
                 className="text-[10px] font-black text-slate-400 hover:text-primary transition-colors uppercase tracking-widest"
               >
-                عرض كافة التقارير
+                عرض كافة الإشعارات
               </button>
             </div>
           </motion.div>

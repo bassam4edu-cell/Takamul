@@ -106,51 +106,51 @@ const PrincipalDashboard: React.FC = () => {
 
   return (
     <div className="space-y-10 pb-12">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-          <h1 className="text-3xl font-extrabold text-slate-900">لوحة تحكم المدير</h1>
-          <p className="text-slate-500 mt-1">نظرة شاملة على أداء نظام التحويل والإرشاد</p>
+          <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">لوحة تحكم المدير</h1>
+          <p className="text-sm md:text-base text-slate-500 mt-1">نظرة شاملة على أداء نظام التحويل والإرشاد</p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="bg-white px-5 py-3 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-3">
+          <div className="bg-white px-4 md:px-5 py-2.5 md:py-3 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-3">
             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-            <span className="text-sm font-bold text-slate-700">النظام متصل</span>
+            <span className="text-xs md:text-sm font-bold text-slate-700">النظام متصل</span>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat, idx) => (
           <motion.div 
             key={idx}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: idx * 0.1 }}
-            className="sts-card p-8 group relative overflow-hidden"
+            className="sts-card p-6 md:p-8 group relative overflow-hidden"
           >
-            <div className={`absolute top-0 right-0 w-24 h-24 ${stat.lightColor} rounded-bl-[5rem] -mr-8 -mt-8 transition-all group-hover:scale-110`} />
+            <div className={`absolute top-0 right-0 w-20 h-20 md:w-24 md:h-24 ${stat.lightColor} rounded-bl-[4rem] md:rounded-bl-[5rem] -mr-6 md:-mr-8 -mt-6 md:-mt-8 transition-all group-hover:scale-110`} />
             <div className="relative z-10">
-              <div className={`${stat.lightColor} ${stat.textColor} w-14 h-14 rounded-2xl flex items-center justify-center mb-6 shadow-sm`}>
-                <stat.icon size={28} />
+              <div className={`${stat.lightColor} ${stat.textColor} w-12 h-12 md:w-14 md:h-14 rounded-xl md:rounded-2xl flex items-center justify-center mb-4 md:mb-6 shadow-sm`}>
+                <stat.icon size={24} md:size={28} />
               </div>
-              <p className="text-slate-500 text-sm font-bold mb-1">{stat.label}</p>
-              <h3 className="text-3xl font-extrabold text-slate-900">{stat.value}</h3>
+              <p className="text-slate-500 text-[10px] md:text-sm font-bold mb-1">{stat.label}</p>
+              <h3 className="text-2xl md:text-3xl font-extrabold text-slate-900">{stat.value}</h3>
             </div>
           </motion.div>
         ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 sts-card p-10">
-          <div className="flex items-center justify-between mb-10">
+        <div className="lg:col-span-2 sts-card p-6 md:p-10">
+          <div className="flex items-center justify-between mb-6 md:mb-10">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-primary/5 text-primary rounded-xl flex items-center justify-center">
-                <BarChart3 size={22} />
+              <div className="w-8 h-8 md:w-10 md:h-10 bg-primary/5 text-primary rounded-lg md:rounded-xl flex items-center justify-center">
+                <BarChart3 size={18} md:size={22} />
               </div>
-              <h2 className="text-xl font-extrabold text-slate-800">أسباب التحويل الأكثر شيوعاً</h2>
+              <h2 className="text-lg md:text-xl font-extrabold text-slate-800">أسباب التحويل الأكثر شيوعاً</h2>
             </div>
           </div>
-          <div className="h-[350px]">
+          <div className="h-[250px] md:h-[350px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={reasonData} layout="vertical" margin={{ right: 30, left: 30 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
@@ -177,14 +177,14 @@ const PrincipalDashboard: React.FC = () => {
           </div>
         </div>
 
-        <div className="sts-card p-10">
-          <div className="flex items-center gap-3 mb-10">
-            <div className="w-10 h-10 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center">
-              <PieChartIcon size={22} />
+        <div className="sts-card p-6 md:p-10">
+          <div className="flex items-center gap-3 mb-6 md:mb-10">
+            <div className="w-8 h-8 md:w-10 md:h-10 bg-amber-50 text-amber-600 rounded-lg md:rounded-xl flex items-center justify-center">
+              <PieChartIcon size={18} md:size={22} />
             </div>
-            <h2 className="text-xl font-extrabold text-slate-800">توزيع الحالات</h2>
+            <h2 className="text-lg md:text-xl font-extrabold text-slate-800">توزيع الحالات</h2>
           </div>
-          <div className="h-[300px] relative">
+          <div className="h-[250px] md:h-[300px] relative">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -223,42 +223,42 @@ const PrincipalDashboard: React.FC = () => {
       </div>
 
       <div className="sts-card overflow-hidden">
-        <div className="p-10 border-b border-slate-50 flex items-center justify-between">
+        <div className="p-6 md:p-10 border-b border-slate-50 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-primary text-white rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
-              <TrendingUp size={22} />
+            <div className="w-8 h-8 md:w-10 md:h-10 bg-primary text-white rounded-lg md:rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
+              <TrendingUp size={18} md:size={22} />
             </div>
-            <h2 className="text-xl font-extrabold text-slate-800">أداء الوكلاء والموجهين</h2>
+            <h2 className="text-lg md:text-xl font-extrabold text-slate-800">أداء الوكلاء والموجهين</h2>
           </div>
         </div>
-        <div className="p-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="p-6 md:p-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {performance.length > 0 ? performance.map((p, idx) => (
             <motion.div 
               key={idx}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: idx * 0.1 }}
-              className="bg-slate-50 rounded-3xl p-8 border border-slate-100 hover:border-primary/20 transition-all group"
+              className="bg-slate-50 rounded-[2rem] p-6 md:p-8 border border-slate-100 hover:border-primary/20 transition-all group"
             >
               <div className="flex items-center gap-4 mb-6">
-                <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center text-primary shadow-sm border border-slate-100 group-hover:bg-primary group-hover:text-white transition-all">
-                  <UserIcon size={28} />
+                <div className="w-12 h-12 md:w-14 md:h-14 bg-white rounded-xl md:rounded-2xl flex items-center justify-center text-primary shadow-sm border border-slate-100 group-hover:bg-primary group-hover:text-white transition-all">
+                  <UserIcon size={24} md:size={28} />
                 </div>
                 <div>
-                  <h3 className="font-extrabold text-slate-800">{p.name}</h3>
-                  <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-lg font-bold">
+                  <h3 className="text-sm md:text-base font-extrabold text-slate-800">{p.name}</h3>
+                  <span className="text-[9px] md:text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-lg font-bold">
                     {p.role === 'vice_principal' ? 'وكيل' : 'موجه'}
                   </span>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-white p-4 rounded-2xl border border-slate-100">
-                  <p className="text-[10px] text-slate-400 font-bold mb-1 uppercase">تم الحل</p>
-                  <p className="text-xl font-extrabold text-primary">{p.total_resolved}</p>
+              <div className="grid grid-cols-2 gap-3 md:gap-4">
+                <div className="bg-white p-3 md:p-4 rounded-xl md:rounded-2xl border border-slate-100">
+                  <p className="text-[8px] md:text-[10px] text-slate-400 font-bold mb-1 uppercase">تم الحل</p>
+                  <p className="text-lg md:text-xl font-extrabold text-primary">{p.total_resolved}</p>
                 </div>
-                <div className="bg-white p-4 rounded-2xl border border-slate-100">
-                  <p className="text-[10px] text-slate-400 font-bold mb-1 uppercase">متوسط الوقت</p>
-                  <p className="text-xl font-extrabold text-amber-600">
+                <div className="bg-white p-3 md:p-4 rounded-xl md:rounded-2xl border border-slate-100">
+                  <p className="text-[8px] md:text-[10px] text-slate-400 font-bold mb-1 uppercase">متوسط الوقت</p>
+                  <p className="text-lg md:text-xl font-extrabold text-amber-600">
                     {p.avg_hours > 24 ? `${Math.round(p.avg_hours / 24)} يوم` : `${Math.round(p.avg_hours)} ساعة`}
                   </p>
                 </div>
@@ -271,17 +271,18 @@ const PrincipalDashboard: React.FC = () => {
       </div>
 
       <div className="sts-card overflow-hidden">
-        <div className="p-10 border-b border-slate-50 flex items-center justify-between">
+        <div className="p-6 md:p-10 border-b border-slate-50 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center">
-              <Timer size={22} />
+            <div className="w-8 h-8 md:w-10 md:h-10 bg-indigo-50 text-indigo-600 rounded-lg md:rounded-xl flex items-center justify-center">
+              <Timer size={18} md:size={22} />
             </div>
-            <h2 className="text-xl font-extrabold text-slate-800">آخر التحويلات المسجلة</h2>
+            <h2 className="text-lg md:text-xl font-extrabold text-slate-800">آخر التحويلات المسجلة</h2>
           </div>
-          <button className="text-sm font-bold text-primary hover:underline">عرض الكل</button>
+          <button className="text-xs md:text-sm font-bold text-primary hover:underline">عرض الكل</button>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-right">
+          {/* Desktop Table */}
+          <table className="w-full text-right hidden md:table">
             <thead>
               <tr className="bg-slate-50/50 text-slate-400 text-[10px] font-extrabold uppercase tracking-widest">
                 <th className="px-10 py-5">اسم الطالب</th>
@@ -342,6 +343,54 @@ const PrincipalDashboard: React.FC = () => {
               ))}
             </tbody>
           </table>
+
+          {/* Mobile Card View */}
+          <div className="md:hidden divide-y divide-slate-50">
+            {referrals.slice(0, 5).map((referral) => (
+              <div 
+                key={referral.id}
+                onClick={() => navigate(`/referral/${referral.id}`)}
+                className="p-6 hover:bg-slate-50 transition-colors cursor-pointer"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-primary font-extrabold border border-slate-200">
+                      {referral.student_name.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="text-sm font-extrabold text-slate-800">{referral.student_name}</p>
+                      <p className="text-[10px] text-slate-400 font-bold">{referral.student_grade} - {referral.student_section}</p>
+                    </div>
+                  </div>
+                  <ChevronRight size={18} className="text-slate-300" />
+                </div>
+                <div className="grid grid-cols-2 gap-4 text-[10px] font-bold">
+                  <div className="space-y-1">
+                    <p className="text-slate-400 uppercase tracking-wider">المعلم المُحيل</p>
+                    <p className="text-slate-700">{referral.teacher_name}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-slate-400 uppercase tracking-wider">الحالة</p>
+                    <p className={`inline-flex items-center gap-1.5 ${
+                      referral.status === 'resolved' ? 'text-emerald-600' :
+                      referral.status === 'pending_vp' ? 'text-amber-600' :
+                      referral.status === 'pending_counselor' ? 'text-indigo-600' :
+                      'text-slate-600'
+                    }`}>
+                      {referral.status === 'resolved' ? 'تم الحل' :
+                       referral.status === 'pending_vp' ? 'بانتظار الوكيل' :
+                       referral.status === 'pending_counselor' ? 'بانتظار الموجه' :
+                       referral.status === 'scheduled_meeting' ? 'موعد جلسة' : 'قيد المعالجة'}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-slate-400 uppercase tracking-wider">التاريخ</p>
+                    <p className="text-slate-500">{new Date(referral.created_at).toLocaleDateString('ar-SA')}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>

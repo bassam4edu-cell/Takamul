@@ -9,6 +9,7 @@ import ReferralDetails from './pages/ReferralDetails';
 import StudentProfile from './pages/StudentProfile';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
+import Notifications from './pages/Notifications';
 import AdminDashboard from './pages/AdminDashboard';
 import PrincipalDashboard from './pages/PrincipalDashboard';
 import Layout from './components/Layout';
@@ -87,6 +88,7 @@ const App: React.FC = () => {
             <Route path="student/:id" element={<StudentProfile />} />
             <Route path="reports" element={<Reports />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="notifications" element={<Notifications />} />
             <Route path="admin" element={
               <ProtectedRoute allowedRoles={['admin']}>
                 <AdminDashboard />

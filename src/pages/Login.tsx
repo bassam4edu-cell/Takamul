@@ -66,8 +66,7 @@ const Login: React.FC = () => {
           transition={{ duration: 0.8, ease: "easeOut" }}
           className="relative z-10 flex flex-col items-center text-center"
         >
-          <Logo className="w-48 h-48 mb-4" light variant="login" />
-          <h2 className="text-white font-extrabold text-2xl mb-8">ثانوية أم القرى بالخرج</h2>
+          <h2 className="text-white font-extrabold text-2xl mb-8"></h2>
           <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-4">نظام تحويل طالب</h1>
           <p className="text-white/80 text-lg md:text-xl font-medium tracking-wide">Student Transfer System</p>
         </motion.div>
@@ -82,7 +81,7 @@ const Login: React.FC = () => {
         <div className="max-w-md w-full">
           <div className="mb-10 flex flex-col items-center text-center">
             <img 
-              src="https://i.ibb.co/QFwrvnqF/photo-2026-02-20-15-16-20.jpg" 
+              src="https://i.ibb.co/11D74Jg/222.png" 
               alt="شعار وزارة التعليم" 
               className="w-40 h-40 mb-2 object-contain"
               referrerPolicy="no-referrer"
@@ -181,7 +180,7 @@ const Login: React.FC = () => {
                 <button className="text-xs font-bold text-slate-400 hover:text-primary transition-colors">نسيت كلمة المرور</button>
               </div>
               <div className="text-[10px] text-slate-400 space-y-1">
-                <p>© 2026 نظام تحويل الطلاب الذكي -v7- جميع الحقوق محفوظة.</p>
+                <p>© 2026 نظام تحويل الطلاب الذكي. جميع الحقوق محفوظة.</p>
                 <p className="font-bold text-primary/60">برمجة: بسام غربي العنزي</p>
               </div>
             </div>

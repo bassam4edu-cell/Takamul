@@ -98,9 +98,9 @@ const Reports: React.FC = () => {
           {/* Right: Ministry Logo Placeholder */}
           <div className="text-center space-y-1">
             <img 
-              src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/Ministry_of_Education_Saudi_Arabia_Logo.svg/512px-Ministry_of_Education_Saudi_Arabia_Logo.svg.png" 
+              src="https://i.ibb.co/QFwrvnqF/photo-2026-02-20-15-16-20.jpg" 
               alt="شعار وزارة التعليم" 
-              className="w-24 h-24 object-contain mb-2"
+              className="w-24 h-24 object-contain mb-2 rounded-xl"
               referrerPolicy="no-referrer"
             />
             <p className="text-sm font-black">المملكة العربية السعودية</p>

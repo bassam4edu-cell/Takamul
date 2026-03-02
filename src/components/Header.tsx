@@ -1,10 +1,10 @@
 import React from 'react';
-import { Search, User as UserIcon, Settings, HelpCircle } from 'lucide-react';
+import { Search, User as UserIcon, Settings, HelpCircle, LogOut } from 'lucide-react';
 import { useAuth } from '../App';
 import NotificationBell from './NotificationBell';
 
 const Header: React.FC = () => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
 
   const getRoleLabel = (role: string) => {
     switch (role) {
@@ -22,9 +22,10 @@ const Header: React.FC = () => {
       <div className="flex items-center gap-4 lg:gap-6 flex-1 max-w-2xl">
         <div className="lg:hidden">
           <img 
-            src="https://upload.wikimedia.org/wikipedia/ar/thumb/a/a2/Ministry_of_Education_Saudi_Arabia.svg/512px-Ministry_of_Education_Saudi_Arabia.svg.png" 
+            src="https://i.ibb.co/QFwrvnqF/photo-2026-02-20-15-16-20.jpg" 
             alt="Logo" 
-            className="w-10 h-10 object-contain"
+            className="w-10 h-10 object-contain rounded-lg"
+            referrerPolicy="no-referrer"
           />
         </div>
         <div className="relative w-full group hidden md:block">
@@ -44,6 +45,13 @@ const Header: React.FC = () => {
           </button>
           <button className="p-3 text-slate-400 hover:text-primary hover:bg-slate-50 rounded-xl transition-all relative">
             <Settings size={22} />
+          </button>
+          <button 
+            onClick={logout}
+            className="p-3 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all relative"
+            title="تسجيل الخروج"
+          >
+            <LogOut size={22} />
           </button>
           <NotificationBell />
         </div>

@@ -11,7 +11,8 @@ import {
   Settings2,
   Home,
   BarChart3,
-  UserCircle
+  UserCircle,
+  Bell
 } from 'lucide-react';
 import { useAuth } from '../App';
 import { clsx, type ClassValue } from 'clsx';
@@ -49,6 +50,12 @@ const Sidebar: React.FC = () => {
       path: '/reports', 
       icon: BarChart3,
       roles: ['principal', 'admin']
+    },
+    { 
+      title: 'الإشعارات', 
+      path: '/notifications', 
+      icon: Bell,
+      roles: ['teacher', 'vice_principal', 'counselor', 'admin', 'principal']
     },
     { 
       title: 'الإعدادات', 

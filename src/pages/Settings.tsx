@@ -8,13 +8,14 @@ import {
   Smartphone,
   ChevronLeft,
   Save,
-  X
+  X,
+  LogOut
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAuth } from '../App';
 
 const Settings: React.FC = () => {
-  const { user, login } = useAuth();
+  const { user, login, logout } = useAuth();
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({
     name: user?.name || '',
@@ -78,6 +79,18 @@ const Settings: React.FC = () => {
       title: 'عام',
       items: [
         { icon: Globe, label: 'اللغة والمنطقة', desc: 'العربية (المملكة العربية السعودية)' },
+      ]
+    },
+    {
+      title: 'خروج',
+      items: [
+        { 
+          icon: LogOut, 
+          label: 'تسجيل الخروج', 
+          desc: 'إنهاء الجلسة الحالية والعودة لصفحة الدخول',
+          onClick: logout,
+          danger: true
+        },
       ]
     }
   ];
@@ -164,11 +177,15 @@ const Settings: React.FC = () => {
                       className="w-full p-6 flex items-center justify-between hover:bg-slate-50 transition-all group"
                     >
                       <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-600 group-hover:bg-blue-600 group-hover:text-white transition-all">
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${
+                          item.danger 
+                            ? 'bg-red-50 text-red-600 group-hover:bg-red-600 group-hover:text-white' 
+                            : 'bg-slate-100 text-slate-600 group-hover:bg-blue-600 group-hover:text-white'
+                        }`}>
                           <item.icon size={22} />
                         </div>
                         <div className="text-right">
-                          <p className="font-bold text-slate-800">{item.label}</p>
+                          <p className={`font-bold ${item.danger ? 'text-red-600' : 'text-slate-800'}`}>{item.label}</p>
                           <p className="text-xs text-slate-500">{item.desc}</p>
                         </div>
                       </div>

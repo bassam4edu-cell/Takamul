@@ -366,6 +366,25 @@ async function startServer() {
         }
       }
 
+      // 3. If status changed to returned_to_teacher -> Notify Teacher
+      if (status === 'returned_to_teacher') {
+        await sql`
+          INSERT INTO notifications (sender_id, recipient_id, message, referral_id)
+          VALUES (${user_id}, ${referral[0].teacher_id}, ${`تم إرجاع تحويل الطالب: ${student[0].name} لاستكمال النواقص`}, ${referralId})
+        `;
+      }
+
+      // 4. If status changed to pending_vp and actor is teacher -> Notify Vice Principals
+      if (status === 'pending_vp' && actor[0].role === 'teacher') {
+        const vps = await sql`SELECT id FROM users WHERE role = 'vice_principal'`;
+        for (const vp of vps) {
+          await sql`
+            INSERT INTO notifications (sender_id, recipient_id, message, referral_id)
+            VALUES (${user_id}, ${vp.id}, ${`تم استكمال النواقص وإعادة إرسال تحويل الطالب: ${student[0].name}`}, ${referralId})
+          `;
+        }
+      }
+
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ success: false, error: "Action failed" });
