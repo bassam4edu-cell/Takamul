@@ -56,6 +56,7 @@ async function initDb() {
     await sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS remedial_plan TEXT`;
     await sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS remedial_plan_file TEXT`;
     await sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS evidence_file TEXT`;
+    await sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS is_exported_to_noor BOOLEAN DEFAULT FALSE`;
 
     await sql`
       CREATE TABLE IF NOT EXISTS referral_logs (
@@ -176,14 +177,27 @@ async function startServer() {
           u.id,
           u.name, 
           u.role,
-          COUNT(r.id) as total_resolved,
-          AVG(EXTRACT(EPOCH FROM (l.created_at - r.created_at))/3600) as avg_hours
-        FROM referral_logs l
-        JOIN referrals r ON l.referral_id = r.id
-        JOIN users u ON l.user_id = u.id
-        WHERE (l.action LIKE '%حل%' OR l.action LIKE '%إغلاق%')
-        AND u.role IN ('vice_principal', 'counselor')
-        GROUP BY u.id, u.name, u.role
+          (
+            SELECT COUNT(r.id) 
+            FROM referrals r 
+            JOIN students s ON r.student_id = s.id
+            JOIN user_grades ug ON s.grade = ug.grade
+            WHERE ug.user_id = u.id
+          ) as total_referred,
+          (
+            SELECT COUNT(DISTINCT l.referral_id)
+            FROM referral_logs l
+            WHERE l.user_id = u.id AND (l.action LIKE '%حل%' OR l.action LIKE '%إغلاق%')
+          ) as total_resolved,
+          (
+            SELECT AVG(EXTRACT(EPOCH FROM (l.created_at - r.created_at))/3600)
+            FROM referral_logs l
+            JOIN referrals r ON l.referral_id = r.id
+            WHERE l.user_id = u.id AND (l.action LIKE '%حل%' OR l.action LIKE '%إغلاق%')
+          ) as avg_hours
+        FROM users u
+        WHERE u.role IN ('vice_principal', 'counselor')
+        ORDER BY u.role, u.name
       `;
       res.json(performance);
     } catch (err) {
@@ -204,7 +218,7 @@ async function startServer() {
       if (grades.length > 0) {
         if (userRole === 'teacher') {
           referrals = await sql`
-            SELECT r.*, s.name as student_name, s.grade as student_grade, s.section as student_section, u.name as teacher_name
+            SELECT r.*, s.name as student_name, s.national_id as student_national_id, s.grade as student_grade, s.section as student_section, u.name as teacher_name
             FROM referrals r
             JOIN students s ON r.student_id = s.id
             JOIN users u ON r.teacher_id = u.id
@@ -213,7 +227,7 @@ async function startServer() {
           `;
         } else {
           referrals = await sql`
-            SELECT r.*, s.name as student_name, s.grade as student_grade, s.section as student_section, u.name as teacher_name
+            SELECT r.*, s.name as student_name, s.national_id as student_national_id, s.grade as student_grade, s.section as student_section, u.name as teacher_name
             FROM referrals r
             JOIN students s ON r.student_id = s.id
             JOIN users u ON r.teacher_id = u.id
@@ -223,7 +237,7 @@ async function startServer() {
         }
       } else if (userRole === 'teacher') {
         referrals = await sql`
-          SELECT r.*, s.name as student_name, s.grade as student_grade, s.section as student_section, u.name as teacher_name
+          SELECT r.*, s.name as student_name, s.national_id as student_national_id, s.grade as student_grade, s.section as student_section, u.name as teacher_name
           FROM referrals r
           JOIN students s ON r.student_id = s.id
           JOIN users u ON r.teacher_id = u.id
@@ -232,7 +246,7 @@ async function startServer() {
         `;
       } else {
         referrals = await sql`
-          SELECT r.*, s.name as student_name, s.grade as student_grade, s.section as student_section, u.name as teacher_name
+          SELECT r.*, s.name as student_name, s.national_id as student_national_id, s.grade as student_grade, s.section as student_section, u.name as teacher_name
           FROM referrals r
           JOIN students s ON r.student_id = s.id
           JOIN users u ON r.teacher_id = u.id
@@ -241,7 +255,7 @@ async function startServer() {
       }
     } else {
       referrals = await sql`
-        SELECT r.*, s.name as student_name, s.grade as student_grade, s.section as student_section, u.name as teacher_name
+        SELECT r.*, s.name as student_name, s.national_id as student_national_id, s.grade as student_grade, s.section as student_section, u.name as teacher_name
         FROM referrals r
         JOIN students s ON r.student_id = s.id
         JOIN users u ON r.teacher_id = u.id
@@ -309,7 +323,7 @@ async function startServer() {
   app.get("/api/referrals/:id", async (req, res) => {
     const id = req.params.id;
     const referralResult = await sql`
-      SELECT r.*, s.name as student_name, s.grade as student_grade, s.section as student_section, u.name as teacher_name
+      SELECT r.*, s.name as student_name, s.national_id as student_national_id, s.grade as student_grade, s.section as student_section, u.name as teacher_name
       FROM referrals r
       JOIN students s ON r.student_id = s.id
       JOIN users u ON r.teacher_id = u.id
@@ -463,7 +477,18 @@ async function startServer() {
   app.get("/api/reports/top-students", async (req, res) => {
     try {
       const data = await sql`
-        SELECT s.name, s.grade, COUNT(r.id) as referral_count
+        SELECT 
+          s.name, 
+          s.grade, 
+          COUNT(r.id) as referral_count,
+          (
+            SELECT type 
+            FROM referrals 
+            WHERE student_id = s.id 
+            GROUP BY type 
+            ORDER BY COUNT(*) DESC 
+            LIMIT 1
+          ) as most_frequent_problem
         FROM students s
         JOIN referrals r ON s.id = r.student_id
         GROUP BY s.id, s.name, s.grade
@@ -479,10 +504,18 @@ async function startServer() {
   app.get("/api/reports/referral-status", async (req, res) => {
     try {
       const data = await sql`
-        SELECT r.id, s.name as student_name, s.grade as student_grade, u.name as teacher_name, 
-               r.status, r.reason, r.remedial_plan,
-               (r.remedial_plan IS NOT NULL AND r.remedial_plan != '') as has_text,
-               (r.evidence_file IS NOT NULL OR r.remedial_plan_file IS NOT NULL) as has_file
+        SELECT 
+          r.id, 
+          s.name as student_name, 
+          s.national_id as student_national_id,
+          s.grade as student_grade, 
+          u.name as teacher_name, 
+          r.status, 
+          r.reason, 
+          r.type,
+          r.remedial_plan,
+          r.created_at,
+          (SELECT created_at FROM referral_logs WHERE referral_id = r.id AND (action LIKE '%إغلاق%' OR action LIKE '%حل%') ORDER BY created_at DESC LIMIT 1) as closed_at
         FROM referrals r
         JOIN students s ON r.student_id = s.id
         JOIN users u ON r.teacher_id = u.id
@@ -494,14 +527,39 @@ async function startServer() {
     }
   });
 
+  app.get("/api/reports/kpi-stats", async (req, res) => {
+    try {
+      const now = new Date();
+      const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      
+      const stats = await sql`
+        SELECT 
+          COUNT(*) FILTER (WHERE created_at >= ${firstDayOfMonth}) as total_this_month,
+          COUNT(*) FILTER (WHERE status IN ('resolved', 'closed')) as resolved_cases,
+          COUNT(*) FILTER (WHERE status NOT IN ('resolved', 'closed')) as pending_cases,
+          COUNT(*) FILTER (WHERE severity = 'low') as first_offense_cases
+        FROM referrals
+      `;
+      res.json(stats[0]);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch KPI stats" });
+    }
+  });
+
   app.get("/api/reports/teacher-stats", async (req, res) => {
     try {
       const data = await sql`
-        SELECT u.name, COUNT(r.id) as referral_count
+        SELECT 
+          u.name, 
+          COUNT(r.id) as total_referrals,
+          COUNT(r.id) FILTER (WHERE r.status IN ('resolved', 'closed')) as resolved_count,
+          COUNT(r.id) FILTER (WHERE r.status = 'pending_counselor') as escalated_count
         FROM users u
-        JOIN referrals r ON u.id = r.teacher_id
+        LEFT JOIN referrals r ON u.id = r.teacher_id
+        WHERE u.role = 'teacher'
         GROUP BY u.id, u.name
-        ORDER BY referral_count DESC
+        HAVING COUNT(r.id) > 0
+        ORDER BY total_referrals DESC
       `;
       res.json(data);
     } catch (err) {
@@ -724,6 +782,68 @@ async function startServer() {
       res.sendFile(path.join(__dirname, "dist", "index.html"));
     });
   }
+
+  app.post("/api/export/noor", async (req, res) => {
+    const { userId, role, startDate, endDate } = req.body;
+
+    if (role !== 'counselor') {
+      return res.status(403).json({ error: "عذراً، هذه الميزة متاحة فقط للموجه الطلابي" });
+    }
+
+    try {
+      const referrals = await sql`
+        SELECT 
+          s.national_id as "رقم الهوية",
+          s.name as "اسم الطالب الرباعي",
+          r.created_at as "تاريخ المخالفة",
+          r.type as "تصنيف المشكلة",
+          r.remedial_plan as "الإجراء المتخذ",
+          r.id
+        FROM referrals r
+        JOIN students s ON r.student_id = s.id
+        WHERE r.assigned_to_id = ${userId}
+        AND r.status IN ('resolved', 'closed')
+        AND r.created_at BETWEEN ${startDate} AND ${endDate}
+        AND (r.is_exported_to_noor = FALSE OR r.is_exported_to_noor IS NULL)
+      `;
+
+      if (referrals.length === 0) {
+        return res.status(404).json({ error: "لا توجد حالات جديدة للتصدير في هذه الفترة" });
+      }
+
+      const getTypeLabel = (type: string) => {
+        switch (type) {
+          case 'behavior': return 'سلوكية';
+          case 'academic': return 'أكاديمية';
+          case 'attendance': return 'غياب وتأخر';
+          case 'uniform': return 'زي مدرسي';
+          case 'other': return 'أخرى';
+          default: return type || 'متنوعة';
+        }
+      };
+
+      const mappedData = referrals.map((r: any) => ({
+        "رقم الهوية": r["رقم الهوية"],
+        "اسم الطالب الرباعي": r["اسم الطالب الرباعي"],
+        "تاريخ المخالفة": new Date(r["تاريخ المخالفة"]).toLocaleDateString('ar-SA'),
+        "تصنيف المشكلة": getTypeLabel(r["تصنيف المشكلة"]),
+        "الإجراء المتخذ": r["الإجراء المتخذ"] || "تم اتخاذ الإجراء اللازم"
+      }));
+
+      // Update exported status
+      const referralIds = referrals.map((r: any) => r.id);
+      await sql`
+        UPDATE referrals 
+        SET is_exported_to_noor = TRUE 
+        WHERE id = ANY(${referralIds})
+      `;
+
+      res.json(mappedData);
+    } catch (err) {
+      console.error("Export error:", err);
+      res.status(500).json({ error: "فشل تصدير البيانات" });
+    }
+  });
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);

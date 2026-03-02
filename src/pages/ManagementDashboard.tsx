@@ -8,18 +8,28 @@ import {
   Search,
   Users,
   Calendar,
-  ChevronLeft
+  ChevronLeft,
+  Download,
+  ShieldAlert,
+  X as CloseIcon
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Referral } from '../types';
 import { useAuth } from '../App';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
+import * as XLSX from 'xlsx';
 
 const ManagementDashboard: React.FC = () => {
   const { user } = useAuth();
   const [referrals, setReferrals] = useState<Referral[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportDates, setExportDates] = useState({
+    start: new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0],
+    end: new Date().toISOString().split('T')[0]
+  });
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     fetch(`/api/referrals?userId=${user?.id}&role=${user?.role}`)
@@ -29,6 +39,48 @@ const ManagementDashboard: React.FC = () => {
         setLoading(false);
       });
   }, [user?.id, user?.role]);
+
+  const handleExportNoor = async () => {
+    setExporting(true);
+    try {
+      const response = await fetch('/api/export/noor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user?.id,
+          role: user?.role,
+          startDate: exportDates.start,
+          endDate: exportDates.end
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        alert(data.error || 'فشل تصدير البيانات');
+        return;
+      }
+
+      // Generate Excel
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "حالات نظام نور");
+      XLSX.writeFile(wb, `Noor_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+      setShowExportModal(false);
+      // Refresh referrals to update is_exported status if needed (though not shown in UI yet)
+      const res = await fetch(`/api/referrals?userId=${user?.id}&role=${user?.role}`);
+      const updatedData = await res.json();
+      setReferrals(updatedData);
+      
+      alert('تم تصدير البيانات بنجاح');
+    } catch (err) {
+      console.error(err);
+      alert('حدث خطأ أثناء التصدير');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const filteredReferrals = referrals.filter(r => {
     if (filter === 'all') return true;
@@ -63,6 +115,15 @@ const ManagementDashboard: React.FC = () => {
           <p className="text-sm md:text-base text-slate-500 mt-1">لديك {referrals.filter(r => r.status === 'pending_vp').length} تحويلات جديدة تتطلب انتباهك.</p>
         </div>
         <div className="flex items-center gap-2 bg-white p-1.5 rounded-2xl border border-slate-100 shadow-sm overflow-x-auto no-scrollbar">
+          {user?.role === 'counselor' && (
+            <button 
+              onClick={() => setShowExportModal(true)}
+              className="px-4 md:px-6 py-2 md:py-2.5 rounded-xl text-xs md:text-sm font-bold bg-emerald-600 text-white shadow-lg shadow-emerald-200 hover:bg-emerald-700 transition-all flex items-center gap-2 ml-2"
+            >
+              <Download size={16} />
+              تصدير لنظام نور
+            </button>
+          )}
           <button 
             onClick={() => setFilter('all')}
             className={`px-4 md:px-6 py-2 md:py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all whitespace-nowrap ${filter === 'all' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-slate-400 hover:text-primary hover:bg-slate-50'}`}
@@ -153,6 +214,11 @@ const ManagementDashboard: React.FC = () => {
                         <div className="shrink-0">{getStatusBadge(referral.status)}</div>
                       </div>
                       <div className="flex flex-wrap items-center gap-x-3 md:gap-x-4 gap-y-1 text-[10px] md:text-sm text-slate-400 font-bold uppercase tracking-wider">
+                        <span className="flex items-center gap-1.5 text-slate-600">
+                          <ShieldAlert size={12} className="md:w-4 md:h-4" />
+                          هوية: {referral.student_national_id || 'غير مسجل'}
+                        </span>
+                        <span className="w-1 h-1 bg-slate-200 rounded-full" />
                         <span className="flex items-center gap-1.5">
                           <Users size={12} className="md:w-4 md:h-4" />
                           {referral.student_grade} - {referral.student_section}
@@ -186,6 +252,66 @@ const ManagementDashboard: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Export Modal */}
+      <AnimatePresence>
+        {showExportModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-[2.5rem] p-8 md:p-10 w-full max-w-md shadow-2xl border border-slate-100"
+            >
+              <div className="flex items-center justify-between mb-8">
+                <h3 className="text-xl font-black text-slate-800">تصدير الحالات لنظام نور</h3>
+                <button onClick={() => setShowExportModal(false)} className="text-slate-400 hover:text-red-500 transition-colors">
+                  <CloseIcon size={24} />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-xs font-black text-slate-500 mr-1 uppercase tracking-widest">من تاريخ</label>
+                  <input 
+                    type="date" 
+                    value={exportDates.start}
+                    onChange={(e) => setExportDates({...exportDates, start: e.target.value})}
+                    className="sts-input"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-black text-slate-500 mr-1 uppercase tracking-widest">إلى تاريخ</label>
+                  <input 
+                    type="date" 
+                    value={exportDates.end}
+                    onChange={(e) => setExportDates({...exportDates, end: e.target.value})}
+                    className="sts-input"
+                  />
+                </div>
+
+                <div className="pt-4">
+                  <button 
+                    onClick={handleExportNoor}
+                    disabled={exporting}
+                    className="w-full sts-button-primary py-4 rounded-2xl flex items-center justify-center gap-3 shadow-xl shadow-primary/20"
+                  >
+                    {exporting ? (
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <Download size={20} />
+                    )}
+                    <span>{exporting ? 'جاري التصدير...' : 'توليد ملف Excel'}</span>
+                  </button>
+                </div>
+                <p className="text-[10px] text-center text-slate-400 font-bold leading-relaxed">
+                  سيتم تصدير الحالات "المغلقة" فقط خلال الفترة المحددة والتي لم يتم تصديرها مسبقاً.
+                </p>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

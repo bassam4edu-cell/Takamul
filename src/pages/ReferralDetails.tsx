@@ -306,11 +306,11 @@ const ReferralDetails: React.FC = () => {
           <div className="print-section-header">القسم الأول: بيانات الطالب الأساسية</div>
           <div className="print-grid">
             <div className="print-cell"><span className="print-label">اسم الطالب:</span> {referral.student_name}</div>
+            <div className="print-cell"><span className="print-label">رقم الهوية:</span> {referral.student_national_id || 'غير مسجل'}</div>
             <div className="print-cell"><span className="print-label">رقم الحالة:</span> #{referral.id}</div>
             <div className="print-cell"><span className="print-label">الصف الدراسي:</span> {referral.student_grade}</div>
             <div className="print-cell"><span className="print-label">الفصل:</span> {referral.student_section}</div>
             <div className="print-cell"><span className="print-label">تاريخ التحويل:</span> {new Date(referral.created_at).toLocaleDateString('ar-SA')}</div>
-            <div className="print-cell"><span className="print-label">وقت التحويل:</span> {new Date(referral.created_at).toLocaleTimeString('ar-SA')}</div>
           </div>
         </div>
 
@@ -516,6 +516,10 @@ const ReferralDetails: React.FC = () => {
                     <span className="flex items-center gap-2 font-bold bg-slate-100 px-3 py-1 rounded-xl text-[10px] md:text-xs">
                       <User size={14} className="text-primary" />
                       {referral.student_grade} - الفصل {referral.student_section}
+                    </span>
+                    <span className="flex items-center gap-2 font-bold bg-slate-100 px-3 py-1 rounded-xl text-[10px] md:text-xs">
+                      <ShieldAlert size={14} className="text-primary" />
+                      هوية: {referral.student_national_id || 'غير مسجل'}
                     </span>
                     <span className="hidden md:block w-1.5 h-1.5 bg-slate-200 rounded-full" />
                     <span className={`font-extrabold text-[10px] md:text-xs px-3 py-1 rounded-xl border uppercase tracking-widest ${

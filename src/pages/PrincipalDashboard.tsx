@@ -34,21 +34,36 @@ import { useNavigate } from 'react-router-dom';
 const PrincipalDashboard: React.FC = () => {
   const [referrals, setReferrals] = useState<Referral[]>([]);
   const [performance, setPerformance] = useState<any[]>([]);
+  const [kpiStats, setKpiStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
   const navigate = useNavigate();
 
+  const getTypeLabel = (type: string) => {
+    switch (type) {
+      case 'behavior': return 'سلوكية';
+      case 'academic': return 'أكاديمية';
+      case 'attendance': return 'غياب وتأخر';
+      case 'uniform': return 'زي مدرسي';
+      case 'other': return 'أخرى';
+      default: return type || 'متنوعة';
+    }
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [refRes, perfRes] = await Promise.all([
+        const [refRes, perfRes, kpiRes] = await Promise.all([
           fetch(`/api/referrals?userId=${user?.id}&role=${user?.role}`),
-          fetch('/api/admin/performance')
+          fetch('/api/admin/performance'),
+          fetch('/api/reports/kpi-stats')
         ]);
         const refData = await refRes.json();
         const perfData = await perfRes.json();
+        const kpiData = await kpiRes.json();
         setReferrals(refData);
         setPerformance(perfData);
+        setKpiStats(kpiData);
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
       } finally {
@@ -60,44 +75,43 @@ const PrincipalDashboard: React.FC = () => {
 
   const stats = [
     { 
-      label: 'إجمالي التحويلات', 
-      value: referrals.length, 
+      label: 'إجمالي الحالات هذا الشهر', 
+      value: kpiStats?.total_this_month || 0, 
       icon: FileText, 
       color: 'bg-primary',
       lightColor: 'bg-primary/5',
       textColor: 'text-primary'
     },
     { 
-      label: 'بانتظار الوكيل', 
-      value: referrals.filter(r => r.status === 'pending_vp').length, 
+      label: 'الحالات المغلقة', 
+      value: kpiStats?.resolved_cases || 0, 
+      icon: CheckCircle2, 
+      color: 'bg-emerald-500',
+      lightColor: 'bg-emerald-50',
+      textColor: 'text-emerald-600'
+    },
+    { 
+      label: 'الحالات قيد الانتظار', 
+      value: kpiStats?.pending_cases || 0, 
       icon: Clock, 
       color: 'bg-amber-500',
       lightColor: 'bg-amber-50',
       textColor: 'text-amber-600'
     },
     { 
-      label: 'عند الموجه الطلابي', 
-      value: referrals.filter(r => r.status === 'pending_counselor' || r.status === 'scheduled_meeting').length, 
-      icon: Users, 
+      label: 'حالات المشكلة الأولى', 
+      value: kpiStats?.first_offense_cases || 0, 
+      icon: Zap, 
       color: 'bg-indigo-500',
       lightColor: 'bg-indigo-50',
       textColor: 'text-indigo-600'
     },
-    { 
-      label: 'تم الإغلاق بنجاح', 
-      value: referrals.filter(r => r.status === 'resolved' || r.status === 'closed').length, 
-      icon: CheckCircle2, 
-      color: 'bg-emerald-500',
-      lightColor: 'bg-emerald-50',
-      textColor: 'text-emerald-600'
-    },
   ];
 
   const reasonData = [
-    { name: 'تأخر صباحي', value: referrals.filter(r => r.reason.includes('تأخر')).length || 5 },
-    { name: 'غياب متكرر', value: referrals.filter(r => r.reason.includes('غياب')).length || 8 },
-    { name: 'ضعف دراسي', value: referrals.filter(r => r.type === 'academic').length || 12 },
-    { name: 'مشكلة سلوكية', value: referrals.filter(r => r.type === 'behavior').length || 15 },
+    { name: 'سلوكية', value: referrals.filter(r => r.type === 'behavior').length || 0 },
+    { name: 'غياب', value: referrals.filter(r => r.reason.includes('غياب') || r.reason.includes('تأخر')).length || 0 },
+    { name: 'تقصير دراسي', value: referrals.filter(r => r.type === 'academic').length || 0 },
   ];
 
   const COLORS = ['#3b82f6', '#f59e0b', '#6366f1', '#10b981'];
@@ -251,15 +265,19 @@ const PrincipalDashboard: React.FC = () => {
                   </span>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3 md:gap-4">
-                <div className="bg-white p-3 md:p-4 rounded-xl md:rounded-2xl border border-slate-100">
-                  <p className="text-[8px] md:text-[10px] text-slate-400 font-bold mb-1 uppercase">تم الحل</p>
-                  <p className="text-lg md:text-xl font-extrabold text-primary">{p.total_resolved}</p>
+              <div className="grid grid-cols-3 gap-2 md:gap-3">
+                <div className="bg-white p-2 md:p-3 rounded-xl border border-slate-100">
+                  <p className="text-[8px] md:text-[9px] text-slate-400 font-bold mb-1 uppercase">المحولة</p>
+                  <p className="text-base md:text-lg font-extrabold text-slate-700">{p.total_referred || 0}</p>
                 </div>
-                <div className="bg-white p-3 md:p-4 rounded-xl md:rounded-2xl border border-slate-100">
-                  <p className="text-[8px] md:text-[10px] text-slate-400 font-bold mb-1 uppercase">متوسط الوقت</p>
-                  <p className="text-lg md:text-xl font-extrabold text-amber-600">
-                    {p.avg_hours > 24 ? `${Math.round(p.avg_hours / 24)} يوم` : `${Math.round(p.avg_hours)} ساعة`}
+                <div className="bg-white p-2 md:p-3 rounded-xl border border-slate-100">
+                  <p className="text-[8px] md:text-[9px] text-slate-400 font-bold mb-1 uppercase">المعالجة</p>
+                  <p className="text-base md:text-lg font-extrabold text-emerald-600">{p.total_resolved || 0}</p>
+                </div>
+                <div className="bg-white p-2 md:p-3 rounded-xl border border-slate-100">
+                  <p className="text-[8px] md:text-[9px] text-slate-400 font-bold mb-1 uppercase">الوقت</p>
+                  <p className="text-base md:text-lg font-extrabold text-amber-600">
+                    {p.avg_hours ? (p.avg_hours > 24 ? `${Math.round(p.avg_hours / 24)}ي` : `${Math.round(p.avg_hours)}س`) : '-'}
                   </p>
                 </div>
               </div>
@@ -302,7 +320,7 @@ const PrincipalDashboard: React.FC = () => {
                       </div>
                       <div>
                         <p className="text-sm font-extrabold text-slate-800">{referral.student_name}</p>
-                        <p className="text-[10px] text-slate-400 font-bold">{referral.student_grade} - {referral.student_section}</p>
+                        <p className="text-[10px] text-slate-400 font-bold">هوية: {referral.student_national_id || 'غير مسجل'} | {referral.student_grade} - {referral.student_section} | {getTypeLabel(referral.type)}</p>
                       </div>
                     </div>
                   </td>
@@ -359,7 +377,7 @@ const PrincipalDashboard: React.FC = () => {
                     </div>
                     <div>
                       <p className="text-sm font-extrabold text-slate-800">{referral.student_name}</p>
-                      <p className="text-[10px] text-slate-400 font-bold">{referral.student_grade} - {referral.student_section}</p>
+                      <p className="text-[10px] text-slate-400 font-bold">هوية: {referral.student_national_id || 'غير مسجل'} | {referral.student_grade} - {referral.student_section} | {getTypeLabel(referral.type)}</p>
                     </div>
                   </div>
                   <ChevronRight size={18} className="text-slate-300" />
