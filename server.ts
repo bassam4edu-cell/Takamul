@@ -5,6 +5,7 @@ import path from "path";
 import dotenv from "dotenv";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
+import * as XLSX from "xlsx";
 
 // تعريف مسارات النظام لتجنب مشكلة Render
 const __filename = fileURLToPath(import.meta.url);
@@ -23,7 +24,8 @@ async function initDb() {
         name TEXT,
         email TEXT UNIQUE,
         password TEXT,
-        role TEXT -- 'teacher', 'vice_principal', 'counselor', 'admin'
+        role TEXT, -- 'teacher', 'vice_principal', 'counselor', 'admin'
+        is_active BOOLEAN DEFAULT TRUE
       )
     `;
 
@@ -31,7 +33,7 @@ async function initDb() {
       CREATE TABLE IF NOT EXISTS students (
         id SERIAL PRIMARY KEY,
         name TEXT,
-        national_id TEXT,
+        national_id TEXT UNIQUE,
         grade TEXT,
         section TEXT
       )
@@ -57,6 +59,14 @@ async function initDb() {
     await sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS remedial_plan_file TEXT`;
     await sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS evidence_file TEXT`;
     await sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS is_exported_to_noor BOOLEAN DEFAULT FALSE`;
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE`;
+    
+    // Ensure national_id is unique if table already exists
+    try {
+      await sql`ALTER TABLE students ADD CONSTRAINT students_national_id_key UNIQUE (national_id)`;
+    } catch (e) {
+      // Constraint might already exist
+    }
 
     await sql`
       CREATE TABLE IF NOT EXISTS referral_logs (
@@ -141,7 +151,7 @@ async function startServer() {
     
     try {
       // البحث عن المستخدم بالبريد الإلكتروني فقط أولاً للتأكد من وجوده
-      const users = await sql`SELECT * FROM users WHERE email = ${email}`;
+      const users = await sql`SELECT * FROM users WHERE email = ${email} AND is_active = TRUE`;
       const user = users[0];
       
       if (!user) {
@@ -349,15 +359,23 @@ async function startServer() {
     const referralId = req.params.id;
 
     try {
+      // Update referral status and latest evidence if provided
       if (evidence_file) {
         await sql`UPDATE referrals SET status = ${status}, evidence_file = ${evidence_file} WHERE id = ${referralId}`;
       } else {
         await sql`UPDATE referrals SET status = ${status} WHERE id = ${referralId}`;
       }
-      await sql`INSERT INTO referral_logs (referral_id, user_id, action, notes, evidence_file, evidence_text) VALUES (${referralId}, ${user_id}, ${action}, ${notes}, ${evidence_file}, ${evidence_text})`;
+
+      // Always log the action with its specific evidence
+      await sql`
+        INSERT INTO referral_logs (referral_id, user_id, action, notes, evidence_file, evidence_text) 
+        VALUES (${referralId}, ${user_id}, ${action}, ${notes}, ${evidence_file || null}, ${evidence_text || null})
+      `;
 
       // Notification Logic
       const referral = await sql`SELECT teacher_id, student_id FROM referrals WHERE id = ${referralId}`;
+      if (referral.length === 0) return res.status(404).json({ error: "Referral not found" });
+      
       const student = await sql`SELECT name FROM students WHERE id = ${referral[0].student_id}`;
       const actor = await sql`SELECT name, role FROM users WHERE id = ${user_id}`;
 
@@ -583,14 +601,33 @@ async function startServer() {
     }
   });
 
+  app.post("/api/admin/users/:id/toggle-status", async (req, res) => {
+    const userId = req.params.id;
+    try {
+      const user = await sql`SELECT is_active FROM users WHERE id = ${userId}`;
+      if (user.length === 0) return res.status(404).json({ error: "User not found" });
+      
+      const newStatus = !user[0].is_active;
+      await sql`UPDATE users SET is_active = ${newStatus} WHERE id = ${userId}`;
+      
+      res.json({ success: true, is_active: newStatus });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to toggle user status" });
+    }
+  });
+
   app.get("/api/admin/users", async (req, res) => {
-    const users = await sql`SELECT id, name, email, role FROM users` as any[];
-    const usersWithGrades = await Promise.all(users.map(async u => {
-      const gradesResult = await sql`SELECT grade FROM user_grades WHERE user_id = ${u.id}`;
-      const grades = gradesResult.map((g: any) => g.grade);
-      return { ...u, assigned_grades: grades };
-    }));
-    res.json(usersWithGrades);
+    try {
+      const users = await sql`SELECT id, name, email, role, is_active FROM users` as any[];
+      const usersWithGrades = await Promise.all(users.map(async u => {
+        const gradesResult = await sql`SELECT grade FROM user_grades WHERE user_id = ${u.id}`;
+        const grades = gradesResult.map((g: any) => g.grade);
+        return { ...u, assigned_grades: grades };
+      }));
+      res.json(usersWithGrades);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch users" });
+    }
   });
 
   app.post("/api/admin/users/:id/grades", async (req, res) => {
@@ -626,43 +663,54 @@ async function startServer() {
     res.json({ success: true });
   });
 
-  app.post("/api/admin/users/:id/delete", async (req, res) => {
-    const userId = req.params.id;
-    console.log(`[ADMIN] Request to delete user ID: ${userId}`);
+  app.post("/api/admin/import-national-ids", async (req, res) => {
+    const { base64 } = req.body;
+    if (!base64) return res.status(400).json({ error: "No file data provided" });
+
     try {
-      // 1. Delete user grades
-      await sql`DELETE FROM user_grades WHERE user_id = ${userId}`;
-      console.log(`- Deleted grades for user ${userId}`);
-      
-      // 2. Delete referral logs associated with the user (actions they took)
-      await sql`DELETE FROM referral_logs WHERE user_id = ${userId}`;
-      console.log(`- Deleted logs for user ${userId}`);
-      
-      // 3. Handle referrals created by this user
-      const createdReferrals = await sql`SELECT id FROM referrals WHERE teacher_id = ${userId}`;
-      if (createdReferrals.length > 0) {
-        const ids = createdReferrals.map((r: any) => r.id);
-        console.log(`- Found ${ids.length} referrals created by user ${userId}. Deleting logs...`);
-        // Delete logs for these referrals first
-        for (const id of ids) {
-          await sql`DELETE FROM referral_logs WHERE referral_id = ${id}`;
+      const buffer = Buffer.from(base64.split(",")[1], 'base64');
+      const workbook = XLSX.read(buffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const data = XLSX.utils.sheet_to_json(worksheet) as any[];
+
+      let updatedCount = 0;
+      let notFoundCount = 0;
+
+      for (const row of data) {
+        const name = row["الاسم"] || row["Name"];
+        const nationalId = row["رقم الهوية"] || row["National ID"] || row["ID"];
+
+        if (name && nationalId) {
+          const result = await sql`UPDATE students SET national_id = ${nationalId.toString()} WHERE name = ${name}`;
+          // result in neon-serverless doesn't return rowCount easily in some versions, 
+          // but we can assume if it didn't throw, it tried.
+          // To be more precise, we could check if student exists first.
+          const check = await sql`SELECT id FROM students WHERE name = ${name}`;
+          if (check.length > 0) {
+            updatedCount++;
+          } else {
+            notFoundCount++;
+          }
         }
-        // Delete the referrals themselves
-        await sql`DELETE FROM referrals WHERE teacher_id = ${userId}`;
-        console.log(`- Deleted referrals created by user ${userId}`);
       }
 
-      // 4. Handle referrals assigned to this user
-      await sql`UPDATE referrals SET assigned_to_id = NULL WHERE assigned_to_id = ${userId}`;
-      console.log(`- Unassigned referrals from user ${userId}`);
-      
-      // 5. Finally delete the user
-      await sql`DELETE FROM users WHERE id = ${userId}`;
-      console.log(`- Successfully deleted user ${userId}`);
-      
+      res.json({ success: true, updatedCount, notFoundCount });
+    } catch (err) {
+      console.error("Import error:", err);
+      res.status(500).json({ error: "Failed to process Excel file" });
+    }
+  });
+
+  app.post("/api/admin/users/:id/delete", async (req, res) => {
+    const userId = req.params.id;
+    console.log(`[ADMIN] Request to soft delete user ID: ${userId}`);
+    try {
+      await sql`UPDATE users SET is_active = FALSE WHERE id = ${userId}`;
+      console.log(`- Successfully soft deleted user ${userId}`);
       res.json({ success: true });
     } catch (err) {
-      console.error(`[ADMIN] User deletion failed for ID ${userId}:`, err);
+      console.error(`[ADMIN] User soft deletion failed for ID ${userId}:`, err);
       res.status(500).json({ success: false, error: "فشل حذف المستخدم من قاعدة البيانات" });
     }
   });
@@ -693,22 +741,67 @@ async function startServer() {
   });
 
   app.post("/api/admin/students/import", async (req, res) => {
-    const { students } = req.body; // Expecting array of { name, national_id, grade, section }
-    console.log(`Attempting to import ${students?.length} students`);
+    const { students, clearExisting } = req.body;
+    console.log(`[IMPORT] Request received. Students: ${students?.length}, ClearExisting: ${clearExisting}`);
     
     try {
       if (!students || !Array.isArray(students)) {
-        return res.status(400).json({ success: false, error: "Invalid students data" });
+        return res.status(400).json({ success: false, error: "بيانات الطلاب غير صالحة" });
       }
 
-      for (const student of students) {
-        await sql`INSERT INTO students (name, national_id, grade, section) VALUES (${student.name}, ${student.national_id}, ${student.grade}, ${student.section})`;
+      // 1. Handle Wipe Logic (Clear Database)
+      if (clearExisting) {
+        console.log("[IMPORT] Wiping existing student data...");
+        // Delete in order to respect foreign keys
+        await sql`DELETE FROM notifications`;
+        await sql`DELETE FROM referral_logs`;
+        await sql`DELETE FROM referrals`;
+        await sql`DELETE FROM students`;
+        console.log("[IMPORT] Database wiped successfully.");
       }
-      console.log(`Successfully imported ${students.length} students`);
-      res.json({ success: true, count: students.length });
+
+      // 2. Process Students Loop
+      let importedCount = 0;
+      for (const student of students) {
+        // Validation: Skip empty rows or rows without a name
+        if (!student.name || String(student.name).trim() === "") {
+          continue; 
+        }
+
+        const name = String(student.name).trim();
+        const national_id = student.national_id ? String(student.national_id).trim() : null;
+        const grade = student.grade ? String(student.grade).trim() : null;
+        const section = student.section ? String(student.section).trim() : null;
+
+        if (national_id && national_id !== "") {
+          // Upsert based on national_id
+          await sql`
+            INSERT INTO students (name, national_id, grade, section) 
+            VALUES (${name}, ${national_id}, ${grade}, ${section})
+            ON CONFLICT (national_id) 
+            DO UPDATE SET 
+              name = EXCLUDED.name,
+              grade = EXCLUDED.grade,
+              section = EXCLUDED.section
+          `;
+        } else {
+          // Insert without national_id (allows multiple students without IDs)
+          await sql`
+            INSERT INTO students (name, grade, section) 
+            VALUES (${name}, ${grade}, ${section})
+          `;
+        }
+        importedCount++;
+      }
+
+      console.log(`[IMPORT] Successfully processed ${importedCount} students`);
+      res.json({ success: true, count: importedCount });
     } catch (err) {
-      console.error("Import failed:", err);
-      res.status(500).json({ success: false, error: "Import failed: " + (err instanceof Error ? err.message : String(err)) });
+      console.error("[IMPORT] Critical Failure:", err);
+      res.status(500).json({ 
+        success: false, 
+        error: "فشل الاستيراد: " + (err instanceof Error ? err.message : "خطأ في قاعدة البيانات") 
+      });
     }
   });
 
@@ -739,9 +832,11 @@ async function startServer() {
         
         if (referrals.length > 0) {
           const refIds = referrals.map((r: any) => r.id);
-          // 3. Delete logs for these referrals
+          // 3. Delete notifications for these referrals
+          await sql`DELETE FROM notifications WHERE referral_id = ANY(${refIds})`;
+          // 4. Delete logs for these referrals
           await sql`DELETE FROM referral_logs WHERE referral_id = ANY(${refIds})`;
-          // 4. Delete the referrals
+          // 5. Delete the referrals
           await sql`DELETE FROM referrals WHERE id = ANY(${refIds})`;
         }
         
@@ -761,10 +856,26 @@ async function startServer() {
   });
 
   app.delete("/api/admin/students/:id", async (req, res) => {
+    const studentId = req.params.id;
     try {
-      await sql`DELETE FROM students WHERE id = ${req.params.id}`;
+      // 1. Find all referrals for this student
+      const referrals = await sql`SELECT id FROM referrals WHERE student_id = ${studentId}`;
+      
+      if (referrals.length > 0) {
+        const refIds = referrals.map((r: any) => r.id);
+        // 2. Delete notifications for these referrals
+        await sql`DELETE FROM notifications WHERE referral_id = ANY(${refIds})`;
+        // 3. Delete logs for these referrals
+        await sql`DELETE FROM referral_logs WHERE referral_id = ANY(${refIds})`;
+        // 4. Delete the referrals
+        await sql`DELETE FROM referrals WHERE id = ANY(${refIds})`;
+      }
+
+      // 5. Delete the student
+      await sql`DELETE FROM students WHERE id = ${studentId}`;
       res.json({ success: true });
     } catch (err) {
+      console.error(`[ADMIN] Failed to delete student ${studentId}:`, err);
       res.status(500).json({ error: "Failed to delete student" });
     }
   });

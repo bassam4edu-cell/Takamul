@@ -12,7 +12,8 @@ import {
   FileText,
   Timer,
   Medal,
-  Zap
+  Zap,
+  Printer
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -120,12 +121,34 @@ const PrincipalDashboard: React.FC = () => {
 
   return (
     <div className="space-y-10 pb-12">
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media print {
+          body { background: white !important; }
+          .no-print, nav, aside, button, .sts-button-primary, .sts-button-accent { display: none !important; }
+          .sts-card { border: none !important; box-shadow: none !important; padding: 0 !important; margin-bottom: 2rem !important; }
+          .sts-card > div { padding: 0 !important; }
+          table { width: 100% !important; border-collapse: collapse !important; }
+          th, td { border: 1px solid #e2e8f0 !important; padding: 8px !important; font-size: 10pt !important; }
+          tr { page-break-inside: avoid !important; }
+          h1, h2 { color: black !important; margin-bottom: 1rem !important; }
+          .grid { display: block !important; }
+          .lg\\:col-span-2, .lg\\:col-span-1 { width: 100% !important; }
+          .recharts-responsive-container { height: 300px !important; width: 100% !important; }
+        }
+      `}} />
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">لوحة تحكم المدير</h1>
           <p className="text-sm md:text-base text-slate-500 mt-1">نظرة شاملة على أداء نظام التحويل والإرشاد</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 no-print">
+          <button 
+            onClick={() => window.print()}
+            className="sts-button-accent px-6 py-3 flex items-center gap-2 shadow-xl shadow-accent/20"
+          >
+            <Printer size={18} />
+            <span>طباعة التقرير</span>
+          </button>
           <div className="bg-white px-4 md:px-5 py-2.5 md:py-3 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-3">
             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
             <span className="text-xs md:text-sm font-bold text-slate-700">النظام متصل</span>

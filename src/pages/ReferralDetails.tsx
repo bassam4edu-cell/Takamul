@@ -165,15 +165,23 @@ const ReferralDetails: React.FC = () => {
 
       if (response.ok) {
         // Refresh data
-        const d = await (await fetch(`/api/referrals/${id}`)).json();
-        setData(d);
-        setActionNotes('');
-        setMeetingDate('');
-        setMeetingTime('');
-        setShowMeetingInputs(false);
+        const refreshRes = await fetch(`/api/referrals/${id}`);
+        if (refreshRes.ok) {
+          const d = await refreshRes.json();
+          setData(d);
+          setActionNotes('');
+          setMeetingDate('');
+          setMeetingTime('');
+          setEvidenceFile(null);
+          setShowMeetingInputs(false);
+        }
+      } else {
+        const errData = await response.json().catch(() => ({ error: 'فشل تنفيذ الإجراء' }));
+        alert(errData.error || 'حدث خطأ أثناء تنفيذ الإجراء');
       }
     } catch (err) {
       console.error(err);
+      alert('حدث خطأ في الاتصال بالخادم');
     } finally {
       setSubmitting(false);
     }
@@ -505,6 +513,36 @@ const ReferralDetails: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 md:gap-10">
         <div className="lg:col-span-2 space-y-8 md:space-y-10">
           <div className="sts-card p-6 md:p-10 space-y-8 md:space-y-10">
+            {/* Returned Case Instructions for Teacher */}
+            {user?.role === 'teacher' && referral.status === 'returned_to_teacher' && (
+              <motion.div 
+                initial={{ x: -20, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                className="bg-red-50 border-r-4 border-red-500 p-8 rounded-3xl space-y-4 shadow-sm"
+              >
+                <div className="flex items-center gap-3 text-red-800 font-black text-lg">
+                  <RotateCcw size={24} />
+                  <span>توجيهات الوكيل (نواقص التحويل)</span>
+                </div>
+                <div className="bg-white/80 p-6 rounded-2xl border border-red-100 text-red-900 font-bold leading-relaxed shadow-inner">
+                  {logs.find(l => l.action.includes('ارجاع'))?.notes || 'يرجى مراجعة سجل الإجراءات أدناه لمعرفة النواقص المطلوبة.'}
+                </div>
+                {logs.find(l => l.action.includes('ارجاع'))?.evidence_file && (
+                  <div className="flex items-center gap-4 pt-2">
+                    <span className="text-xs font-black text-red-700 uppercase tracking-widest">المرفق التوضيحي من الوكيل:</span>
+                    <button 
+                      onClick={() => window.open(logs.find(l => l.action.includes('ارجاع'))?.evidence_file, '_blank')}
+                      className="flex items-center gap-2 bg-white text-red-600 px-4 py-2 rounded-xl border border-red-200 text-[10px] font-black hover:bg-red-100 transition-all"
+                    >
+                      <ExternalLink size={14} />
+                      فتح المرفق
+                    </button>
+                  </div>
+                )}
+                <p className="text-xs text-red-600 font-bold">يرجى تعديل البيانات المطلوبة أعلاه ثم النقر على "حفظ وإرسال للوكيل".</p>
+              </motion.div>
+            )}
+
             <div className="flex flex-col md:flex-row md:items-center justify-between pb-8 md:pb-10 border-b border-slate-50 gap-6">
               <div className="flex items-center gap-4 md:gap-6">
                 <div className="w-16 h-16 md:w-24 md:h-24 bg-primary text-white rounded-[1.5rem] md:rounded-[2rem] flex items-center justify-center text-2xl md:text-4xl font-extrabold shadow-2xl shadow-primary/20 border-4 border-white shrink-0">

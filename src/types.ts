@@ -6,6 +6,7 @@ export interface User {
   email: string;
   role: Role;
   assigned_grades?: string[];
+  is_active?: boolean;
 }
 
 export interface Student {
