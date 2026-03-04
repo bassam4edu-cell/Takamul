@@ -59,9 +59,14 @@ const PrincipalDashboard: React.FC = () => {
           fetch('/api/admin/performance'),
           fetch('/api/reports/kpi-stats')
         ]);
-        const refData = await refRes.json();
-        const perfData = await perfRes.json();
-        const kpiData = await kpiRes.json();
+
+        if (!refRes.ok || !perfRes.ok || !kpiRes.ok) {
+          throw new Error('Failed to fetch dashboard data');
+        }
+
+        const refData = await refRes.json().catch(() => []);
+        const perfData = await perfRes.json().catch(() => []);
+        const kpiData = await kpiRes.json().catch(() => ({}));
         setReferrals(refData);
         setPerformance(perfData);
         setKpiStats(kpiData);

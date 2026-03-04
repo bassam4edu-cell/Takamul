@@ -66,10 +66,14 @@ const Reports: React.FC = () => {
           fetch('/api/reports/kpi-stats')
         ]);
 
-        setTopStudents(await topRes.json());
-        setReferralStatus(await statusRes.json());
-        setTeacherStats(await teacherRes.json());
-        setKpiStats(await kpiRes.json());
+        if (!topRes.ok || !statusRes.ok || !teacherRes.ok || !kpiRes.ok) {
+          throw new Error('Failed to fetch reports');
+        }
+
+        setTopStudents(await topRes.json().catch(() => []));
+        setReferralStatus(await statusRes.json().catch(() => []));
+        setTeacherStats(await teacherRes.json().catch(() => []));
+        setKpiStats(await kpiRes.json().catch(() => ({})));
       } catch (err) {
         console.error('Failed to fetch reports', err);
       } finally {

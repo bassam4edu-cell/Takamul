@@ -46,14 +46,16 @@ const StudentProfile: React.FC = () => {
 
     const fetchData = async () => {
       try {
-        // Fetch student details (we might need a specific endpoint or filter from /api/students)
+        // Fetch student details
         const studentsRes = await fetch('/api/students');
-        const students = await studentsRes.json();
+        if (!studentsRes.ok) throw new Error('Failed to fetch students');
+        const students = await studentsRes.json().catch(() => []);
         const foundStudent = students.find((s: any) => s.id === parseInt(id || '0'));
         setStudent(foundStudent);
 
         const referralsRes = await fetch(`/api/students/${id}/referrals`);
-        const referralsData = await referralsRes.json();
+        if (!referralsRes.ok) throw new Error('Failed to fetch referrals');
+        const referralsData = await referralsRes.json().catch(() => []);
         setReferrals(referralsData);
       } catch (err) {
         console.error('Failed to fetch student data', err);

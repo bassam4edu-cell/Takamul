@@ -28,7 +28,12 @@ const Login: React.FC = () => {
         body: JSON.stringify({ email, password, role }),
       });
 
-      const data = await response.json();
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'فشل تسجيل الدخول' }));
+        throw new Error(errorData.message || 'فشل تسجيل الدخول');
+      }
+
+      const data = await response.json().catch(() => ({ success: false, message: 'استجابة غير صالحة من السيرفر' }));
 
       if (data.success) {
         login(data.user);
@@ -37,8 +42,8 @@ const Login: React.FC = () => {
       } else {
         setError(data.message || 'بيانات الدخول غير صحيحة');
       }
-    } catch (err) {
-      setError('حدث خطأ في الاتصال بالسيرفر');
+    } catch (err: any) {
+      setError(err.message || 'حدث خطأ في الاتصال بالسيرفر');
     } finally {
       setLoading(false);
     }

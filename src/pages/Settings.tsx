@@ -41,6 +41,9 @@ const Settings: React.FC = () => {
         login(updatedUser);
         setIsEditingProfile(false);
         alert('تم تحديث الملف الشخصي بنجاح');
+      } else {
+        const data = await res.json().catch(() => ({ error: 'فشل تحديث الملف الشخصي' }));
+        alert(data.error || 'فشل تحديث الملف الشخصي');
       }
     } catch (err) {
       alert('فشل تحديث الملف الشخصي');

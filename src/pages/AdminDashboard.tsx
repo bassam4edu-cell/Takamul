@@ -76,7 +76,8 @@ const AdminDashboard: React.FC = () => {
     setLoadingStudents(true);
     try {
       const res = await fetch('/api/admin/students');
-      const data = await res.json();
+      if (!res.ok) throw new Error('Failed to fetch students');
+      const data = await res.json().catch(() => []);
       if (Array.isArray(data)) {
         setStudents(data);
       } else {
@@ -104,7 +105,7 @@ const AdminDashboard: React.FC = () => {
         setNewStudentForm({ name: '', national_id: '', grade: '', section: '' });
         fetchStudents();
       } else {
-        const data = await res.json();
+        const data = await res.json().catch(() => ({ error: 'فشل إضافة الطالب' }));
         alert(data.error || 'فشل إضافة الطالب');
       }
     } catch (err) {
@@ -114,17 +115,28 @@ const AdminDashboard: React.FC = () => {
   };
 
   const fetchGrades = async () => {
-    const res = await fetch('/api/students');
-    const data = await res.json();
-    const grades = Array.from(new Set(data.map((s: any) => s.grade))) as string[];
-    setAllGrades(grades);
+    try {
+      const res = await fetch('/api/students');
+      if (!res.ok) throw new Error('Failed to fetch grades');
+      const data = await res.json().catch(() => []);
+      const grades = Array.from(new Set(data.map((s: any) => s.grade))) as string[];
+      setAllGrades(grades);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const fetchUsers = async () => {
-    const res = await fetch('/api/admin/users');
-    const data = await res.json();
-    setUsers(data);
-    setLoading(false);
+    try {
+      const res = await fetch('/api/admin/users');
+      if (!res.ok) throw new Error('Failed to fetch users');
+      const data = await res.json().catch(() => []);
+      setUsers(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleRoleChange = async (userId: number, newRole: string) => {
@@ -136,9 +148,13 @@ const AdminDashboard: React.FC = () => {
       });
       if (res.ok) {
         fetchUsers();
+      } else {
+        const data = await res.json().catch(() => ({ error: 'فشل تغيير الدور' }));
+        alert(data.error || 'فشل تغيير الدور');
       }
     } catch (err) {
       console.error(err);
+      alert('حدث خطأ أثناء تغيير الدور');
     }
   };
 
@@ -161,9 +177,13 @@ const AdminDashboard: React.FC = () => {
       if (res.ok) {
         setEditingUserId(null);
         fetchUsers();
+      } else {
+        const data = await res.json().catch(() => ({ error: 'فشل تحديث بيانات المستخدم' }));
+        alert(data.error || 'فشل تحديث بيانات المستخدم');
       }
     } catch (err) {
       console.error(err);
+      alert('حدث خطأ أثناء تحديث بيانات المستخدم');
     }
   };
 
@@ -179,6 +199,9 @@ const AdminDashboard: React.FC = () => {
         setEditingPasswordUserId(null);
         setNewPassword('');
         alert('تم تحديث كلمة المرور بنجاح');
+      } else {
+        const data = await res.json().catch(() => ({ error: 'فشل تحديث كلمة المرور' }));
+        alert(data.error || 'فشل تحديث كلمة المرور');
       }
     } catch (err) {
       console.error(err);
@@ -224,7 +247,7 @@ const AdminDashboard: React.FC = () => {
         setSelectedGradeFilter('');
         setSelectedSectionFilter('');
       } else {
-        const data = await res.json();
+        const data = await res.json().catch(() => ({ error: 'فشل حذف الصف' }));
         alert(data.error || 'فشل حذف الصف');
       }
     } catch (err) {
@@ -256,9 +279,13 @@ const AdminDashboard: React.FC = () => {
       });
       if (res.ok) {
         fetchStudents();
+      } else {
+        const data = await res.json().catch(() => ({ error: 'فشل حذف الطالب' }));
+        alert(data.error || 'فشل حذف الطالب');
       }
     } catch (err) {
       console.error(err);
+      alert('حدث خطأ أثناء حذف الطالب');
     }
   };
 
@@ -280,12 +307,13 @@ const AdminDashboard: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newUserForm),
       });
-      const data = await res.json();
       if (res.ok) {
+        const data = await res.json().catch(() => ({}));
         setShowAddUser(false);
         setNewUserForm({ name: '', email: '', password: '', role: 'teacher' });
         fetchUsers();
       } else {
+        const data = await res.json().catch(() => ({ error: 'فشل إضافة المستخدم' }));
         alert(data.error || 'فشل إضافة المستخدم');
       }
     } catch (err) {
@@ -301,9 +329,13 @@ const AdminDashboard: React.FC = () => {
       });
       if (res.ok) {
         fetchUsers();
+      } else {
+        const data = await res.json().catch(() => ({ error: 'فشل تغيير حالة المستخدم' }));
+        alert(data.error || 'فشل تغيير حالة المستخدم');
       }
     } catch (err) {
       console.error(err);
+      alert('حدث خطأ أثناء تغيير حالة المستخدم');
     }
   };
 
@@ -320,9 +352,13 @@ const AdminDashboard: React.FC = () => {
       });
       if (res.ok) {
         fetchUsers();
+      } else {
+        const data = await res.json().catch(() => ({ error: 'فشل تحديث الصفوف المسندة' }));
+        alert(data.error || 'فشل تحديث الصفوف المسندة');
       }
     } catch (err) {
       console.error(err);
+      alert('حدث خطأ أثناء تحديث الصفوف المسندة');
     }
   };
 
@@ -377,7 +413,7 @@ const AdminDashboard: React.FC = () => {
           }),
         });
         
-        const result = await res.json();
+        const result = await res.json().catch(() => ({ success: false, error: 'استجابة غير صالحة من السيرفر' }));
         if (result.success) {
           setImportSuccess(result.count);
           fetchGrades(); // Refresh grades list

@@ -34,7 +34,8 @@ const Notifications: React.FC = () => {
     if (!user) return;
     try {
       const res = await fetch(`/api/notifications?userId=${user.id}`);
-      const data = await res.json();
+      if (!res.ok) throw new Error('Failed to fetch notifications');
+      const data = await res.json().catch(() => []);
       setNotifications(data);
     } catch (err) {
       console.error('Failed to fetch notifications', err);
@@ -49,10 +50,15 @@ const Notifications: React.FC = () => {
 
   const markAsRead = async (id: number, referralId?: number) => {
     try {
-      await fetch(`/api/notifications/${id}/read`, { method: 'POST' });
-      setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
-      if (referralId) {
-        navigate(`/referral/${referralId}`);
+      const res = await fetch(`/api/notifications/${id}/read`, { method: 'POST' });
+      if (res.ok) {
+        setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+        if (referralId) {
+          navigate(`/referral/${referralId}`);
+        }
+      } else {
+        const data = await res.json().catch(() => ({ error: 'فشل تحديث حالة الإشعار' }));
+        console.error(data.error || 'فشل تحديث حالة الإشعار');
       }
     } catch (err) {
       console.error('Failed to mark as read', err);
@@ -62,12 +68,17 @@ const Notifications: React.FC = () => {
   const markAllAsRead = async () => {
     if (!user) return;
     try {
-      await fetch('/api/notifications/read-all', {
+      const res = await fetch('/api/notifications/read-all', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.id })
       });
-      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      if (res.ok) {
+        setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      } else {
+        const data = await res.json().catch(() => ({ error: 'فشل تحديث الإشعارات' }));
+        console.error(data.error || 'فشل تحديث الإشعارات');
+      }
     } catch (err) {
       console.error('Failed to mark all as read', err);
     }

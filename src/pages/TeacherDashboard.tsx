@@ -20,12 +20,19 @@ const TeacherDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`/api/referrals?userId=${user?.id}&role=${user?.role}`)
-      .then(res => res.json())
-      .then(data => {
+    const fetchReferrals = async () => {
+      try {
+        const res = await fetch(`/api/referrals?userId=${user?.id}&role=${user?.role}`);
+        if (!res.ok) throw new Error('Failed to fetch referrals');
+        const data = await res.json().catch(() => []);
         setReferrals(data);
+      } catch (err) {
+        console.error(err);
+      } finally {
         setLoading(false);
-      });
+      }
+    };
+    if (user?.id) fetchReferrals();
   }, [user?.id, user?.role]);
 
   const stats = [

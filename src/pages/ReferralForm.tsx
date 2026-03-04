@@ -35,9 +35,17 @@ const ReferralForm: React.FC = () => {
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/students?userId=${user?.id}`)
-      .then(res => res.json())
-      .then(data => setStudents(data));
+    const fetchStudents = async () => {
+      try {
+        const res = await fetch(`/api/students?userId=${user?.id}`);
+        if (!res.ok) throw new Error('Failed to fetch students');
+        const data = await res.json().catch(() => []);
+        setStudents(data);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    if (user?.id) fetchStudents();
   }, [user?.id]);
 
   const grades = Array.from(new Set(students.map(s => s.grade)));
@@ -86,6 +94,9 @@ const ReferralForm: React.FC = () => {
       if (response.ok) {
         setSuccess(true);
         setTimeout(() => navigate('/'), 2000);
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'فشل إرسال التحويل' }));
+        alert(errorData.error || 'فشل إرسال التحويل');
       }
     } catch (err) {
       console.error(err);

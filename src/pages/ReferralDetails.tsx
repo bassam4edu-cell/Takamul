@@ -56,41 +56,118 @@ const ReferralDetails: React.FC = () => {
   });
   const [fileError, setFileError] = useState('');
 
+  // Utility to compress image
+  const compressImage = (file: File, quality: number = 0.7): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          // Resize if too large (max 1600px width/height)
+          const MAX_SIZE = 1600;
+          if (width > height) {
+            if (width > MAX_SIZE) {
+              height *= MAX_SIZE / width;
+              width = MAX_SIZE;
+            }
+          } else {
+            if (height > MAX_SIZE) {
+              width *= MAX_SIZE / height;
+              height = MAX_SIZE;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = reject;
+      };
+      reader.onerror = reject;
+    });
+  };
+
+  const getFileExtension = (dataUrl: string) => {
+    if (dataUrl.startsWith('data:application/pdf')) return 'pdf';
+    if (dataUrl.startsWith('data:image/png')) return 'png';
+    if (dataUrl.startsWith('data:image/jpeg') || dataUrl.startsWith('data:image/jpg')) return 'jpg';
+    return 'file';
+  };
+
   useEffect(() => {
-    fetch(`/api/referrals/${id}`)
-      .then(res => res.json())
-      .then(d => {
-        setData(d);
-        setEditForm({
-          type: d.referral.type,
-          severity: d.referral.severity,
-          reason: d.referral.reason,
-          teacher_notes: d.referral.teacher_notes,
-          remedial_plan: d.referral.remedial_plan || '',
-          remedial_plan_file: d.referral.remedial_plan_file || '',
-          status: d.referral.status
-        });
+    const fetchReferral = async () => {
+      try {
+        const res = await fetch(`/api/referrals/${id}`);
+        if (!res.ok) throw new Error('Failed to fetch referral');
+        const d = await res.json().catch(() => null);
+        if (d) {
+          setData(d);
+          setEditForm({
+            type: d.referral.type,
+            severity: d.referral.severity,
+            reason: d.referral.reason,
+            teacher_notes: d.referral.teacher_notes,
+            remedial_plan: d.referral.remedial_plan || '',
+            remedial_plan_file: d.referral.remedial_plan_file || '',
+            status: d.referral.status
+          });
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
         setLoading(false);
-      });
+      }
+    };
+    fetchReferral();
   }, [id]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     setFileError('');
     if (!file) return;
-    if (file.type !== 'application/pdf') {
-      setFileError('يرجى اختيار ملف PDF فقط');
+    
+    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+    if (!allowedTypes.includes(file.type)) {
+      setFileError('يرجى اختيار ملف PDF أو صورة (PNG, JPG) فقط');
+      alert('نوع الملف غير مدعوم. يرجى اختيار PDF أو صورة.');
       return;
     }
-    if (file.size > 500 * 1024) {
-      setFileError('حجم الملف يجب أن لا يتجاوز 500 كيلوبايت');
-      return;
+
+    if (file.type === 'application/pdf') {
+      if (file.size > 2 * 1024 * 1024) {
+        setFileError('حجم ملف PDF يجب أن لا يتجاوز 2 ميجابايت. يرجى ضغط الملف قبل الرفع.');
+        alert('ملف PDF كبير جداً (أكبر من 2MB).');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        setEditForm({ ...editForm, remedial_plan_file: reader.result as string });
+      };
+      reader.readAsDataURL(file);
+    } else if (file.type.startsWith('image/')) {
+      try {
+        if (file.size > 1024 * 1024) {
+          const compressed = await compressImage(file, 0.6);
+          setEditForm({ ...editForm, remedial_plan_file: compressed });
+        } else {
+          const reader = new FileReader();
+          reader.onload = () => {
+            setEditForm({ ...editForm, remedial_plan_file: reader.result as string });
+          };
+          reader.readAsDataURL(file);
+        }
+      } catch (err) {
+        setFileError('فشل معالجة الصورة');
+      }
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      setEditForm({ ...editForm, remedial_plan_file: reader.result as string });
-    };
-    reader.readAsDataURL(file);
   };
 
   const handleAdminUpdate = async () => {
@@ -103,9 +180,14 @@ const ReferralDetails: React.FC = () => {
       });
 
       if (response.ok) {
-        const d = await (await fetch(`/api/referrals/${id}`)).json();
-        setData(d);
-        setIsEditing(false);
+        const refreshRes = await fetch(`/api/referrals/${id}`);
+        if (refreshRes.ok) {
+          const d = await refreshRes.json().catch(() => null);
+          if (d) {
+            setData(d);
+            setIsEditing(false);
+          }
+        }
       }
     } catch (err) {
       console.error(err);
@@ -114,23 +196,45 @@ const ReferralDetails: React.FC = () => {
     }
   };
 
-  const handleEvidenceFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleEvidenceFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     setEvidenceError('');
     if (!file) return;
-    if (file.type !== 'application/pdf' && !file.type.startsWith('image/')) {
-      setEvidenceError('يرجى اختيار ملف PDF أو صورة فقط');
+
+    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+    if (!allowedTypes.includes(file.type)) {
+      setEvidenceError('يرجى اختيار ملف PDF أو صورة (PNG, JPG) فقط');
+      alert('نوع الملف غير مدعوم. يرجى اختيار PDF أو صورة.');
       return;
     }
-    if (file.size > 1024 * 1024) {
-      setEvidenceError('حجم الملف يجب أن لا يتجاوز 1 ميجابايت');
-      return;
+
+    if (file.type === 'application/pdf') {
+      if (file.size > 2 * 1024 * 1024) {
+        setEvidenceError('حجم ملف PDF يجب أن لا يتجاوز 2 ميجابايت. يرجى ضغط الملف قبل الرفع.');
+        alert('ملف PDF كبير جداً (أكبر من 2MB).');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        setEvidenceFile(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    } else if (file.type.startsWith('image/')) {
+      try {
+        if (file.size > 1024 * 1024) {
+          const compressed = await compressImage(file, 0.6);
+          setEvidenceFile(compressed);
+        } else {
+          const reader = new FileReader();
+          reader.onload = () => {
+            setEvidenceFile(reader.result as string);
+          };
+          reader.readAsDataURL(file);
+        }
+      } catch (err) {
+        setEvidenceError('فشل معالجة الصورة');
+      }
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      setEvidenceFile(reader.result as string);
-    };
-    reader.readAsDataURL(file);
   };
 
   const handleAction = async (action: string, status: string, customNotes?: string) => {
@@ -167,13 +271,15 @@ const ReferralDetails: React.FC = () => {
         // Refresh data
         const refreshRes = await fetch(`/api/referrals/${id}`);
         if (refreshRes.ok) {
-          const d = await refreshRes.json();
-          setData(d);
-          setActionNotes('');
-          setMeetingDate('');
-          setMeetingTime('');
-          setEvidenceFile(null);
-          setShowMeetingInputs(false);
+          const d = await refreshRes.json().catch(() => null);
+          if (d) {
+            setData(d);
+            setActionNotes('');
+            setMeetingDate('');
+            setMeetingTime('');
+            setEvidenceFile(null);
+            setShowMeetingInputs(false);
+          }
         }
       } else {
         const errData = await response.json().catch(() => ({ error: 'فشل تنفيذ الإجراء' }));
@@ -634,26 +740,26 @@ const ReferralDetails: React.FC = () => {
                   <span>الخطة العلاجية / الإجراءات التربوية</span>
                 </div>
                 {!isEditing && referral.remedial_plan_file && (
-                  <div className="flex gap-3">
-                    <a 
-                      href={referral.remedial_plan_file} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 text-[10px] font-extrabold text-primary hover:text-primary-light bg-primary/5 px-4 py-2 rounded-xl border border-primary/10 transition-all uppercase tracking-widest"
-                    >
-                      <File size={14} />
-                      <span>عرض</span>
-                      <ExternalLink size={12} />
-                    </a>
-                    <a 
-                      href={referral.remedial_plan_file} 
-                      download={`plan_${referral.id}.pdf`}
-                      className="flex items-center gap-2 text-[10px] font-extrabold text-emerald-600 hover:text-emerald-700 bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-100 transition-all uppercase tracking-widest"
-                    >
-                      <Download size={14} />
-                      <span>تحميل</span>
-                    </a>
-                  </div>
+                    <div className="flex gap-3">
+                      <a 
+                        href={referral.remedial_plan_file} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 text-[10px] font-extrabold text-primary hover:text-primary-light bg-primary/5 px-4 py-2 rounded-xl border border-primary/10 transition-all uppercase tracking-widest"
+                      >
+                        {referral.remedial_plan_file.startsWith('data:image/') ? <ImageIcon size={14} /> : <FileText size={14} />}
+                        <span>عرض</span>
+                        <ExternalLink size={12} />
+                      </a>
+                      <a 
+                        href={referral.remedial_plan_file} 
+                        download={`plan_${referral.id}.${getFileExtension(referral.remedial_plan_file)}`}
+                        className="flex items-center gap-2 text-[10px] font-extrabold text-emerald-600 hover:text-emerald-700 bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-100 transition-all uppercase tracking-widest"
+                      >
+                        <Download size={14} />
+                        <span>تحميل</span>
+                      </a>
+                    </div>
                 )}
               </div>
               
@@ -831,7 +937,7 @@ const ReferralDetails: React.FC = () => {
                                 <div className="flex gap-3">
                                   <a 
                                     href={log.evidence_file} 
-                                    download={`evidence-${log.id}.png`}
+                                    download={`evidence-${log.id}.${getFileExtension(log.evidence_file)}`}
                                     className="w-10 h-10 flex items-center justify-center bg-primary text-white rounded-xl hover:bg-primary-dark transition-all shadow-lg shadow-primary/20"
                                     title="تحميل الملف"
                                   >

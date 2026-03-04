@@ -25,7 +25,7 @@ const NotificationBell: React.FC = () => {
     try {
       const res = await fetch(`/api/notifications?userId=${user.id}`);
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json().catch(() => []);
         setNotifications(data);
       }
     } catch (err) {
@@ -54,8 +54,13 @@ const NotificationBell: React.FC = () => {
   const handleNotificationClick = async (notification: Notification) => {
     if (!notification.is_read) {
       try {
-        await fetch(`/api/notifications/${notification.id}/read`, { method: 'POST' });
-        setNotifications(prev => prev.map(n => n.id === notification.id ? { ...n, is_read: true } : n));
+        const res = await fetch(`/api/notifications/${notification.id}/read`, { method: 'POST' });
+        if (res.ok) {
+          setNotifications(prev => prev.map(n => n.id === notification.id ? { ...n, is_read: true } : n));
+        } else {
+          const data = await res.json().catch(() => ({ error: 'فشل تحديث حالة الإشعار' }));
+          console.error(data.error || 'فشل تحديث حالة الإشعار');
+        }
       } catch (err) {
         console.error('Failed to mark as read', err);
       }
@@ -66,12 +71,17 @@ const NotificationBell: React.FC = () => {
 
   const markAllAsRead = async () => {
     try {
-      await fetch('/api/notifications/read-all', {
+      const res = await fetch('/api/notifications/read-all', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user?.id })
       });
-      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      if (res.ok) {
+        setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      } else {
+        const data = await res.json().catch(() => ({ error: 'فشل تحديث الإشعارات' }));
+        console.error(data.error || 'فشل تحديث الإشعارات');
+      }
     } catch (err) {
       console.error('Failed to mark all as read', err);
     }

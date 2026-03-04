@@ -32,12 +32,19 @@ const ManagementDashboard: React.FC = () => {
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/referrals?userId=${user?.id}&role=${user?.role}`)
-      .then(res => res.json())
-      .then(data => {
+    const fetchReferrals = async () => {
+      try {
+        const res = await fetch(`/api/referrals?userId=${user?.id}&role=${user?.role}`);
+        if (!res.ok) throw new Error('Failed to fetch referrals');
+        const data = await res.json().catch(() => []);
         setReferrals(data);
+      } catch (err) {
+        console.error(err);
+      } finally {
         setLoading(false);
-      });
+      }
+    };
+    if (user?.id) fetchReferrals();
   }, [user?.id, user?.role]);
 
   const handleExportNoor = async () => {
@@ -54,10 +61,11 @@ const ManagementDashboard: React.FC = () => {
         })
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
         alert(data.error || 'فشل تصدير البيانات');
+        setExporting(false);
         return;
       }
 
@@ -70,8 +78,10 @@ const ManagementDashboard: React.FC = () => {
       setShowExportModal(false);
       // Refresh referrals to update is_exported status if needed (though not shown in UI yet)
       const res = await fetch(`/api/referrals?userId=${user?.id}&role=${user?.role}`);
-      const updatedData = await res.json();
-      setReferrals(updatedData);
+      if (res.ok) {
+        const updatedData = await res.json().catch(() => []);
+        setReferrals(updatedData);
+      }
       
       alert('تم تصدير البيانات بنجاح');
     } catch (err) {

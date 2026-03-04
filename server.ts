@@ -332,26 +332,35 @@ async function startServer() {
 
   app.get("/api/referrals/:id", async (req, res) => {
     const id = req.params.id;
-    const referralResult = await sql`
-      SELECT r.*, s.name as student_name, s.national_id as student_national_id, s.grade as student_grade, s.section as student_section, u.name as teacher_name
-      FROM referrals r
-      JOIN students s ON r.student_id = s.id
-      JOIN users u ON r.teacher_id = u.id
-      WHERE r.id = ${id}
-    `;
+    try {
+      const referralResult = await sql`
+        SELECT r.*, s.name as student_name, s.national_id as student_national_id, s.grade as student_grade, s.section as student_section, u.name as teacher_name
+        FROM referrals r
+        JOIN students s ON r.student_id = s.id
+        JOIN users u ON r.teacher_id = u.id
+        WHERE r.id = ${id}
+      `;
 
-    const studentId = referralResult[0].student_id;
-    const studentReferralsCount = await sql`SELECT COUNT(*) as count FROM referrals WHERE student_id = ${studentId}`;
+      if (referralResult.length === 0) {
+        return res.status(404).json({ error: "Referral not found" });
+      }
 
-    const logs = await sql`
-      SELECT l.*, u.name as user_name, u.role as user_role
-      FROM referral_logs l
-      JOIN users u ON l.user_id = u.id
-      WHERE l.referral_id = ${id}
-      ORDER BY l.created_at DESC
-    `;
+      const studentId = referralResult[0].student_id;
+      const studentReferralsCount = await sql`SELECT COUNT(*) as count FROM referrals WHERE student_id = ${studentId}`;
 
-    res.json({ referral: referralResult[0], logs, studentReferralsCount: parseInt(studentReferralsCount[0].count) });
+      const logs = await sql`
+        SELECT l.*, u.name as user_name, u.role as user_role
+        FROM referral_logs l
+        JOIN users u ON l.user_id = u.id
+        WHERE l.referral_id = ${id}
+        ORDER BY l.created_at DESC
+      `;
+
+      res.json({ referral: referralResult[0], logs, studentReferralsCount: parseInt(studentReferralsCount[0].count) });
+    } catch (err) {
+      console.error("Error fetching referral details:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
   app.post("/api/referrals/:id/action", async (req, res) => {
@@ -647,20 +656,35 @@ async function startServer() {
 
   app.post("/api/admin/users/:id/role", async (req, res) => {
     const { role } = req.body;
-    await sql`UPDATE users SET role = ${role} WHERE id = ${req.params.id}`;
-    res.json({ success: true });
+    try {
+      await sql`UPDATE users SET role = ${role} WHERE id = ${req.params.id}`;
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Failed to update user role:", err);
+      res.status(500).json({ success: false, error: "Failed to update user role" });
+    }
   });
 
   app.post("/api/admin/users/:id/update", async (req, res) => {
     const { name, email } = req.body;
-    await sql`UPDATE users SET name = ${name}, email = ${email} WHERE id = ${req.params.id}`;
-    res.json({ success: true });
+    try {
+      await sql`UPDATE users SET name = ${name}, email = ${email} WHERE id = ${req.params.id}`;
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Failed to update user:", err);
+      res.status(500).json({ success: false, error: "Failed to update user" });
+    }
   });
 
   app.post("/api/admin/users/:id/password", async (req, res) => {
     const { password } = req.body;
-    await sql`UPDATE users SET password = ${password} WHERE id = ${req.params.id}`;
-    res.json({ success: true });
+    try {
+      await sql`UPDATE users SET password = ${password} WHERE id = ${req.params.id}`;
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Failed to update user password:", err);
+      res.status(500).json({ success: false, error: "Failed to update user password" });
+    }
   });
 
   app.post("/api/admin/import-national-ids", async (req, res) => {
@@ -732,12 +756,17 @@ async function startServer() {
 
   app.post("/api/admin/referrals/:id/update", async (req, res) => {
     const { type, severity, reason, teacher_notes, remedial_plan, remedial_plan_file, status } = req.body;
-    await sql`
-      UPDATE referrals 
-      SET type = ${type}, severity = ${severity}, reason = ${reason}, teacher_notes = ${teacher_notes}, remedial_plan = ${remedial_plan}, remedial_plan_file = ${remedial_plan_file}, status = ${status} 
-      WHERE id = ${req.params.id}
-    `;
-    res.json({ success: true });
+    try {
+      await sql`
+        UPDATE referrals 
+        SET type = ${type}, severity = ${severity}, reason = ${reason}, teacher_notes = ${teacher_notes}, remedial_plan = ${remedial_plan}, remedial_plan_file = ${remedial_plan_file}, status = ${status} 
+        WHERE id = ${req.params.id}
+      `;
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Failed to update referral:", err);
+      res.status(500).json({ success: false, error: "Failed to update referral" });
+    }
   });
 
   app.post("/api/admin/students/import", async (req, res) => {
