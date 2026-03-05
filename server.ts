@@ -294,6 +294,88 @@ async function startServer() {
     res.json(students);
   });
 
+  app.get("/api/student-search", async (req, res) => {
+    const { query } = req.query;
+    if (!query) return res.json([]);
+    
+    try {
+      const students = await sql`
+        SELECT * FROM students 
+        WHERE name LIKE ${`%${query}%`} 
+        OR national_id = ${query}
+        LIMIT 20
+      `;
+      res.json(students);
+    } catch (err) {
+      res.status(500).json({ error: "Search failed" });
+    }
+  });
+
+  app.get("/api/hierarchy/grades", async (req, res) => {
+    try {
+      const grades = await sql`SELECT DISTINCT grade FROM students ORDER BY grade`;
+      res.json(grades.map((g: any) => g.grade));
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch grades" });
+    }
+  });
+
+  app.get("/api/hierarchy/sections", async (req, res) => {
+    const { grade } = req.query;
+    try {
+      const sections = await sql`SELECT DISTINCT section FROM students WHERE grade = ${grade} ORDER BY section`;
+      res.json(sections.map((s: any) => s.section));
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch sections" });
+    }
+  });
+
+  app.get("/api/hierarchy/students", async (req, res) => {
+    const { grade, section } = req.query;
+    try {
+      const students = await sql`SELECT id, name FROM students WHERE grade = ${grade} AND section = ${section} ORDER BY name`;
+      res.json(students);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch students" });
+    }
+  });
+
+  app.get("/api/student-profile/:id", async (req, res) => {
+    const { id } = req.params;
+    try {
+      const studentResult = await sql`
+        SELECT 
+          s.*,
+          (SELECT COUNT(*) FROM referrals WHERE student_id = s.id) as total_referrals,
+          (SELECT COUNT(*) FROM referrals WHERE student_id = s.id AND status IN ('resolved', 'closed')) as closed_referrals,
+          (SELECT COUNT(*) FROM referrals WHERE student_id = s.id AND status NOT IN ('resolved', 'closed')) as active_referrals
+        FROM students s
+        WHERE s.id = ${id}
+      `;
+
+      if (studentResult.length === 0) {
+        return res.status(404).json({ error: "Student not found" });
+      }
+
+      const referrals = await sql`
+        SELECT 
+          r.*, 
+          u_teacher.name as teacher_name,
+          (SELECT action FROM referral_logs WHERE referral_id = r.id ORDER BY created_at DESC LIMIT 1) as last_action,
+          (SELECT u.name FROM referral_logs rl JOIN users u ON rl.user_id = u.id WHERE rl.referral_id = r.id ORDER BY rl.created_at DESC LIMIT 1) as last_actor_name
+        FROM referrals r
+        JOIN users u_teacher ON r.teacher_id = u_teacher.id
+        WHERE r.student_id = ${id}
+        ORDER BY r.created_at DESC
+      `;
+
+      res.json({ student: studentResult[0], referrals });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch student profile" });
+    }
+  });
+
   app.post("/api/referrals", async (req, res) => {
     const { student_id, teacher_id, type, severity, reason, teacher_notes, remedial_plan, remedial_plan_file } = req.body;
     try {

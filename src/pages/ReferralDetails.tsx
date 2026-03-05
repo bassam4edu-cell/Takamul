@@ -678,12 +678,12 @@ const ReferralDetails: React.FC = () => {
               </div>
               {['vice_principal', 'counselor', 'principal', 'admin'].includes(user?.role || '') && (
                 <button 
-                  onClick={() => navigate(`/student/${referral.student_id}`)}
+                  onClick={() => navigate(`/dashboard/student/${referral.student_id}`)}
                   className="flex items-center justify-center gap-2 text-primary font-black text-xs md:text-sm bg-primary/5 px-4 md:px-6 py-3 rounded-2xl border border-primary/10 hover:bg-primary/10 transition-all w-full md:w-auto"
                 >
-                  <User size={16} md:size={18} />
+                  <User size={16} />
                   <span>عرض ملف الطالب</span>
-                  <ExternalLink size={12} md:size={14} />
+                  <ExternalLink size={12} />
                 </button>
               )}
             </div>

@@ -167,7 +167,7 @@ const ManagementDashboard: React.FC = () => {
             <div className={`absolute top-0 right-0 w-20 h-20 md:w-24 md:h-24 ${stat.color.replace('bg-', 'bg-')}/5 rounded-bl-[4rem] md:rounded-bl-[5rem] -mr-6 md:-mr-8 -mt-6 md:-mt-8 transition-all group-hover:scale-110`} />
             <div className="relative z-10 flex items-center gap-4 md:gap-6">
               <div className={`${stat.color} w-12 h-12 md:w-16 md:h-16 rounded-xl md:rounded-2xl flex items-center justify-center text-white shadow-lg shadow-slate-100 shrink-0`}>
-                <stat.icon size={24} md:size={32} />
+                <stat.icon size={24} />
               </div>
               <div>
                 <p className="text-[10px] md:text-sm text-slate-500 font-bold mb-1 uppercase tracking-wider">{stat.label}</p>
@@ -182,7 +182,7 @@ const ManagementDashboard: React.FC = () => {
         <div className="p-6 md:p-10 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-center gap-3 md:gap-4">
             <div className="w-8 h-8 md:w-10 md:h-10 bg-primary/5 text-primary rounded-lg md:rounded-xl flex items-center justify-center">
-              <Search size={18} md:size={22} />
+              <Search size={18} />
             </div>
             <h2 className="text-lg md:text-xl font-extrabold text-slate-800">إدارة التحويلات</h2>
             <div className="hidden sm:block h-6 w-px bg-slate-100" />
@@ -211,7 +211,7 @@ const ManagementDashboard: React.FC = () => {
               filteredReferrals.map((referral) => (
                 <Link 
                   key={referral.id}
-                  to={`/referral/${referral.id}`}
+                  to={`/dashboard/referral/${referral.id}`}
                   className="group bg-slate-50/30 hover:bg-white p-5 md:p-8 rounded-[1.5rem] md:rounded-[2rem] border border-transparent hover:border-slate-100 hover:shadow-2xl hover:shadow-slate-200/50 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6"
                 >
                   <div className="flex items-center gap-4 md:gap-8">

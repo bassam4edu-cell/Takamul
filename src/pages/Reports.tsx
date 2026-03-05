@@ -24,6 +24,7 @@ interface TopStudent {
 interface ReferralStatus {
   id: number;
   student_name: string;
+  student_national_id?: string;
   student_grade: string;
   teacher_name: string;
   status: string;
@@ -53,7 +54,7 @@ const Reports: React.FC = () => {
 
   useEffect(() => {
     if (user?.role !== 'principal' && user?.role !== 'admin') {
-      navigate('/');
+      navigate('/dashboard');
       return;
     }
 

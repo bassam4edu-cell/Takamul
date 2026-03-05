@@ -173,7 +173,7 @@ const PrincipalDashboard: React.FC = () => {
             <div className={`absolute top-0 right-0 w-20 h-20 md:w-24 md:h-24 ${stat.lightColor} rounded-bl-[4rem] md:rounded-bl-[5rem] -mr-6 md:-mr-8 -mt-6 md:-mt-8 transition-all group-hover:scale-110`} />
             <div className="relative z-10">
               <div className={`${stat.lightColor} ${stat.textColor} w-12 h-12 md:w-14 md:h-14 rounded-xl md:rounded-2xl flex items-center justify-center mb-4 md:mb-6 shadow-sm`}>
-                <stat.icon size={24} md:size={28} />
+                <stat.icon size={24} />
               </div>
               <p className="text-slate-500 text-[10px] md:text-sm font-bold mb-1">{stat.label}</p>
               <h3 className="text-2xl md:text-3xl font-extrabold text-slate-900">{stat.value}</h3>
@@ -187,7 +187,7 @@ const PrincipalDashboard: React.FC = () => {
           <div className="flex items-center justify-between mb-6 md:mb-10">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 md:w-10 md:h-10 bg-primary/5 text-primary rounded-lg md:rounded-xl flex items-center justify-center">
-                <BarChart3 size={18} md:size={22} />
+                <BarChart3 size={18} />
               </div>
               <h2 className="text-lg md:text-xl font-extrabold text-slate-800">أسباب التحويل الأكثر شيوعاً</h2>
             </div>
@@ -222,7 +222,7 @@ const PrincipalDashboard: React.FC = () => {
         <div className="sts-card p-6 md:p-10">
           <div className="flex items-center gap-3 mb-6 md:mb-10">
             <div className="w-8 h-8 md:w-10 md:h-10 bg-amber-50 text-amber-600 rounded-lg md:rounded-xl flex items-center justify-center">
-              <PieChartIcon size={18} md:size={22} />
+              <PieChartIcon size={18} />
             </div>
             <h2 className="text-lg md:text-xl font-extrabold text-slate-800">توزيع الحالات</h2>
           </div>
@@ -268,7 +268,7 @@ const PrincipalDashboard: React.FC = () => {
         <div className="p-6 md:p-10 border-b border-slate-50 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 md:w-10 md:h-10 bg-primary text-white rounded-lg md:rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
-              <TrendingUp size={18} md:size={22} />
+              <TrendingUp size={18} />
             </div>
             <h2 className="text-lg md:text-xl font-extrabold text-slate-800">أداء الوكلاء والموجهين</h2>
           </div>
@@ -284,7 +284,7 @@ const PrincipalDashboard: React.FC = () => {
             >
               <div className="flex items-center gap-4 mb-6">
                 <div className="w-12 h-12 md:w-14 md:h-14 bg-white rounded-xl md:rounded-2xl flex items-center justify-center text-primary shadow-sm border border-slate-100 group-hover:bg-primary group-hover:text-white transition-all">
-                  <UserIcon size={24} md:size={28} />
+                  <UserIcon size={24} />
                 </div>
                 <div>
                   <h3 className="text-sm md:text-base font-extrabold text-slate-800">{p.name}</h3>
@@ -320,7 +320,7 @@ const PrincipalDashboard: React.FC = () => {
         <div className="p-6 md:p-10 border-b border-slate-50 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 md:w-10 md:h-10 bg-indigo-50 text-indigo-600 rounded-lg md:rounded-xl flex items-center justify-center">
-              <Timer size={18} md:size={22} />
+              <Timer size={18} />
             </div>
             <h2 className="text-lg md:text-xl font-extrabold text-slate-800">آخر التحويلات المسجلة</h2>
           </div>
@@ -379,7 +379,7 @@ const PrincipalDashboard: React.FC = () => {
                   </td>
                   <td className="px-10 py-6 text-left">
                     <button 
-                      onClick={() => navigate(`/referral/${referral.id}`)}
+                      onClick={() => navigate(`/dashboard/referral/${referral.id}`)}
                       className="p-3 text-slate-300 hover:text-primary hover:bg-primary/5 rounded-xl transition-all"
                     >
                       <ChevronRight size={22} />
@@ -395,7 +395,7 @@ const PrincipalDashboard: React.FC = () => {
             {referrals.slice(0, 5).map((referral) => (
               <div 
                 key={referral.id}
-                onClick={() => navigate(`/referral/${referral.id}`)}
+                onClick={() => navigate(`/dashboard/referral/${referral.id}`)}
                 className="p-6 hover:bg-slate-50 transition-colors cursor-pointer"
               >
                 <div className="flex items-center justify-between mb-4">

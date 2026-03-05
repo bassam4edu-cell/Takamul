@@ -12,7 +12,8 @@ import {
   Home,
   BarChart3,
   UserCircle,
-  Bell
+  Bell,
+  FileText
 } from 'lucide-react';
 import { useAuth } from '../App';
 import { clsx, type ClassValue } from 'clsx';
@@ -29,37 +30,43 @@ const Sidebar: React.FC = () => {
   const menuItems = [
     { 
       title: 'لوحة التحكم', 
-      path: '/', 
+      path: '/dashboard', 
       icon: LayoutDashboard,
       roles: ['teacher', 'vice_principal', 'counselor', 'principal']
     },
     { 
       title: 'تحويل جديد', 
-      path: '/referral/new', 
+      path: '/dashboard/referral/new', 
       icon: FilePlus,
       roles: ['teacher']
     },
     { 
       title: 'إدارة النظام', 
-      path: '/admin', 
+      path: '/dashboard/admin', 
       icon: ShieldCheck,
       roles: ['admin']
     },
     { 
+      title: 'السجل الشامل للطالب', 
+      path: '/dashboard/student-record', 
+      icon: FileText,
+      roles: ['vice_principal', 'counselor', 'principal']
+    },
+    { 
       title: 'التقارير الإحصائية', 
-      path: '/reports', 
+      path: '/dashboard/reports', 
       icon: BarChart3,
       roles: ['principal', 'admin']
     },
     { 
       title: 'الإشعارات', 
-      path: '/notifications', 
+      path: '/dashboard/notifications', 
       icon: Bell,
       roles: ['teacher', 'vice_principal', 'counselor', 'admin', 'principal']
     },
     { 
       title: 'الإعدادات', 
-      path: '/settings', 
+      path: '/dashboard/settings', 
       icon: Settings,
       roles: ['teacher', 'vice_principal', 'counselor', 'admin', 'principal']
     },

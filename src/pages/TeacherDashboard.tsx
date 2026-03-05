@@ -90,7 +90,7 @@ const TeacherDashboard: React.FC = () => {
             <div className={`absolute top-0 right-0 w-20 h-20 md:w-24 md:h-24 ${stat.color.replace('bg-', 'bg-')}/5 rounded-bl-[4rem] md:rounded-bl-[5rem] -mr-6 md:-mr-8 -mt-6 md:-mt-8 transition-all group-hover:scale-110`} />
             <div className="relative z-10 flex items-center gap-4 md:gap-6">
               <div className={`${stat.color} w-12 h-12 md:w-16 md:h-16 rounded-xl md:rounded-2xl flex items-center justify-center text-white shadow-lg shadow-slate-100 shrink-0`}>
-                <stat.icon size={24} md:size={32} />
+                <stat.icon size={24} />
               </div>
               <div>
                 <p className="text-[10px] md:text-sm text-slate-500 font-bold mb-1 uppercase tracking-wider">{stat.label}</p>
@@ -105,13 +105,13 @@ const TeacherDashboard: React.FC = () => {
         <div className="p-6 md:p-10 border-b border-slate-50 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 md:w-10 md:h-10 bg-primary/5 text-primary rounded-lg md:rounded-xl flex items-center justify-center">
-              <Search size={18} md:size={22} />
+              <Search size={18} />
             </div>
             <h2 className="text-lg md:text-xl font-extrabold text-slate-800">آخر التحويلات</h2>
           </div>
           <div className="flex items-center gap-4">
             <button className="p-2 md:p-3 text-slate-400 hover:text-primary hover:bg-slate-50 rounded-lg md:rounded-xl transition-all">
-              <Filter size={18} md:size={20} />
+              <Filter size={18} />
             </button>
           </div>
         </div>
@@ -175,7 +175,7 @@ const TeacherDashboard: React.FC = () => {
                     <td className="px-10 py-6 text-left">
                       <div className="flex items-center justify-end gap-3">
                         <Link 
-                          to={`/referral/${referral.id}`}
+                          to={`/dashboard/referral/${referral.id}`}
                           className="p-3 text-slate-300 hover:text-primary hover:bg-primary/5 rounded-xl transition-all"
                         >
                           <ArrowUpRight size={22} />
@@ -198,7 +198,7 @@ const TeacherDashboard: React.FC = () => {
               referrals.map((referral) => (
                 <Link 
                   key={referral.id}
-                  to={`/referral/${referral.id}`}
+                  to={`/dashboard/referral/${referral.id}`}
                   className="block p-6 hover:bg-slate-50 transition-colors"
                 >
                   <div className="flex items-center justify-between mb-4">

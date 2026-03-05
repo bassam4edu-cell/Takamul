@@ -1,12 +1,14 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { User } from './types';
+import Landing from './pages/Landing';
 import Login from './pages/Login';
 import TeacherDashboard from './pages/TeacherDashboard';
 import ReferralForm from './pages/ReferralForm';
 import ManagementDashboard from './pages/ManagementDashboard';
 import ReferralDetails from './pages/ReferralDetails';
 import StudentProfile from './pages/StudentProfile';
+import StudentComprehensiveRecord from './pages/StudentComprehensiveRecord';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
 import Notifications from './pages/Notifications';
@@ -60,7 +62,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: strin
   }
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;
@@ -71,9 +73,10 @@ const App: React.FC = () => {
     <AuthProvider>
       <Router>
         <Routes>
+          <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           
-          <Route path="/" element={
+          <Route path="/dashboard" element={
             <ProtectedRoute>
               <Layout />
             </ProtectedRoute>
@@ -86,6 +89,11 @@ const App: React.FC = () => {
             } />
             <Route path="referral/:id" element={<ReferralDetails />} />
             <Route path="student/:id" element={<StudentProfile />} />
+            <Route path="student-record" element={
+              <ProtectedRoute allowedRoles={['principal', 'vice_principal', 'counselor']}>
+                <StudentComprehensiveRecord />
+              </ProtectedRoute>
+            } />
             <Route path="reports" element={<Reports />} />
             <Route path="settings" element={<Settings />} />
             <Route path="notifications" element={<Notifications />} />
@@ -95,6 +103,9 @@ const App: React.FC = () => {
               </ProtectedRoute>
             } />
           </Route>
+          
+          {/* Fallback redirect */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Router>
     </AuthProvider>

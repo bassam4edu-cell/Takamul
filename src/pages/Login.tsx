@@ -37,7 +37,7 @@ const Login: React.FC = () => {
 
       if (data.success) {
         login(data.user);
-        const from = (location.state as any)?.from?.pathname || '/';
+        const from = (location.state as any)?.from?.pathname || '/dashboard';
         navigate(from, { replace: true });
       } else {
         setError(data.message || 'بيانات الدخول غير صحيحة');

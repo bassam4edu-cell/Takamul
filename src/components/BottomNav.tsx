@@ -5,7 +5,8 @@ import {
   FilePlus, 
   Bell, 
   UserCircle,
-  BarChart3
+  BarChart3,
+  FileText
 } from 'lucide-react';
 import { useAuth } from '../App';
 
@@ -15,31 +16,37 @@ const BottomNav: React.FC = () => {
   const navItems = [
     { 
       title: 'الرئيسية', 
-      path: '/', 
+      path: '/dashboard', 
       icon: LayoutDashboard,
       roles: ['teacher', 'vice_principal', 'counselor', 'principal', 'admin']
     },
     { 
       title: 'تحويل', 
-      path: '/referral/new', 
+      path: '/dashboard/referral/new', 
       icon: FilePlus,
       roles: ['teacher']
     },
     { 
+      title: 'السجل', 
+      path: '/dashboard/student-record', 
+      icon: FileText,
+      roles: ['vice_principal', 'counselor', 'principal']
+    },
+    { 
       title: 'التقارير', 
-      path: '/reports', 
+      path: '/dashboard/reports', 
       icon: BarChart3,
       roles: ['principal', 'admin']
     },
     { 
       title: 'الإشعارات', 
-      path: '/notifications', 
+      path: '/dashboard/notifications', 
       icon: Bell,
       roles: ['teacher', 'vice_principal', 'counselor', 'principal', 'admin']
     },
     { 
       title: 'حسابي', 
-      path: '/settings', 
+      path: '/dashboard/settings', 
       icon: UserCircle,
       roles: ['teacher', 'vice_principal', 'counselor', 'principal', 'admin']
     },

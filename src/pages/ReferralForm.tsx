@@ -93,7 +93,7 @@ const ReferralForm: React.FC = () => {
 
       if (response.ok) {
         setSuccess(true);
-        setTimeout(() => navigate('/'), 2000);
+        setTimeout(() => navigate('/dashboard'), 2000);
       } else {
         const errorData = await response.json().catch(() => ({ error: 'فشل إرسال التحويل' }));
         alert(errorData.error || 'فشل إرسال التحويل');

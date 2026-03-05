@@ -40,7 +40,7 @@ const StudentProfile: React.FC = () => {
 
   useEffect(() => {
     if (user && !['vice_principal', 'counselor', 'principal', 'admin'].includes(user.role)) {
-      navigate('/');
+      navigate('/dashboard');
       return;
     }
 
@@ -111,7 +111,7 @@ const StudentProfile: React.FC = () => {
       >
         <div className="flex flex-col md:flex-row gap-6 md:gap-8 items-center md:items-start text-center md:text-right">
           <div className="w-20 h-20 md:w-24 md:h-24 bg-primary/10 rounded-3xl flex items-center justify-center text-primary shadow-inner shrink-0">
-            <User size={40} md:size={48} />
+            <User size={40} />
           </div>
           <div className="flex-1 space-y-2">
             <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">{student.name}</h1>
@@ -169,7 +169,7 @@ const StudentProfile: React.FC = () => {
                   initial={{ x: 20, opacity: 0 }}
                   animate={{ x: 0, opacity: 1 }}
                   transition={{ delay: index * 0.1 }}
-                  onClick={() => navigate(`/referral/${referral.id}`)}
+                  onClick={() => navigate(`/dashboard/referral/${referral.id}`)}
                   className="sts-card p-6 hover:border-primary/30 transition-all cursor-pointer group relative overflow-hidden"
                 >
                   <div className="flex items-start justify-between gap-4">
@@ -188,17 +188,17 @@ const StudentProfile: React.FC = () => {
                       </h4>
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] md:text-xs text-slate-500 font-bold">
                         <span className="flex items-center gap-1">
-                          <User size={12} md:size={14} />
+                          <User size={12} />
                           المعلم: {referral.teacher_name}
                         </span>
                         <span className="flex items-center gap-1">
-                          <FileText size={12} md:size={14} />
+                          <FileText size={12} />
                           الحالة: {getStatusLabel(referral.status)}
                         </span>
                       </div>
                     </div>
                     <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-primary/10 group-hover:text-primary transition-all shrink-0">
-                      <ChevronRight size={18} md:size={20} />
+                      <ChevronRight size={18} />
                     </div>
                   </div>
                 </motion.div>
