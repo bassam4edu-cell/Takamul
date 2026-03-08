@@ -17,6 +17,10 @@ import AdminDashboard from './pages/AdminDashboard';
 import AdminReferrals from './pages/AdminReferrals';
 import PrincipalDashboard from './pages/PrincipalDashboard';
 import BehavioralViolations from './pages/BehavioralViolations';
+import PrintTemplate from './pages/PrintTemplate';
+import TeacherAttendance from './pages/TeacherAttendance';
+import VPRadar from './pages/VPRadar';
+import DailyAbsenceReport from './pages/DailyAbsenceReport';
 import Layout from './components/Layout';
 
 interface AuthContextType {
@@ -79,6 +83,18 @@ const App: React.FC = () => {
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           
+          <Route path="/print/:templateId/:referralId" element={
+            <ProtectedRoute>
+              <PrintTemplate />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/print/daily-absence" element={
+            <ProtectedRoute allowedRoles={['vice_principal', 'principal']}>
+              <DailyAbsenceReport />
+            </ProtectedRoute>
+          } />
+
           <Route path="/dashboard" element={
             <ProtectedRoute>
               <Layout />
@@ -92,6 +108,16 @@ const App: React.FC = () => {
             } />
             <Route path="referral/:id" element={<ReferralDetails />} />
             <Route path="student/:id" element={<StudentProfile />} />
+            <Route path="attendance/teacher" element={
+              <ProtectedRoute allowedRoles={['teacher']}>
+                <TeacherAttendance />
+              </ProtectedRoute>
+            } />
+            <Route path="attendance/radar" element={
+              <ProtectedRoute allowedRoles={['vice_principal', 'principal']}>
+                <VPRadar />
+              </ProtectedRoute>
+            } />
             <Route path="student-record" element={
               <ProtectedRoute allowedRoles={['principal', 'vice_principal', 'counselor']}>
                 <StudentComprehensiveRecord />

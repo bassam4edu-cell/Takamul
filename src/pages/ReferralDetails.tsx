@@ -26,7 +26,8 @@ import {
   Upload,
   Info,
   Image as ImageIcon,
-  Trash2
+  Trash2,
+  ArrowUpRight
 } from 'lucide-react';
 import { Referral, ReferralLog } from '../types';
 import { useAuth } from '../App';
@@ -80,6 +81,7 @@ const ReferralDetails: React.FC = () => {
   const [bonusPoints, setBonusPoints] = useState(0);
   const [bonusReason, setBonusReason] = useState('');
   const [submittingBonus, setSubmittingBonus] = useState(false);
+  const [fileError, setFileError] = useState('');
 
   const handleBonusPoints = async () => {
     if (bonusPoints <= 0 || !bonusReason.trim()) {
@@ -110,14 +112,7 @@ const ReferralDetails: React.FC = () => {
           if (d) setData(d);
         }
         // Open template 9
-        const printWindow = window.open(`/print/9/${id}`, '_blank');
-        if (printWindow) {
-          printWindow.onload = () => {
-            setTimeout(() => {
-              printWindow.print();
-            }, 500);
-          };
-        }
+        navigate(`/print/9/${id}`);
       } else {
         alert('حدث خطأ أثناء إضافة النقاط');
       }
@@ -332,20 +327,20 @@ const ReferralDetails: React.FC = () => {
     }
   };
 
-  const getRecommendedTemplates = (actions: string[], violationDegree: number) => {
+  const getRecommendedTemplates = (actions: string[]) => {
     const templates: {id: number, name: string, icon: string}[] = [];
     const actionsStr = actions.join(' ');
 
-    if (actionsStr.includes('تعهد')) {
+    if (actionsStr.includes('تعهد خطي') || actionsStr.includes('تعهد')) {
       templates.push({ id: 1, name: 'تعهد سلوكي', icon: '📄' });
     }
-    if (actionsStr.includes('إشعار ولي أمر')) {
+    if (actionsStr.includes('ولي أمر') || actionsStr.includes('ولي الأمر')) {
       templates.push({ id: 2, name: 'إشعار ولي أمر بمشكلة', icon: '📄' });
     }
     if (actionsStr.includes('دعوة ولي أمر') || actionsStr.includes('موعد جلسة')) {
       templates.push({ id: 5, name: 'خطاب دعوة ولي أمر', icon: '📄' });
     }
-    if (actionsStr.includes('الموجه الطلابي') || actionsStr.includes('لجنة التوجيه')) {
+    if (actionsStr.includes('الموجه الطلابي') || actionsStr.includes('لجنة التوجيه') || actionsStr.includes('الموجه')) {
       templates.push({ id: 10, name: 'إحالة طالب', icon: '📄' });
       templates.push({ id: 12, name: 'خطة تعديل سلوك', icon: '📄' });
     }
@@ -353,13 +348,17 @@ const ReferralDetails: React.FC = () => {
       templates.push({ id: 4, name: 'تعهد الحضور', icon: '📄' });
       templates.push({ id: 16, name: 'إجراءات الغياب', icon: '📄' });
     }
-    if (violationDegree === 4 || violationDegree === 5) {
-      templates.push({ id: 13, name: 'محضر ضبط واقعة', icon: '📄' });
-      templates.push({ id: 11, name: 'اجتماع لجنة التوجيه', icon: '📄' });
+    if (actionsStr.includes('مركز البلاغات') || actionsStr.includes('1919')) {
+      templates.push({ id: 15, name: 'نموذج إبلاغ 1919', icon: '📄' });
     }
-    if (actionsStr.includes('جهات أمنية') || actionsStr.includes('1919') || actionsStr.includes('حماية')) {
-      templates.push({ id: 14, name: 'عالية الخطورة', icon: '📄' });
-      templates.push({ id: 15, name: 'إيذاء', icon: '📄' });
+    if (actionsStr.includes('الجهات الأمنية')) {
+      templates.push({ id: 14, name: 'نموذج إبلاغ جهات أمنية', icon: '📄' });
+    }
+    if (actionsStr.includes('انعقاد لجنة التوجيه')) {
+      templates.push({ id: 11, name: 'محضر اجتماع لجنة التوجيه', icon: '📄' });
+    }
+    if (actionsStr.includes('إدارة التعليم') || actionsStr.includes('مدير التعليم') || actionsStr.includes('نقل')) {
+      templates.push({ id: 13, name: 'محضر الرفع الرسمي', icon: '📄' });
     }
 
     // Deduplicate
@@ -415,7 +414,7 @@ const ReferralDetails: React.FC = () => {
             // Show Smart Print Hub if Vice Principal and case is being forwarded or resolved
             if (user?.role === 'vice_principal' && (status === 'pending_counselor' || status === 'resolved')) {
               const selectedV = violations.find(v => v.id.toString() === selectedViolationId);
-              const templates = getRecommendedTemplates(appliedActions, selectedV?.degree || 0);
+              const templates = getRecommendedTemplates(appliedActions);
               if (templates.length > 0) {
                 setRecommendedTemplates(templates);
                 setShowPrintHub(true);
@@ -1290,7 +1289,10 @@ const ReferralDetails: React.FC = () => {
                           
                           <select 
                             value={selectedViolationId}
-                            onChange={(e) => setSelectedViolationId(e.target.value)}
+                            onChange={(e) => {
+                              setSelectedViolationId(e.target.value);
+                              setAppliedActions([]);
+                            }}
                             className="w-full bg-white border border-slate-200 rounded-2xl py-4 px-5 text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all font-bold text-slate-700"
                           >
                             <option value="">-- اختر التصنيف الرسمي للمخالفة --</option>
@@ -1422,16 +1424,55 @@ const ReferralDetails: React.FC = () => {
                                                   </div>
                                                 )}
 
-                                                {(proc.includes('إدارة التعليم') || proc.includes('مدير التعليم') || proc.includes('نقل')) && (
+                                                {(proc.includes('مركز البلاغات') || proc.includes('1919')) && (
                                                   <div className="p-6 bg-rose-600 rounded-[1.5rem] text-white space-y-4 shadow-xl shadow-rose-600/30">
+                                                    <div className="flex items-center gap-3 font-black text-xs uppercase tracking-widest">
+                                                      <AlertCircle size={20} className="animate-pulse" />
+                                                      <span>إجراء جسيم يتطلب الإبلاغ</span>
+                                                    </div>
+                                                    <button className="w-full py-4 bg-white text-rose-600 hover:bg-rose-50 rounded-2xl text-xs font-black flex items-center justify-center gap-3 transition-all shadow-lg">
+                                                      <span>🚨</span>
+                                                      <span>نموذج إبلاغ 1919</span>
+                                                    </button>
+                                                  </div>
+                                                )}
+
+                                                {proc.includes('الجهات الأمنية') && (
+                                                  <div className="p-6 bg-slate-800 rounded-[1.5rem] text-white space-y-4 shadow-xl shadow-slate-800/30">
+                                                    <div className="flex items-center gap-3 font-black text-xs uppercase tracking-widest">
+                                                      <AlertCircle size={20} className="animate-pulse" />
+                                                      <span>إجراء جسيم يتطلب تدخل أمني</span>
+                                                    </div>
+                                                    <button className="w-full py-4 bg-white text-slate-800 hover:bg-slate-50 rounded-2xl text-xs font-black flex items-center justify-center gap-3 transition-all shadow-lg">
+                                                      <span>🚓</span>
+                                                      <span>نموذج إبلاغ الجهات الأمنية</span>
+                                                    </button>
+                                                  </div>
+                                                )}
+
+                                                {proc.includes('انعقاد لجنة التوجيه') && (
+                                                  <div className="p-6 bg-amber-500 rounded-[1.5rem] text-white space-y-4 shadow-xl shadow-amber-500/30">
+                                                    <div className="flex items-center gap-3 font-black text-xs uppercase tracking-widest">
+                                                      <AlertCircle size={20} className="animate-pulse" />
+                                                      <span>إجراء يتطلب اجتماع لجنة</span>
+                                                    </div>
+                                                    <button className="w-full py-4 bg-white text-amber-600 hover:bg-amber-50 rounded-2xl text-xs font-black flex items-center justify-center gap-3 transition-all shadow-lg">
+                                                      <span>👥</span>
+                                                      <span>محضر اجتماع لجنة التوجيه</span>
+                                                    </button>
+                                                  </div>
+                                                )}
+
+                                                {(proc.includes('إدارة التعليم') || proc.includes('مدير التعليم') || proc.includes('نقل')) && (
+                                                  <div className="p-6 bg-purple-600 rounded-[1.5rem] text-white space-y-4 shadow-xl shadow-purple-600/30">
                                                     <div className="flex items-center gap-3 font-black text-xs uppercase tracking-widest">
                                                       <AlertCircle size={20} className="animate-pulse" />
                                                       <span>إجراء جسيم يتطلب الرفع الرسمي</span>
                                                     </div>
-                                                    <p className="text-[10px] font-bold text-rose-100 leading-relaxed">
+                                                    <p className="text-[10px] font-bold text-purple-100 leading-relaxed">
                                                       هذا الإجراء يتطلب محضر اجتماع رسمي من لجنة التوجيه والطلاب موقع من مدير المدرسة للرفع لإدارة التعليم.
                                                     </p>
-                                                    <button className="w-full py-4 bg-white text-rose-600 hover:bg-rose-50 rounded-2xl text-xs font-black flex items-center justify-center gap-3 transition-all shadow-lg">
+                                                    <button className="w-full py-4 bg-white text-purple-600 hover:bg-purple-50 rounded-2xl text-xs font-black flex items-center justify-center gap-3 transition-all shadow-lg">
                                                       <span>📄</span>
                                                       <span>تجهيز محضر الرفع الرسمي</span>
                                                     </button>
@@ -1524,7 +1565,31 @@ const ReferralDetails: React.FC = () => {
                       </div>
                     )}
                     {user?.role === 'counselor' && (
-                      <>
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 gap-3 mb-6">
+                          <button
+                            onClick={() => navigate(`/print/12/${id}`)}
+                            className="w-full py-3 bg-blue-50 text-blue-700 font-bold rounded-xl hover:bg-blue-100 transition-all flex items-center justify-center gap-2 border border-blue-200"
+                          >
+                            <FileText size={18} />
+                            <span>إنشاء خطة تعديل سلوك</span>
+                          </button>
+                          <button
+                            onClick={() => navigate(`/print/11/${id}`)}
+                            className="w-full py-3 bg-amber-50 text-amber-700 font-bold rounded-xl hover:bg-amber-100 transition-all flex items-center justify-center gap-2 border border-amber-200"
+                          >
+                            <Users size={18} />
+                            <span>طلب انعقاد لجنة التوجيه</span>
+                          </button>
+                          <button
+                            onClick={() => setShowBonusModal(true)}
+                            className="w-full py-3 bg-emerald-50 text-emerald-700 font-bold rounded-xl hover:bg-emerald-100 transition-all flex items-center justify-center gap-2 border border-emerald-200"
+                          >
+                            <ArrowUpRight size={18} />
+                            <span>منح فرص تعويض درجات</span>
+                          </button>
+                        </div>
+
                         {referral.status === 'pending_counselor' && (
                           <button
                             onClick={() => setShowMeetingInputs(true)}
@@ -1543,7 +1608,7 @@ const ReferralDetails: React.FC = () => {
                           <CheckCircle2 size={20} />
                           <span>{referral.status === 'scheduled_meeting' ? 'إتمام اللقاء وإغلاق الحالة' : 'إتمام المعالجة'}</span>
                         </button>
-                      </>
+                      </div>
                     )}
                     {user?.role === 'teacher' && referral.status === 'returned_to_teacher' && (
                       <button
@@ -1581,9 +1646,8 @@ const ReferralDetails: React.FC = () => {
               </div>
 
               {(() => {
-                const currentDegree = violations.find(v => v.id.toString() === selectedViolationId)?.degree || referral.violation_degree || 0;
                 const currentActions = appliedActions.length > 0 ? appliedActions : (referral.applied_remedial_actions || []);
-                const templates = getRecommendedTemplates(currentActions, currentDegree);
+                const templates = getRecommendedTemplates(currentActions);
 
                 if (templates.length === 0) {
                   return (
@@ -1606,14 +1670,7 @@ const ReferralDetails: React.FC = () => {
                       <button
                         key={template.id}
                         onClick={() => {
-                          const printWindow = window.open(`/print/${template.id}/${id}`, '_blank');
-                          if (printWindow) {
-                            printWindow.onload = () => {
-                              setTimeout(() => {
-                                printWindow.print();
-                              }, 500);
-                            };
-                          }
+                          navigate(`/print/${template.id}/${id}`);
                         }}
                         className="group bg-white p-5 rounded-2xl border border-slate-200 hover:border-primary/30 hover:shadow-xl hover:shadow-primary/5 transition-all flex items-center gap-4 text-right"
                       >
@@ -1694,14 +1751,7 @@ const ReferralDetails: React.FC = () => {
                     <button
                       key={template.id}
                       onClick={() => {
-                        const printWindow = window.open(`/print/${template.id}/${id}`, '_blank');
-                        if (printWindow) {
-                          printWindow.onload = () => {
-                            setTimeout(() => {
-                              printWindow.print();
-                            }, 500);
-                          };
-                        }
+                        navigate(`/print/${template.id}/${id}`);
                       }}
                       className="group bg-white p-5 rounded-2xl border border-slate-200 hover:border-primary/30 hover:shadow-xl hover:shadow-primary/5 transition-all flex items-center gap-4 text-right"
                     >
@@ -1728,6 +1778,88 @@ const ReferralDetails: React.FC = () => {
                 >
                   <FileText size={16} />
                   <span>عرض جميع النماذج الأخرى</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+      {/* Bonus Points Modal */}
+      <AnimatePresence>
+        {showBonusModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowBonusModal(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: "spring", duration: 0.5 }}
+              className="relative w-full max-w-md bg-white rounded-[2rem] shadow-2xl overflow-hidden flex flex-col"
+            >
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-emerald-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center">
+                    <ArrowUpRight size={20} />
+                  </div>
+                  <h3 className="font-extrabold text-lg text-slate-800">منح فرص تعويض درجات</h3>
+                </div>
+                <button
+                  onClick={() => setShowBonusModal(false)}
+                  className="w-8 h-8 bg-white hover:bg-slate-50 text-slate-400 hover:text-slate-600 rounded-full flex items-center justify-center transition-colors shadow-sm"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">عدد الدرجات للتعويض</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={bonusPoints}
+                    onChange={(e) => setBonusPoints(Number(e.target.value))}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                    placeholder="مثال: 3"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">سبب التعويض (السلوك الإيجابي)</label>
+                  <textarea
+                    value={bonusReason}
+                    onChange={(e) => setBonusReason(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all min-h-[100px] resize-none"
+                    placeholder="اكتب السلوك الإيجابي الذي قام به الطالب..."
+                  />
+                </div>
+              </div>
+
+              <div className="p-6 border-t border-slate-100 bg-slate-50 flex gap-3">
+                <button
+                  onClick={handleBonusPoints}
+                  disabled={submittingBonus}
+                  className="flex-1 py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20"
+                >
+                  {submittingBonus ? (
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <CheckCircle2 size={18} />
+                      <span>حفظ وتوليد النموذج</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => setShowBonusModal(false)}
+                  className="px-6 py-3 bg-white text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-all border border-slate-200"
+                >
+                  إلغاء
                 </button>
               </div>
             </motion.div>

@@ -148,6 +148,20 @@ async function initDb() {
       )
     `;
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS attendance_records (
+        id SERIAL PRIMARY KEY,
+        student_id INTEGER REFERENCES students(id),
+        teacher_id INTEGER REFERENCES users(id),
+        class_id TEXT,
+        date DATE DEFAULT CURRENT_DATE,
+        period INTEGER,
+        status TEXT, -- 'حاضر', 'غائب', 'متأخر', 'مستأذن'
+        is_excused BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+
     // Seed data if empty
     const usersCount = await sql`SELECT COUNT(*) as count FROM users`;
     if (parseInt(usersCount[0].count) === 0) {
@@ -738,7 +752,7 @@ async function startServer() {
     const id = req.params.id;
     try {
       const referralResult = await sql`
-        SELECT r.*, s.name as student_name, s.national_id as student_national_id, s.grade as student_grade, s.section as student_section, u.name as teacher_name,
+        SELECT r.*, s.name as student_name, s.national_id as student_national_id, s.grade as student_grade, s.section as student_section, s.behavior_score as student_behavior_score, u.name as teacher_name,
                v.violation_name, v.degree as violation_degree, v.deduction_points as violation_points
         FROM referrals r
         JOIN students s ON r.student_id = s.id
@@ -1386,19 +1400,219 @@ async function startServer() {
     }
   });
 
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    app.use(express.static(path.join(__dirname, "dist")));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(__dirname, "dist", "index.html"));
-    });
-  }
+
+
+  // ==========================================
+  // Attendance System Endpoints
+  // ==========================================
+
+  // 0. Get available classes
+  app.get("/api/attendance/classes", async (req, res) => {
+    try {
+      const classes = await sql`
+        SELECT DISTINCT grade, section 
+        FROM students 
+        WHERE grade IS NOT NULL AND section IS NOT NULL
+        ORDER BY grade ASC, section ASC
+      `;
+      res.json(classes);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch classes" });
+    }
+  });
+
+  // 1. Get students for a specific class (Teacher Interface)
+  app.get("/api/attendance/class/:classId", async (req, res) => {
+    const { classId } = req.params;
+    const { date, period } = req.query;
+    const { grade, section } = JSON.parse(decodeURIComponent(classId));
+    
+    try {
+      const students = await sql`
+        SELECT 
+          s.id, 
+          s.name, 
+          s.national_id,
+          ar.status
+        FROM students s
+        LEFT JOIN attendance_records ar 
+          ON s.id = ar.student_id 
+          AND ar.date = ${date} 
+          AND ar.period = ${period}
+        WHERE s.grade = ${grade} AND s.section = ${section}
+        ORDER BY s.name ASC
+      `;
+      res.json(students);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch students" });
+    }
+  });
+
+  // 2. Submit attendance (Teacher Interface)
+  app.post("/api/attendance/submit", async (req, res) => {
+    const { records, teacher_id, class_id, period, date } = req.body;
+    
+    try {
+      // Delete existing records for this class, period, and date to allow updates
+      await sql`
+        DELETE FROM attendance_records 
+        WHERE class_id = ${class_id} AND period = ${period} AND date = ${date}
+      `;
+
+      // Insert new records
+      for (const record of records) {
+        await sql`
+          INSERT INTO attendance_records (student_id, teacher_id, class_id, date, period, status)
+          VALUES (${record.student_id}, ${teacher_id}, ${class_id}, ${date}, ${period}, ${record.status})
+        `;
+      }
+      res.json({ success: true });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to submit attendance" });
+    }
+  });
+
+  // 3. Get Live Radar Data (VP Interface)
+  app.get("/api/attendance/radar", async (req, res) => {
+    const { date } = req.query;
+    const targetDate = date || new Date().toISOString().split('T')[0];
+    
+    try {
+      // Live Counters
+      const counters = await sql`
+        SELECT 
+          COUNT(CASE WHEN status = 'حاضر' THEN 1 END) as present,
+          COUNT(CASE WHEN status = 'غائب' THEN 1 END) as absent,
+          COUNT(CASE WHEN status = 'متأخر' THEN 1 END) as late
+        FROM attendance_records
+        WHERE date = ${targetDate}
+      `;
+
+      // Actionable List (Absent & Late)
+      const actionableList = await sql`
+        SELECT 
+          ar.id,
+          s.name as student_name,
+          s.grade,
+          s.section,
+          ar.status,
+          ar.is_excused,
+          ar.period,
+          u.name as teacher_name
+        FROM attendance_records ar
+        JOIN students s ON ar.student_id = s.id
+        JOIN users u ON ar.teacher_id = u.id
+        WHERE ar.date = ${targetDate} AND ar.status IN ('غائب', 'متأخر')
+        ORDER BY ar.period DESC, s.name ASC
+      `;
+
+      res.json({
+        counters: counters[0],
+        actionableList
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch radar data" });
+    }
+  });
+
+  // 4. Toggle Excused Status (VP Interface)
+  app.post("/api/attendance/toggle-excuse/:id", async (req, res) => {
+    const { id } = req.params;
+    const { is_excused } = req.body;
+    
+    try {
+      await sql`
+        UPDATE attendance_records 
+        SET is_excused = ${is_excused}
+        WHERE id = ${id}
+      `;
+      res.json({ success: true });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to update excuse status" });
+    }
+  });
+
+  // 5. Automated Behavior Integration (Check Absence Limits)
+  app.get("/api/attendance/check-limits", async (req, res) => {
+    try {
+      // Calculate total unexcused absences per student
+      const absenceLimits = await sql`
+        SELECT 
+          student_id,
+          COUNT(DISTINCT date) as total_unexcused_days
+        FROM attendance_records
+        WHERE status = 'غائب' AND is_excused = FALSE
+        GROUP BY student_id
+        HAVING COUNT(DISTINCT date) >= 3
+      `;
+
+      const alerts = [];
+      for (const record of absenceLimits) {
+        const days = parseInt(record.total_unexcused_days);
+        if (days === 3 || days === 5 || days >= 10) {
+          const studentInfo = await sql`SELECT id, name, grade, section FROM students WHERE id = ${record.student_id}`;
+          alerts.push({
+            student: studentInfo[0],
+            days: days
+          });
+        }
+      }
+
+      res.json(alerts);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to check absence limits" });
+    }
+  });
+
+  // 6. Get Daily Absence Report
+  app.get("/api/attendance/daily-report", async (req, res) => {
+    const { date, grade, section } = req.query;
+    const targetDate = date || new Date().toISOString().split('T')[0];
+    
+    try {
+      let reportData;
+      if (grade && section) {
+        reportData = await sql`
+          SELECT 
+            s.name as student_name,
+            s.grade,
+            s.section,
+            ar.status,
+            ar.period
+          FROM attendance_records ar
+          JOIN students s ON ar.student_id = s.id
+          WHERE ar.date = ${targetDate} 
+            AND ar.status IN ('غائب', 'متأخر')
+            AND s.grade = ${grade}
+            AND s.section = ${section}
+          ORDER BY s.name ASC
+        `;
+      } else {
+        reportData = await sql`
+          SELECT 
+            s.name as student_name,
+            s.grade,
+            s.section,
+            ar.status,
+            ar.period
+          FROM attendance_records ar
+          JOIN students s ON ar.student_id = s.id
+          WHERE ar.date = ${targetDate} AND ar.status IN ('غائب', 'متأخر')
+          ORDER BY s.grade ASC, s.section ASC, s.name ASC
+        `;
+      }
+      res.json(reportData);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch daily report" });
+    }
+  });
 
   app.post("/api/export/noor", async (req, res) => {
     const { userId, role, startDate, endDate } = req.body;
@@ -1461,6 +1675,20 @@ async function startServer() {
       res.status(500).json({ error: "فشل تصدير البيانات" });
     }
   });
+
+  // Vite middleware for development
+  if (process.env.NODE_ENV !== "production") {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
+  } else {
+    app.use(express.static(path.join(__dirname, "dist")));
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(__dirname, "dist", "index.html"));
+    });
+  }
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);

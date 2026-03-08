@@ -13,7 +13,8 @@ import {
   AlertCircle,
   Send,
   FileText,
-  Users
+  Users,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../App';
@@ -72,8 +73,25 @@ const BehavioralViolations: React.FC = () => {
   const [success, setSuccess] = useState(false);
   const [occurrenceCount, setOccurrenceCount] = useState(0);
   const [fetchingOccurrence, setFetchingOccurrence] = useState(false);
+  const [showCounselorModal, setShowCounselorModal] = useState(false);
+
+  const recommendedStep = selectedFormViolation?.procedures.steps[Math.min(occurrenceCount, (selectedFormViolation?.procedures.steps.length || 1) - 1)] || '';
+  const activeProcedures = selectedFormViolation ? [
+    recommendedStep,
+    ...(selectedFormViolation.procedures.general || [])
+  ] : [];
+
+  const activeProceduresText = activeProcedures.join(' ');
+  const needsPledge = activeProceduresText.includes('تعهد خطي') || activeProceduresText.includes('تعهد');
+  const needsParent = activeProceduresText.includes('ولي أمر') || activeProceduresText.includes('ولي الأمر');
+  const needsCounselor = activeProceduresText.includes('الموجه الطلابي') || activeProceduresText.includes('لجنة التوجيه') || activeProceduresText.includes('الموجه');
+  const needs1919 = activeProceduresText.includes('مركز البلاغات') || activeProceduresText.includes('1919');
+  const needsSecurity = activeProceduresText.includes('الجهات الأمنية');
+  const needsCommittee = activeProceduresText.includes('انعقاد لجنة التوجيه');
+  const needsOfficial = activeProceduresText.includes('إدارة التعليم') || activeProceduresText.includes('مدير التعليم') || activeProceduresText.includes('نقل');
 
   useEffect(() => {
+    setAppliedProcedures([]);
     const fetchOccurrence = async () => {
       if (selectedStudent && selectedFormViolation) {
         setFetchingOccurrence(true);
@@ -147,7 +165,7 @@ const BehavioralViolations: React.FC = () => {
   }).slice(0, 5);
 
   const handleRecordViolation = async () => {
-    if (!selectedStudent || !selectedFormViolation || appliedProcedures.length === 0) return;
+    if (!selectedStudent || !selectedFormViolation) return;
     
     setSubmitting(true);
     try {
@@ -162,8 +180,8 @@ const BehavioralViolations: React.FC = () => {
           reason: selectedFormViolation.violation_name,
           teacher_notes: notes,
           violation_id: selectedFormViolation.id,
-          applied_remedial_actions: appliedProcedures,
-          status: appliedProcedures.some(p => p.includes('الموجه') || p.includes('لجنة التوجيه')) ? 'pending_counselor' : 'resolved'
+          applied_remedial_actions: activeProcedures,
+          status: activeProcedures.some(p => p.includes('الموجه') || p.includes('لجنة التوجيه')) ? 'pending_counselor' : 'resolved'
         })
       });
 
@@ -174,7 +192,6 @@ const BehavioralViolations: React.FC = () => {
           setStep(1);
           setSelectedStudent(null);
           setSelectedFormViolation(null);
-          setAppliedProcedures([]);
           setNotes('');
           setStudentSearch('');
           setFormViolationSearch('');
@@ -524,314 +541,153 @@ const BehavioralViolations: React.FC = () => {
               <motion.div 
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
-                className="space-y-8"
+                className="space-y-6 pb-24"
               >
-                {/* Top Alert Bar */}
-                <div className="bg-slate-900 p-8 rounded-[2.5rem] text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full -mr-32 -mt-32 blur-3xl" />
-                  <div className="relative z-10 flex items-center gap-6">
-                    <div className="w-16 h-16 bg-white/10 rounded-2xl flex items-center justify-center text-primary">
-                      <ShieldAlert size={32} />
+                {/* Status Header */}
+                <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-600 font-black text-xl">
+                      {selectedStudent?.name.charAt(0)}
                     </div>
                     <div>
-                      <h3 className="text-xl font-black">{selectedFormViolation?.violation_name}</h3>
-                      <p className="text-slate-400 font-bold text-sm mt-1">
-                        الطالب: {selectedStudent?.name} | 
-                        <span className="text-primary mr-2">
-                          {fetchingOccurrence ? 'جاري فحص السجل...' : `التكرار رقم: ${occurrenceCount + 1}`}
-                        </span>
+                      <h3 className="text-lg font-black text-slate-800">
+                        الطالب: {selectedStudent?.name} 
+                        <span className="text-slate-400 text-sm font-bold mr-2">| الصف: {selectedStudent?.grade} - {selectedStudent?.section}</span>
+                      </h3>
+                      <p className="text-sm font-bold text-slate-600 mt-1">
+                        المخالفة: {selectedFormViolation?.violation_name} 
+                        <span className="text-slate-400 text-xs font-bold mr-2">| الدرجة: {selectedFormViolation?.degree}</span>
                       </p>
                     </div>
                   </div>
-                  <div className="relative z-10 flex items-center gap-4">
-                    <div className="bg-white/10 px-6 py-3 rounded-2xl border border-white/10 text-center">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">درجة المخالفة</p>
-                      <p className="text-2xl font-black text-primary">{selectedFormViolation?.degree}</p>
-                    </div>
-                    <div className="bg-white/10 px-6 py-3 rounded-2xl border border-white/10 text-center">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">مقدار الحسم</p>
-                      <p className="text-2xl font-black text-rose-500">{selectedFormViolation?.deduction_points} درجات</p>
-                    </div>
+                  <div className="bg-red-50 border border-red-100 px-6 py-3 rounded-2xl text-center min-w-[200px]">
+                    <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-1">الإجراء الآلي للنظام</p>
+                    <p className="text-sm font-black text-red-800">سيتم حسم {selectedFormViolation?.deduction_points} درجات من المواظبة</p>
                   </div>
                 </div>
 
-                {/* Two Column Procedures */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  {/* Column 1: Administrative */}
-                  <div className="sts-card p-8 space-y-6">
-                    <div className="flex items-center gap-4 text-primary font-extrabold border-b border-slate-50 pb-6">
-                      <div className="w-10 h-10 bg-primary/5 rounded-xl flex items-center justify-center">
-                        <ShieldAlert size={22} />
-                      </div>
-                      <span className="text-lg uppercase tracking-widest">الإجراءات النظامية والإدارية</span>
-                    </div>
-                    <div className="space-y-4">
+                {/* Two-Column Layout */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-0 bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+                  
+                  {/* Right Column: Procedures (Read-only) */}
+                  <div className="p-8 border-l border-slate-200 bg-slate-50/50">
+                    <h4 className="text-base font-black text-slate-800 mb-6 flex items-center gap-2">
+                      <ShieldAlert size={20} className="text-slate-400" />
+                      الإجراءات النظامية المطلوبة
+                    </h4>
+                    <ul className="space-y-4 text-sm font-bold text-slate-700 list-disc list-inside">
                       {selectedFormViolation?.procedures.steps.map((proc, i) => {
                         const isRecommended = i === Math.min(occurrenceCount, (selectedFormViolation?.procedures.steps.length || 1) - 1);
                         return (
-                          <label key={i} className={`flex items-start gap-4 p-5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden ${appliedProcedures.includes(proc) ? 'bg-primary/5 border-primary/20 shadow-inner' : 'bg-slate-50/50 border-slate-100 hover:border-primary/20'}`}>
+                          <li key={i} className={`p-4 rounded-2xl border ${isRecommended ? 'bg-white border-primary/20 text-primary shadow-sm' : 'bg-transparent border-transparent text-slate-500'}`}>
+                            <span className="leading-relaxed">{proc}</span>
                             {isRecommended && (
-                              <div className="absolute top-0 left-0 bg-primary text-white text-[8px] font-black px-3 py-1 rounded-br-xl uppercase tracking-widest">
-                                الإجراء الموصى به آلياً
-                              </div>
-                            )}
-                            <div className="pt-1">
-                              <input 
-                                type="checkbox"
-                                checked={appliedProcedures.includes(proc)}
-                                onChange={() => {
-                                  const current = [...appliedProcedures];
-                                  const idx = current.indexOf(proc);
-                                  if (idx > -1) current.splice(idx, 1);
-                                  else current.push(proc);
-                                  setAppliedProcedures(current);
-                                }}
-                                className="w-6 h-6 rounded-lg text-primary focus:ring-primary border-slate-300 transition-all"
-                              />
-                            </div>
-                            <div className="flex-1">
-                              <span className={`text-sm leading-relaxed font-bold ${appliedProcedures.includes(proc) ? 'text-primary' : 'text-slate-600'}`}>
-                                {proc}
+                              <span className="block text-[10px] text-primary/70 mt-2 font-black uppercase tracking-widest">
+                                الإجراء الموصى به للتكرار الحالي ({occurrenceCount + 1})
                               </span>
-                              {isRecommended && (
-                                <p className="text-[10px] text-primary font-black mt-1">هذا الإجراء يتناسب مع التكرار رقم {occurrenceCount + 1} لهذه المخالفة.</p>
-                              )}
-
-                              {/* Dynamic Action Box (Keyword Engine) - Professional UI */}
-                              <AnimatePresence>
-                                {appliedProcedures.includes(proc) && (
-                                  <motion.div
-                                    initial={{ height: 0, opacity: 0 }}
-                                    animate={{ height: 'auto', opacity: 1 }}
-                                    exit={{ height: 0, opacity: 0 }}
-                                    className="overflow-hidden"
-                                  >
-                                    <div className="mt-6 p-6 bg-slate-50/80 rounded-[2rem] border-2 border-white shadow-xl space-y-5 relative" onClick={(e) => e.stopPropagation()}>
-                                      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
-                                      
-                                      {(proc.includes('تعهد خطي') || proc.includes('تعهد')) && (
-                                        <div className="flex flex-col gap-3">
-                                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 px-2">
-                                            <FileText size={12} className="text-primary" />
-                                            <span>توثيق التعهد السلوكي</span>
-                                          </p>
-                                          <button className="w-full py-4 bg-white hover:bg-slate-50 text-slate-700 rounded-2xl text-xs font-black flex items-center justify-center gap-3 border border-slate-200 transition-all shadow-sm group">
-                                            <span className="text-lg group-hover:scale-110 transition-transform">🖨️</span>
-                                            <span>معاينة وطباعة التعهد السلوكي (1447هـ)</span>
-                                          </button>
-                                        </div>
-                                      )}
-
-                                      {(proc.includes('الموجه الطلابي') || proc.includes('لجنة التوجيه') || proc.includes('الموجه')) && (
-                                        <div className="space-y-4">
-                                          <div className="flex items-center justify-between px-2">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                              <Users size={14} className="text-primary" />
-                                              <span>ملاحظات الوكيل للموجه الطلابي</span>
-                                            </label>
-                                            <span className="bg-primary/10 text-primary text-[8px] font-black px-2 py-0.5 rounded-full">إجراء إلزامي</span>
-                                          </div>
-                                          <textarea 
-                                            className="w-full bg-white border border-slate-200 rounded-2xl p-5 text-sm font-bold focus:ring-4 focus:ring-primary/10 outline-none transition-all shadow-sm min-h-[100px]"
-                                            placeholder="اكتب مرئياتك أو أسباب التحويل للموجه هنا بالتفصيل..."
-                                            value={notes}
-                                            onChange={(e) => setNotes(e.target.value)}
-                                          />
-                                          <div className="bg-primary/5 p-4 rounded-2xl border border-primary/10 flex items-center gap-3">
-                                            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-primary shadow-sm shrink-0">
-                                              <Send size={20} />
-                                            </div>
-                                            <div className="flex-1">
-                                              <p className="text-[10px] font-black text-primary">سيتم تحويل الحالة آلياً للموجه</p>
-                                              <p className="text-[9px] text-slate-500 font-bold">عند حفظ المخالفة، ستنتقل لملف الموجه لاستكمال دراسة الحالة.</p>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      )}
-
-                                      {(proc.includes('ولي أمر') || proc.includes('ولي الأمر')) && (
-                                        <div className="space-y-4">
-                                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 px-2">
-                                            <Users size={12} className="text-primary" />
-                                            <span>التواصل مع ولي الأمر</span>
-                                          </p>
-                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                            <button className="py-4 bg-white hover:bg-slate-50 text-slate-700 rounded-2xl text-xs font-black flex items-center justify-center gap-3 border border-slate-200 transition-all shadow-sm group">
-                                              <span className="text-lg group-hover:scale-110 transition-transform">🖨️</span>
-                                              <span>طباعة إشعار استدعاء</span>
-                                            </button>
-                                            <button className="py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-black flex items-center justify-center gap-3 transition-all shadow-lg shadow-emerald-600/20 group">
-                                              <span className="text-lg group-hover:scale-110 transition-transform">📱</span>
-                                              <span>إرسال رسالة SMS فورية</span>
-                                            </button>
-                                          </div>
-                                        </div>
-                                      )}
-
-                                      {(proc.includes('إدارة التعليم') || proc.includes('مدير التعليم') || proc.includes('نقل')) && (
-                                        <div className="p-6 bg-rose-600 rounded-[1.5rem] text-white space-y-4 shadow-xl shadow-rose-600/30">
-                                          <div className="flex items-center gap-3 font-black text-xs uppercase tracking-widest">
-                                            <AlertCircle size={20} className="animate-pulse" />
-                                            <span>إجراء جسيم يتطلب الرفع الرسمي</span>
-                                          </div>
-                                          <p className="text-[10px] font-bold text-rose-100 leading-relaxed">
-                                            هذا الإجراء يتطلب محضر اجتماع رسمي من لجنة التوجيه والطلاب موقع من مدير المدرسة للرفع لإدارة التعليم.
-                                          </p>
-                                          <button className="w-full py-4 bg-white text-rose-600 hover:bg-rose-50 rounded-2xl text-xs font-black flex items-center justify-center gap-3 transition-all shadow-lg">
-                                            <span>📄</span>
-                                            <span>تجهيز محضر الرفع الرسمي</span>
-                                          </button>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </motion.div>
-                                )}
-                              </AnimatePresence>
-                            </div>
-                          </label>
+                            )}
+                          </li>
                         );
                       })}
-                    </div>
+                      {selectedFormViolation?.procedures.general.map((proc, i) => (
+                        <li key={`gen-${i}`} className="p-4 rounded-2xl border bg-transparent border-transparent text-slate-600">
+                          <span className="leading-relaxed">{proc}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
 
-                  {/* Column 2: Educational */}
-                  <div className="sts-card p-8 space-y-6">
-                    <div className="flex items-center gap-4 text-amber-600 font-extrabold border-b border-slate-50 pb-6">
-                      <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center">
-                        <Info size={22} />
-                      </div>
-                      <span className="text-lg uppercase tracking-widest">المرشد التربوي والعلاجي</span>
-                    </div>
+                  {/* Left Column: Action Buttons */}
+                  <div className="p-8 bg-white">
+                    <h4 className="text-base font-black text-slate-800 mb-6 flex items-center gap-2">
+                      <CheckCircle2 size={20} className="text-slate-400" />
+                      أدوات التنفيذ والطباعة
+                    </h4>
                     <div className="space-y-4">
-                      {selectedFormViolation?.procedures.general.map((proc, i) => (
-                        <label key={i} className={`flex items-start gap-4 p-6 rounded-[2.5rem] border transition-all cursor-pointer relative overflow-hidden ${appliedProcedures.includes(proc) ? 'bg-amber-50 border-amber-200 shadow-inner' : 'bg-slate-50/50 border-slate-100 hover:border-amber-200'}`}>
-                          <div className="pt-1">
-                            <input 
-                              type="checkbox"
-                              checked={appliedProcedures.includes(proc)}
-                              onChange={() => {
-                                const current = [...appliedProcedures];
-                                const idx = current.indexOf(proc);
-                                if (idx > -1) current.splice(idx, 1);
-                                else current.push(proc);
-                                setAppliedProcedures(current);
-                              }}
-                              className="w-6 h-6 rounded-lg text-amber-600 focus:ring-amber-500 border-slate-300 transition-all"
-                            />
-                          </div>
-                          <div className="flex-1">
-                            <span className={`text-sm leading-relaxed font-bold ${appliedProcedures.includes(proc) ? 'text-amber-900' : 'text-slate-600'}`}>
-                              {proc}
-                            </span>
-                            
-                            {/* Dynamic Action Box (Keyword Engine) */}
-                            <AnimatePresence mode="wait">
-                              {appliedProcedures.includes(proc) && (
-                                <motion.div
-                                  initial={{ height: 0, opacity: 0 }}
-                                  animate={{ height: 'auto', opacity: 1 }}
-                                  exit={{ height: 0, opacity: 0 }}
-                                  className="overflow-hidden"
-                                >
-                                  <div className="mt-6 p-6 bg-white rounded-[2rem] border border-slate-100 shadow-xl space-y-5 relative" onClick={(e) => e.stopPropagation()}>
-                                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-amber-500/20 to-transparent" />
-                                    
-                                    {(proc.includes('تعهد خطي') || proc.includes('تعهد')) && (
-                                      <div className="flex flex-col gap-3">
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 px-2">
-                                          <FileText size={12} className="text-amber-600" />
-                                          <span>توثيق التعهد السلوكي</span>
-                                        </p>
-                                        <button className="w-full py-4 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-2xl text-xs font-black flex items-center justify-center gap-3 border border-slate-200 transition-all shadow-sm group">
-                                          <span className="text-lg group-hover:scale-110 transition-transform">🖨️</span>
-                                          <span>معاينة وطباعة التعهد السلوكي</span>
-                                        </button>
-                                      </div>
-                                    )}
-                                    
-                                    {(proc.includes('الموجه الطلابي') || proc.includes('لجنة التوجيه') || proc.includes('الموجه')) && (
-                                      <div className="space-y-4">
-                                        <div className="flex items-center justify-between px-2">
-                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                            <Users size={14} className="text-amber-600" />
-                                            <span>ملاحظات الوكيل للموجه الطلابي</span>
-                                          </label>
-                                        </div>
-                                        <textarea 
-                                          className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-5 text-sm font-bold focus:ring-4 focus:ring-amber-500/10 outline-none transition-all shadow-sm min-h-[100px]"
-                                          placeholder="اكتب مرئياتك أو أسباب التحويل للموجه هنا بالتفصيل..."
-                                          value={notes}
-                                          onChange={(e) => setNotes(e.target.value)}
-                                        />
-                                        <button className="w-full py-4 bg-amber-600 hover:bg-amber-700 text-white rounded-2xl text-xs font-black flex items-center justify-center gap-3 transition-all shadow-lg shadow-amber-600/20 group">
-                                          <Send size={18} className="group-hover:translate-x-1 transition-transform" />
-                                          <span>اعتماد وتحويل لملف الموجه</span>
-                                        </button>
-                                      </div>
-                                    )}
-                                    
-                                    {(proc.includes('ولي أمر') || proc.includes('ولي الأمر')) && (
-                                      <div className="space-y-4">
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 px-2">
-                                          <Users size={12} className="text-amber-600" />
-                                          <span>التواصل مع ولي الأمر</span>
-                                        </p>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                          <button className="py-4 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-2xl text-xs font-black flex items-center justify-center gap-3 border border-slate-200 transition-all shadow-sm group">
-                                            <span className="text-lg group-hover:scale-110 transition-transform">🖨️</span>
-                                            <span>طباعة إشعار استدعاء</span>
-                                          </button>
-                                          <button className="py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-black flex items-center justify-center gap-3 transition-all shadow-lg shadow-emerald-600/20 group">
-                                            <span className="text-lg group-hover:scale-110 transition-transform">📱</span>
-                                            <span>إرسال رسالة SMS فورية</span>
-                                          </button>
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                </motion.div>
-                              )}
-                            </AnimatePresence>
-                          </div>
-                        </label>
-                      ))}
+                      {needsPledge && (
+                        <button className="w-full py-5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-2xl text-sm font-black flex items-center justify-center gap-3 border border-slate-200 transition-all shadow-sm">
+                          <span className="text-xl">🖨️</span>
+                          <span>طباعة التعهد السلوكي</span>
+                        </button>
+                      )}
+                      
+                      {needsParent && (
+                        <button className="w-full py-5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-2xl text-sm font-black flex items-center justify-center gap-3 border border-slate-200 transition-all shadow-sm">
+                          <span className="text-xl">🖨️</span>
+                          <span>طباعة إشعار ولي الأمر</span>
+                        </button>
+                      )}
+
+                      {needsCounselor && (
+                        <button 
+                          onClick={() => setShowCounselorModal(true)}
+                          className="w-full py-5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-2xl text-sm font-black flex items-center justify-center gap-3 border border-blue-200 transition-all shadow-sm"
+                        >
+                          <span className="text-xl">📩</span>
+                          <span>تحويل الحالة للموجه الطلابي</span>
+                        </button>
+                      )}
+
+                      {needs1919 && (
+                        <button className="w-full py-5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-2xl text-sm font-black flex items-center justify-center gap-3 border border-rose-200 transition-all shadow-sm">
+                          <span className="text-xl">🚨</span>
+                          <span>نموذج إبلاغ 1919</span>
+                        </button>
+                      )}
+
+                      {needsSecurity && (
+                        <button className="w-full py-5 bg-slate-800 hover:bg-slate-900 text-white rounded-2xl text-sm font-black flex items-center justify-center gap-3 border border-slate-700 transition-all shadow-sm">
+                          <span className="text-xl">🚓</span>
+                          <span>نموذج إبلاغ الجهات الأمنية</span>
+                        </button>
+                      )}
+
+                      {needsCommittee && (
+                        <button className="w-full py-5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-2xl text-sm font-black flex items-center justify-center gap-3 border border-amber-200 transition-all shadow-sm">
+                          <span className="text-xl">👥</span>
+                          <span>محضر اجتماع لجنة التوجيه</span>
+                        </button>
+                      )}
+
+                      {needsOfficial && (
+                        <button className="w-full py-5 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-2xl text-sm font-black flex items-center justify-center gap-3 border border-purple-200 transition-all shadow-sm">
+                          <span className="text-xl">📄</span>
+                          <span>محضر الرفع الرسمي لإدارة التعليم</span>
+                        </button>
+                      )}
+
+                      {!needsPledge && !needsParent && !needsCounselor && !needs1919 && !needsSecurity && !needsCommittee && !needsOfficial && (
+                        <div className="text-center py-12 bg-slate-50 rounded-2xl border border-slate-100">
+                          <CheckCircle2 className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                          <p className="text-slate-500 text-sm font-bold">لا توجد أدوات تنفيذ إضافية مطلوبة لهذه المخالفة.</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
 
-                <div className="sts-card p-8 space-y-6">
-                  <div className="space-y-3">
-                    <label className="text-xs font-extrabold text-slate-500 mr-2 uppercase tracking-widest">ملاحظات الوكيل النهائية</label>
-                    <textarea 
-                      rows={4}
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                      placeholder="اكتب أي تفاصيل إضافية عن معالجة الحالة..."
-                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-5 px-6 text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all font-bold resize-none"
-                    />
-                  </div>
-
-                  <div className="flex flex-col md:flex-row gap-4 pt-6">
+                {/* Sticky Footer */}
+                <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] z-40 flex justify-center">
+                  <div className="w-full max-w-6xl flex gap-4 px-4">
                     <button
                       onClick={() => setStep(1)}
-                      className="flex-1 py-5 bg-slate-100 text-slate-600 font-black rounded-[2rem] hover:bg-slate-200 transition-all text-sm uppercase tracking-widest"
+                      className="px-8 py-4 bg-slate-100 text-slate-600 font-black rounded-2xl hover:bg-slate-200 transition-all text-sm flex items-center gap-2"
                     >
-                      رجوع لتعديل البيانات
+                      <span>🔙</span>
+                      <span>تراجع</span>
                     </button>
-                    
-                    {/* Smart Validation Button */}
                     <button
                       onClick={handleRecordViolation}
-                      disabled={submitting || appliedProcedures.length === 0}
-                      className={`flex-[2] py-5 rounded-[2rem] font-black text-sm uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 shadow-2xl ${
-                        submitting || appliedProcedures.length === 0
-                          ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' 
-                          : 'bg-primary text-white hover:bg-primary-dark shadow-primary/20'
+                      disabled={submitting}
+                      className={`flex-1 py-4 rounded-2xl font-black text-sm transition-all flex items-center justify-center gap-3 shadow-sm ${
+                        submitting
+                          ? 'bg-slate-200 text-slate-400 cursor-not-allowed' 
+                          : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-600/20 shadow-lg'
                       }`}
                     >
                       {submitting ? (
                         <>
-                          <div className="w-5 h-5 border-2 border-slate-300 border-t-slate-500 rounded-full animate-spin" />
+                          <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                           <span>جاري التوثيق...</span>
                         </>
                       ) : success ? (
@@ -841,17 +697,12 @@ const BehavioralViolations: React.FC = () => {
                         </>
                       ) : (
                         <>
-                          <Send size={20} />
-                          <span>اعتماد وتوثيق الحالة</span>
+                          <span className="text-lg">✅</span>
+                          <span>اعتماد الإجراءات وإغلاق السجل</span>
                         </>
                       )}
                     </button>
                   </div>
-                  {appliedProcedures.length === 0 && (
-                    <p className="text-center text-rose-500 text-[10px] font-black uppercase tracking-widest animate-pulse">
-                      يرجى اختيار إجراء واحد على الأقل لتفعيل زر الاعتماد
-                    </p>
-                  )}
                 </div>
               </motion.div>
             )}
@@ -1061,6 +912,77 @@ const BehavioralViolations: React.FC = () => {
               )}
             </div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Counselor Modal */}
+      <AnimatePresence>
+        {showCounselorModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-100"
+            >
+              <div className="bg-blue-50 p-6 border-b border-blue-100 flex items-center justify-between">
+                <div className="flex items-center gap-3 text-blue-800">
+                  <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center text-blue-600">
+                    <Users size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-lg">تحويل للموجه الطلابي</h3>
+                    <p className="text-xs font-bold text-blue-600/70 mt-0.5">إضافة ملاحظات وتوجيهات للموجه</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setShowCounselorModal(false)}
+                  className="w-8 h-8 bg-white rounded-full flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors shadow-sm"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              
+              <div className="p-6 space-y-6">
+                <div className="space-y-3">
+                  <label className="text-xs font-black text-slate-700 uppercase tracking-widest flex items-center gap-2">
+                    <FileText size={14} className="text-slate-400" />
+                    ملاحظات الوكيل (اختياري)
+                  </label>
+                  <textarea 
+                    rows={5}
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="اكتب مرئياتك أو أسباب التحويل للموجه هنا بالتفصيل..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-5 text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-300 outline-none transition-all font-bold resize-none shadow-inner"
+                  />
+                </div>
+
+                <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100 flex items-start gap-3">
+                  <Info size={18} className="text-blue-500 shrink-0 mt-0.5" />
+                  <p className="text-xs font-bold text-blue-800 leading-relaxed">
+                    عند حفظ المخالفة، ستنتقل هذه الحالة تلقائياً إلى صندوق الوارد الخاص بالموجه الطلابي لاستكمال دراسة الحالة والإجراءات التربوية.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3">
+                <button
+                  onClick={() => setShowCounselorModal(false)}
+                  className="flex-1 py-4 bg-white border border-slate-200 text-slate-600 font-black rounded-xl hover:bg-slate-50 transition-all text-sm shadow-sm"
+                >
+                  إلغاء
+                </button>
+                <button
+                  onClick={() => setShowCounselorModal(false)}
+                  className="flex-[2] py-4 bg-blue-600 text-white font-black rounded-xl hover:bg-blue-700 transition-all text-sm shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
+                >
+                  <CheckCircle2 size={18} />
+                  <span>تأكيد التحويل</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>

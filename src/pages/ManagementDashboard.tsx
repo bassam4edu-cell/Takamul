@@ -220,7 +220,14 @@ const ManagementDashboard: React.FC = () => {
                     </div>
                     <div className="space-y-1 md:space-y-2 flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2 md:gap-4">
-                        <h3 className="font-extrabold text-slate-800 text-base md:text-xl truncate">{referral.student_name}</h3>
+                        <h3 className="font-extrabold text-slate-800 text-base md:text-xl truncate flex items-center gap-2">
+                          {referral.student_name}
+                          {referral.status === 'resolved' && (
+                            <span title="تمت المعالجة من قبل الموجه" className="flex items-center justify-center w-5 h-5 bg-emerald-100 text-emerald-600 rounded-full">
+                              <CheckCircle2 size={12} />
+                            </span>
+                          )}
+                        </h3>
                         <div className="shrink-0">{getStatusBadge(referral.status)}</div>
                       </div>
                       <div className="flex flex-wrap items-center gap-x-3 md:gap-x-4 gap-y-1 text-[10px] md:text-sm text-slate-400 font-bold uppercase tracking-wider">

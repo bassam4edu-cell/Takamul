@@ -27,6 +27,7 @@ export interface Referral {
   student_national_id?: string;
   student_grade: string;
   student_section: string;
+  student_behavior_score?: number;
   teacher_id: number;
   teacher_name: string;
   assigned_to_id: number | null;

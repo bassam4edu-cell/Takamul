@@ -41,6 +41,18 @@ const Sidebar: React.FC = () => {
       roles: ['teacher']
     },
     { 
+      title: 'تحضير الطلاب', 
+      path: '/dashboard/attendance/teacher', 
+      icon: Users,
+      roles: ['teacher']
+    },
+    { 
+      title: 'رادار التحضير', 
+      path: '/dashboard/attendance/radar', 
+      icon: Users,
+      roles: ['vice_principal', 'principal']
+    },
+    { 
       title: 'إدارة النظام', 
       path: '/dashboard/admin', 
       icon: ShieldCheck,
