@@ -42,6 +42,8 @@ interface Referral {
   teacher_name: string;
   last_action: string;
   last_actor_name: string;
+  violation_id?: number;
+  applied_remedial_actions?: string | string[];
 }
 
 const StudentComprehensiveRecord: React.FC = () => {
@@ -52,6 +54,7 @@ const StudentComprehensiveRecord: React.FC = () => {
   const [referrals, setReferrals] = useState<Referral[]>([]);
   const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [selectedReferral, setSelectedReferral] = useState<Referral | null>(null);
 
   // Hierarchical Search State
   const [grades, setGrades] = useState<string[]>([]);
@@ -399,14 +402,21 @@ const StudentComprehensiveRecord: React.FC = () => {
                       </tr>
                     ) : (
                       referrals.map((ref) => (
-                        <tr key={ref.id} className="hover:bg-slate-50/50 transition-colors">
+                        <tr 
+                          key={ref.id} 
+                          onClick={() => setSelectedReferral(ref)}
+                          className="hover:bg-slate-50/50 transition-colors cursor-pointer group"
+                        >
                           <td className="p-5">
                             <p className="font-bold text-slate-700 text-sm">{new Date(ref.created_at).toLocaleDateString('ar-SA')}</p>
                             <p className="text-[10px] text-slate-400 font-bold">{new Date(ref.created_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}</p>
                           </td>
                           <td className="p-5 font-black text-slate-800 text-sm">{ref.teacher_name}</td>
                           <td className="p-5">
-                            <span className="text-slate-600 font-bold text-sm">{getTypeLabel(ref.type)}</span>
+                            <div className="flex flex-col">
+                              <span className="text-slate-600 font-bold text-sm">{getTypeLabel(ref.type)}</span>
+                              <span className="text-[10px] text-slate-400 font-bold truncate max-w-[150px]">{ref.reason}</span>
+                            </div>
                           </td>
                           <td className="p-5">
                             <p className="text-slate-600 text-xs font-bold line-clamp-2 max-w-xs">{ref.remedial_plan || 'قيد المراجعة والمعالجة'}</p>
@@ -415,8 +425,13 @@ const StudentComprehensiveRecord: React.FC = () => {
                             {getStatusBadge(ref.status)}
                           </td>
                           <td className="p-5">
-                            <p className="font-black text-slate-800 text-xs">{ref.last_actor_name || '-'}</p>
-                            <p className="text-[10px] text-slate-400 font-bold">{ref.last_action || '-'}</p>
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="font-black text-slate-800 text-xs">{ref.last_actor_name || '-'}</p>
+                                <p className="text-[10px] text-slate-400 font-bold">{ref.last_action || '-'}</p>
+                              </div>
+                              <ArrowRight size={14} className="text-primary opacity-0 group-hover:opacity-100 transition-all" />
+                            </div>
                           </td>
                         </tr>
                       ))
@@ -555,6 +570,110 @@ const StudentComprehensiveRecord: React.FC = () => {
               </div>
             </div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Referral Details Modal */}
+      <AnimatePresence>
+        {selectedReferral && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-8 no-print">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedReferral(null)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden"
+            >
+              <div className="bg-primary p-8 text-white relative">
+                <button 
+                  onClick={() => setSelectedReferral(null)}
+                  className="absolute left-8 top-8 w-10 h-10 bg-white/10 hover:bg-white/20 rounded-xl flex items-center justify-center transition-all"
+                >
+                  <ArrowRight size={24} className="rotate-180" />
+                </button>
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="bg-white/20 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
+                    {getTypeLabel(selectedReferral.type)}
+                  </span>
+                  <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                    selectedReferral.severity === 'high' ? 'bg-rose-500/20 text-rose-100' : 
+                    selectedReferral.severity === 'medium' ? 'bg-amber-500/20 text-amber-100' : 'bg-emerald-500/20 text-emerald-100'
+                  }`}>
+                    {selectedReferral.severity === 'high' ? 'عالية الخطورة' : selectedReferral.severity === 'medium' ? 'متوسطة' : 'منخفضة'}
+                  </span>
+                </div>
+                <h3 className="text-xl md:text-2xl font-black leading-tight">{selectedReferral.reason}</h3>
+                <p className="mt-2 text-primary-light font-bold text-sm">
+                  بتاريخ: {new Date(selectedReferral.created_at).toLocaleDateString('ar-SA')} | المعلم: {selectedReferral.teacher_name}
+                </p>
+              </div>
+
+              <div className="p-8 space-y-8 max-h-[60vh] overflow-y-auto">
+                {/* Applied Procedures */}
+                {selectedReferral.applied_remedial_actions && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3 text-primary font-black text-sm border-b border-slate-50 pb-4">
+                      <CheckCircle2 size={18} />
+                      <span>الإجراءات التي تم تطبيقها</span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3">
+                      {(typeof selectedReferral.applied_remedial_actions === 'string' 
+                        ? JSON.parse(selectedReferral.applied_remedial_actions) 
+                        : selectedReferral.applied_remedial_actions).map((proc: string, i: number) => (
+                        <div key={i} className="flex gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                          <div className="w-6 h-6 bg-primary/10 text-primary rounded-lg flex items-center justify-center font-black text-[10px] shrink-0">
+                            {i + 1}
+                          </div>
+                          <p className="text-xs leading-relaxed font-bold text-slate-700">{proc}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Teacher Notes */}
+                {selectedReferral.teacher_notes && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3 text-slate-800 font-black text-sm border-b border-slate-50 pb-4">
+                      <FileText size={18} className="text-primary" />
+                      <span>ملاحظات المعلم / الوكيل</span>
+                    </div>
+                    <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 italic text-slate-600 text-sm leading-relaxed font-bold">
+                      "{selectedReferral.teacher_notes}"
+                    </div>
+                  </div>
+                )}
+
+                {/* Remedial Plan */}
+                {selectedReferral.remedial_plan && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3 text-emerald-600 font-black text-sm border-b border-slate-50 pb-4">
+                      <Layers size={18} />
+                      <span>الخطة العلاجية المنفذة</span>
+                    </div>
+                    <div className="p-5 bg-emerald-50/50 rounded-2xl border border-emerald-100 text-emerald-900 text-sm leading-relaxed font-bold">
+                      {selectedReferral.remedial_plan}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-8 bg-slate-50 border-t border-slate-100 flex justify-end">
+                <button 
+                  onClick={() => setSelectedReferral(null)}
+                  className="px-8 py-3 bg-white border border-slate-200 text-slate-600 font-black rounded-2xl hover:bg-slate-100 transition-all text-sm"
+                >
+                  إغلاق التفاصيل
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 

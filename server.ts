@@ -60,6 +60,52 @@ async function initDb() {
     await sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS evidence_file TEXT`;
     await sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS is_exported_to_noor BOOLEAN DEFAULT FALSE`;
     await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE`;
+
+    // New Columns for Students (Behavior & Attendance)
+    await sql`ALTER TABLE students ADD COLUMN IF NOT EXISTS behavior_score INT DEFAULT 80`;
+    await sql`ALTER TABLE students ADD COLUMN IF NOT EXISTS bonus_score INT DEFAULT 0`;
+    await sql`ALTER TABLE students ADD COLUMN IF NOT EXISTS attendance_score INT DEFAULT 100`;
+
+    // Behavioral Violations Dictionary Table (Official 1447 AH)
+    await sql`
+      CREATE TABLE IF NOT EXISTS behavioral_violations_dict (
+        id SERIAL PRIMARY KEY,
+        category TEXT NOT NULL, -- 'تجاه الطلبة والمدرسة' / 'تجاه الهيئة التعليمية'
+        violation_name TEXT NOT NULL,
+        degree INTEGER NOT NULL,
+        deduction_points INTEGER NOT NULL,
+        procedures JSON
+      )
+    `;
+
+    // Update Referrals with Violation ID and Remedial Actions
+    // Drop old constraint if it exists and add the correct one
+    try {
+      await sql`ALTER TABLE referrals DROP CONSTRAINT IF EXISTS referrals_violation_id_fkey`;
+    } catch (e) {}
+    
+    await sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS violation_id INTEGER`;
+    
+    try {
+      await sql`ALTER TABLE referrals ADD CONSTRAINT referrals_violation_id_fkey FOREIGN KEY (violation_id) REFERENCES behavioral_violations_dict(id)`;
+    } catch (e) {
+      // Constraint might already exist
+    }
+    
+    await sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS applied_remedial_actions JSON`;
+
+    // Student Score Logs Table
+    await sql`
+      CREATE TABLE IF NOT EXISTS student_score_logs (
+        id SERIAL PRIMARY KEY,
+        student_id INTEGER REFERENCES students(id),
+        action_type TEXT, -- 'deduction', 'bonus', 'compensation'
+        points_changed INTEGER,
+        reason_or_evidence TEXT,
+        created_by_user_id INTEGER REFERENCES users(id),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
     
     // Ensure national_id is unique if table already exists
     try {
@@ -129,6 +175,135 @@ async function initDb() {
     if (principalExists.length === 0) {
       await sql`INSERT INTO users (name, email, password, role) VALUES ('د. خالد المنصور', 'principal@school.edu', 'password', 'principal')`;
     }
+
+    // Seed Behavioral Violations Dictionary
+    const behavioralViolationsCount = await sql`SELECT COUNT(*) as count FROM behavioral_violations_dict`;
+    if (parseInt(behavioralViolationsCount[0].count) === 0) {
+      const generalProcedures = [
+        "استدعاء الهلال الأحمر لنقل الطالب المصاب إلى أقرب مركز صحي (إذا تطلب الأمر).",
+        "تبليغ الجهات الأمنية المختصة فور وقوع المشكلة.",
+        "التواصل مباشرة مع مركز تلقي البلاغات (1919) للتبليغ عن حالات الإيذاء."
+      ];
+
+      const degree1Procedures = [
+        "الإجراء الأول: التنبيه الشفهي الأول من المعلم أو إدارة المدرسة للطالب عن السلوك وأضراره المترتبة، وكونه يعد سلوكا غير مرغوب بأسلوب تربوي حكيم.",
+        "الإجراء الثاني: التنبيه الشفهي الثاني من المعلم، أو إدارة المدرسة عند مباشرة الموقف بأسلوب تربوي حكيم، وتعزيز السلوك الإيجابي. ملاحظة الطالب وحصر السلوكيات السلبية والإيجابية، ومسببات حدوثها، والبدء بالحد من مسببات السلوك السلبي، وتعزيز السلوك الإيجابي.",
+        "الإجراء الثالث (بدء الحسم): تدوين المشكلة السلوكية من المعلم المباشر للموقف، وتوقيع الطالب عليها. إشعار ولي أمر الطالب هاتفيًا بمشكلة الطالب السلوكية، والتنسيق معه لتعديل السلوك المخالف. حسم درجة من درجات السلوك الإيجابي للطالب من قبل إدارة المدرسة، مع تمكينه من فرص التعويض وإشعار ولي الأمر بذلك. تحويل الطالب إلى الموجه الطلابي لدراسة حالته.",
+        "الإجراء الرابع: دعوة ولي أمر الطالب واخطاره بسلوك الطالب غير المرغوب فيه، والاتفاق على خطة لتعديل السلوك بين الأسرة والمدرسة يقوم بها الموجه الطلابي. حسم درجة من درجات السلوك الإيجابي للطالب، مع تمكينه من فرص التعويض وإشعار ولي الأمر بذلك. تحويل الطالب إلى لجنة التوجيه الطلابي في المدرسة لبحث أسباب عدم استجابة الطالب لإجراءات تعديل السلوك. يتابع الموجه الطلابي حالته لتقديم الخدمات التربوية."
+      ];
+
+      const degree2Procedures = [
+        "الإجراء الأول: تحويل الطالب إلى إدارة المدرسة. إشعار ولي الأمر هاتفيا بمشكلة الطالب السلوكية والإجراءات المتخذة. حسم درجتين من درجات السلوك الإيجابي للطالب مع تمكينه من فرص التعويض. أخذ تعهد خطي على الطالب بعدم تكرار المخالفة. تحويل الطالب إلى الموجه الطلابي لدراسة حالته.",
+        "الإجراء الثاني: جميع ما ذكر في الإجراء الأول. دعوة ولي أمر الطالب حضوريا، ومناقشته في خطة تعديل السلوك، ووضع برنامج وقائي مشترك مع الأسرة، وتوقيع ولي الأمر بالعلم. متابعة حالة الطالب من قبل الموجه الطلابي لتقديم الخدمات التربوية.",
+        "الإجراء الثالث: تنفيذ جميع ما ذكر في الإجراء الثاني. نقل الطالب إلى فصل آخر وفقا لقرار لجنة التوجيه الطلابي في المدرسة."
+      ];
+
+      const degree3Procedures = [
+        "الإجراء الأول: دعوة ولي أمر الطالب، وتوضيح الإجراءات ومناقشته في خطة تعديل السلوك، وأخذ تعهد خطي على الطالب بعدم تكرار السلوك وتوقيع ولي الأمر بالعلم. حسم ثلاث درجات من درجات السلوك الإيجابي للطالب. الاعتذار إلى من أساء إليهم. إصلاح ما أتلفه الطالب، أو إحضار بديل عنه. مصادرة ما بحوزة الطالب من مواد ممنوعة وإتلافها وإعداد محضر بذلك. تحويل الطالب إلى الموجه الطلابي لدراسة حالته.",
+        "الإجراء الثاني: تنفيذ جميع ما ورد في الإجراء الأول. إنذار الطالب كتابيا بالنقل إلى مدرسة أخرى في حال تكرار المخالفة، وتوقيع ولي الأمر بالعلم بذلك. تحويل الحالة إلى لجنة التوجيه الطلابي في المدرسة. نقل الطالب المخالف سلوكيا إلى فصل آخر. متابعة حالة الطالب من قبل الموجه الطلابي.",
+        "الإجراء الثالث: تنفيذ جميع ما ورد في الإجراء الأول. ترفع إدارة المدرسة رسميًا وبصفة عاجلة لإدارة التعليم محضر اجتماع لجنة التوجيه بخصوص القضية. يصدر مدير التعليم قرار بنقل الطالب إلى مدرسة أخرى."
+      ];
+
+      const degree4Procedures = [
+        "الإجراء الأول: إحالة الطالب إلى لجنة التوجيه الطلابي. دعوة ولي أمر الطالب، وأخذ تعهد خطي على الطالب وإنذاره بالنقل إلى مدرسة أخرى وتوقيع ولي الأمر بالعلم. حسم عشر درجات من السلوك. تقديم الاعتذار لمن أسيء إليهم. إصلاح ما أتلفه الطالب أو إحضار بديل عنه. مصادرة ما بحوزة الطالب من مواد ممنوعة وإتلافها. نقل الطالب من فصل إلى آخر. متابعة الحالة من الموجه الطلابي.",
+        "الإجراء الثاني: تنفيذ جميع ما ورد في الإجراء الأول، باستثناء نقل الطالب من الفصل. رفع محضر اجتماع لجنة التوجيه إلى إدارة التعليم رسميًا وبصفة عاجلة. إصدار قرار من مدير التعليم بنقل الطالب إلى مدرسة أخرى."
+      ];
+
+      const degree5Procedures = [
+        "تدون إدارة المدرسة محضر لإثبات الواقعة. دعوة ولي أمر الطالب وتبليغه بمشكلة الطالب. حسم خمس عشرة درجة من درجات السلوك. اجتماع لجنة التوجيه الطلابي بعد وقوع القضية مباشرة. إصلاح ما أتلفه الطالب (إن وجد). تقديم الاعتذار لمن أسيء إليهم. رفع محضر اجتماع لجنة التوجيه رسميًا وبصفة عاجلة إلى إدارة التعليم. إصدار قرار من مدير التعليم بنقل الطالب إلى مدرسة أخرى. متابعة الحالة من الموجه الطلابي في المدرسة المنقول إليها الطالب."
+      ];
+
+      const violations = [
+        // Degree 1
+        ...[
+          "التأخر الصباحي.",
+          "عدم حضور الاصطفاف الصباحي - في حال كان الطالب متواجدًا داخل المدرسة.",
+          "التأخر عن الاصطفاف الصباحي - في حال كان الطالب متواجدا داخل المدرسة أو العبث أثناءه.",
+          "التأخر في الدخول إلى الحصص.",
+          "إعاقة سير الحصص الدراسية مثل: الحديث الجانبي المقاطعة المستمرة غير الهادفة لشرح المعلم، تناول الأطعمة أو المشروبات أثناء الدرس.",
+          "النوم داخل الفصل.",
+          "تكرار خروج ودخول الطلبة من البوابة قبل وقت الحضور والانصراف. التجمهر أمام بوابة المدرسة."
+        ].map(name => ({ name, degree: 1, points: 1, category: 'تجاه الطلبة والمدرسة', procedures: degree1Procedures })),
+        
+        // Degree 2
+        ...[
+          "عدم حضور الحصة الدراسية أو الهروب منها.",
+          "الدخول أو الخروج من الفصل دون استئذان.",
+          "دخول فصل آخر دون استئذان.",
+          "إثارة الفوضى داخل الفصل أو المدرسة أو في وسائل النقل المدرسي."
+        ].map(name => ({ name, degree: 2, points: 2, category: 'تجاه الطلبة والمدرسة', procedures: degree2Procedures })),
+
+        // Degree 3
+        ...[
+          "عدم التقيد بالزي المدرسي.",
+          "الشجار أو الاشتراك في مضاربة جماعية.",
+          "الإشارة بحركات مخلة بالأدب تجاه الطلبة.",
+          "التلفظ بكلمات نابية على الطلبة، أو تهديدهم أو السخرية منهم.",
+          "إلحاق الضرر المتعمد بممتلكات الطلبة.",
+          "العبث بتجهيزات المدرسة أو مبانيها كأجهزة الحاسوب، أدوات ومعدات الأمن والسلامة المدرسية، الكهرباء المعامل، حافلة المدرسة والكتابة على الجدار وغيره.",
+          "إحضار المواد أو الألعاب الخطرة إلى المدرسة دون استخدامها.",
+          "حيازة السجائر بأنواعها.",
+          "حيازة المواد الإعلامية الممنوعة المقروءة، أو المسموعة، أو المرئية.",
+          "التوقيع عن ولي الأمر من غير علمه على المكاتبات المتبادلة بين المدرسة وولي الأمر.",
+          "امتهان الكتب الدراسية."
+        ].map(name => ({ name, degree: 3, points: 3, category: 'تجاه الطلبة والمدرسة', procedures: degree3Procedures })),
+
+        // Degree 4
+        ...[
+          "تعمد إصابة أحد الطلبة عن طريق الضرب.",
+          "سرقة شيء من ممتلكات الطلبة أو المدرسة.",
+          "التصوير أو التسجيل الصوتي للطلبة.",
+          "إلحاق الضرر المتعمد بتجهيزات المدرسة.",
+          "التدخين بأنواعه داخل المدرسة.",
+          "الهروب من المدرسة.",
+          "إحضار أو استخدام المواد أو الألعاب الخطرة.",
+          "عرض أو توزيع المواد الإعلامية الممنوعة."
+        ].map(name => ({ name, degree: 4, points: 10, category: 'تجاه الطلبة والمدرسة', procedures: degree4Procedures })),
+        ...[
+          "تهديد المعلمين أو الإداريين، أو من في حكمهم.",
+          "التلفظ بألفاظ غير لائقة تجاه المعلمين.",
+          "السخرية من المعلمين.",
+          "التوقيع عن أحد منسوبي المدرسة.",
+          "تصوير المعلمين، أو الإداريين، أو من في حكمهم، أو التسجيل الصوتي لهم."
+        ].map(name => ({ name, degree: 4, points: 10, category: 'تجاه الهيئة التعليمية والإدارية', procedures: degree4Procedures })),
+
+        // Degree 5
+        ...[
+          "الإساءة أو الاستهزاء بشيء من شعائر الإسلام.",
+          "الإساءة للدولة أو رموزها.",
+          "بث أو ترويج أفكار ومعتقدات متطرفة.",
+          "الإساءة إلى الأديان السماوية أو إثارة العنصرية والفتن.",
+          "التزوير.",
+          "التحرش الجنسي.",
+          "المظاهر أو الصور أو الشعارات التي تدل على الشذوذ الجنسي.",
+          "إشعال النار داخل المدرسة.",
+          "حيازة أو استخدام أو تهديد الطلبة بالأسلحة النارية أو ما في حكمها.",
+          "حيازة، أو تعاطي، أو ترويج المخدرات.",
+          "الجرائم المعلوماتية بكافة أنواعها.",
+          "ابتزاز الطلبة.",
+          "التنمر بجميع أنواعه وأشكاله."
+        ].map(name => ({ name, degree: 5, points: 15, category: 'تجاه الطلبة والمدرسة', procedures: degree5Procedures })),
+        ...[
+          "إلحاق الضرر بممتلكات المعلمين أو سرقتها.",
+          "الإشارة بحركات مخلة بالأدب تجاه المعلمين.",
+          "الاعتداء بالضرب على المعلمين.",
+          "ابتزاز المعلمين.",
+          "الجرائم المعلوماتية تجاه المعلمين."
+        ].map(name => ({ name, degree: 5, points: 15, category: 'تجاه الهيئة التعليمية والإدارية', procedures: degree5Procedures }))
+      ];
+
+      for (const v of violations) {
+        const fullProcedures = {
+          steps: v.procedures,
+          general: generalProcedures
+        };
+        await sql`
+          INSERT INTO behavioral_violations_dict (category, violation_name, degree, deduction_points, procedures)
+          VALUES (${v.category}, ${v.name}, ${v.degree}, ${v.points}, ${JSON.stringify(fullProcedures)})
+        `;
+      }
+    }
+
   } catch (err) {
     console.error("Database initialization error:", err);
   }
@@ -213,6 +388,56 @@ async function startServer() {
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to fetch performance data" });
+    }
+  });
+
+  app.get("/api/violations", async (req, res) => {
+    try {
+      const violations = await sql`SELECT * FROM behavioral_violations_dict ORDER BY degree, violation_name`;
+      res.json(violations);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch violations" });
+    }
+  });
+
+  app.post("/api/students/:id/score", async (req, res) => {
+    const { id } = req.params;
+    const { action_type, points_changed, reason, user_id } = req.body;
+    try {
+      // 1. Log the action
+      await sql`
+        INSERT INTO student_score_logs (student_id, action_type, points_changed, reason_or_evidence, created_by_user_id)
+        VALUES (${id}, ${action_type}, ${points_changed}, ${reason}, ${user_id})
+      `;
+
+      // 2. Update student score
+      if (action_type === 'deduction') {
+        await sql`UPDATE students SET behavior_score = behavior_score - ${points_changed} WHERE id = ${id}`;
+      } else if (action_type === 'bonus') {
+        await sql`UPDATE students SET bonus_score = bonus_score + ${points_changed} WHERE id = ${id}`;
+      } else if (action_type === 'compensation') {
+        await sql`UPDATE students SET behavior_score = behavior_score + ${points_changed} WHERE id = ${id}`;
+      }
+
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to update score" });
+    }
+  });
+
+  app.get("/api/students/:id/score-logs", async (req, res) => {
+    const { id } = req.params;
+    try {
+      const logs = await sql`
+        SELECT l.*, u.name as creator_name
+        FROM student_score_logs l
+        JOIN users u ON l.created_by_user_id = u.id
+        WHERE l.student_id = ${id}
+        ORDER BY l.created_at DESC
+      `;
+      res.json(logs);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch logs" });
     }
   });
 
@@ -340,6 +565,20 @@ async function startServer() {
     }
   });
 
+  app.get("/api/students/:studentId/violations/:violationId/occurrence", async (req, res) => {
+    const { studentId, violationId } = req.params;
+    try {
+      const result = await sql`
+        SELECT COUNT(*) as count 
+        FROM referrals 
+        WHERE student_id = ${studentId} AND violation_id = ${violationId}
+      `;
+      res.json({ count: parseInt(result[0].count) });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch occurrence count" });
+    }
+  });
+
   app.get("/api/student-profile/:id", async (req, res) => {
     const { id } = req.params;
     try {
@@ -376,21 +615,104 @@ async function startServer() {
     }
   });
 
+  // Helper function for behavioral deduction logic
+  async function calculateBehavioralDeduction(student_id: number, violation_id: number) {
+    const violationData = await sql`SELECT deduction_points, violation_name, degree FROM behavioral_violations_dict WHERE id = ${violation_id}`;
+    if (violationData.length === 0) return { deductionPoints: 0, violationName: '', violationDegree: 0, occurrenceNumber: 0 };
+
+    const violationName = violationData[0].violation_name;
+    const violationDegree = violationData[0].degree;
+    
+    // Count previous occurrences of the SAME violation for this student
+    const prevOccurrences = await sql`
+      SELECT COUNT(*) as count 
+      FROM referrals 
+      WHERE student_id = ${student_id} AND violation_id = ${violation_id}
+    `;
+    const occurrenceNumber = parseInt(prevOccurrences[0].count) + 1;
+
+    let deductionPoints = 0;
+    switch (violationDegree) {
+      case 1:
+        // الدرجة الأولى: المرة 1 و 2 (لا حسم)، المرة 3 و 4 (حسم 1 درجة)
+        if (occurrenceNumber >= 3) deductionPoints = 1;
+        else deductionPoints = 0;
+        break;
+      case 2:
+        deductionPoints = 2;
+        break;
+      case 3:
+        deductionPoints = 3;
+        break;
+      case 4:
+        deductionPoints = 10;
+        break;
+      case 5:
+        deductionPoints = 15;
+        break;
+      default:
+        deductionPoints = violationData[0].deduction_points;
+    }
+
+    return { deductionPoints, violationName, violationDegree, occurrenceNumber };
+  }
+
   app.post("/api/referrals", async (req, res) => {
-    const { student_id, teacher_id, type, severity, reason, teacher_notes, remedial_plan, remedial_plan_file } = req.body;
+    const { student_id, teacher_id, type, severity, reason, teacher_notes, remedial_plan, remedial_plan_file, violation_id, applied_remedial_actions, status } = req.body;
+    
     try {
+      // 1. Data Validation: Ensure at least one procedure is selected for behavior violations
+      if (type === 'behavior' && (!applied_remedial_actions || !Array.isArray(applied_remedial_actions) || applied_remedial_actions.length === 0)) {
+        return res.status(400).json({ success: false, error: "يجب اختيار إجراء علاجي/تربوي واحد على الأقل لاعتماد الحالة نظاماً." });
+      }
+
+      const finalStatus = status || 'pending_vp';
+      
+      // 2. Occurrence Counting & Deduction Logic
+      let deductionPoints = 0;
+      let violationName = reason;
+      let occurrenceNumber = 0;
+
+      if (violation_id) {
+        const result = await calculateBehavioralDeduction(student_id, violation_id);
+        deductionPoints = result.deductionPoints;
+        violationName = result.violationName;
+        occurrenceNumber = result.occurrenceNumber;
+      }
+
+      // 4. Database Transaction
       const result = await sql`
-        INSERT INTO referrals (student_id, teacher_id, type, severity, reason, teacher_notes, remedial_plan, remedial_plan_file, status)
-        VALUES (${student_id}, ${teacher_id}, ${type}, ${severity}, ${reason}, ${teacher_notes}, ${remedial_plan}, ${remedial_plan_file}, 'pending_vp')
+        INSERT INTO referrals (student_id, teacher_id, type, severity, reason, teacher_notes, remedial_plan, remedial_plan_file, status, violation_id, applied_remedial_actions)
+        VALUES (${student_id}, ${teacher_id}, ${type}, ${severity}, ${reason}, ${teacher_notes}, ${remedial_plan}, ${remedial_plan_file}, ${finalStatus}, ${violation_id || null}, ${applied_remedial_actions ? JSON.stringify(applied_remedial_actions) : null})
         RETURNING id
       `;
       
       const referralId = result[0].id;
+
+      if (violation_id && deductionPoints > 0) {
+        // Log the score change for transparency
+        await sql`
+          INSERT INTO student_score_logs (student_id, action_type, points_changed, reason_or_evidence, created_by_user_id)
+          VALUES (${student_id}, 'deduction', ${deductionPoints}, ${`مخالفة: ${violationName} (التكرار رقم ${occurrenceNumber})`}, ${teacher_id})
+        `;
+        
+        // Update student score (Ensure it doesn't go below zero)
+        await sql`
+          UPDATE students 
+          SET behavior_score = GREATEST(0, behavior_score - ${deductionPoints}) 
+          WHERE id = ${student_id}
+        `;
+      }
       
       // Add initial log entry
+      const logAction = finalStatus === 'resolved' ? 'تسجيل ومعالجة مباشرة' : 'إنشاء التحويل';
+      const logNotes = finalStatus === 'resolved' 
+        ? `تم تسجيل المخالفة وتطبيق الإجراءات النظامية مباشرة. مقدار الحسم الآلي: ${deductionPoints} درجة.` 
+        : 'تم إنشاء التحويل وتحويله آلياً إلى وكيل شؤون الطلاب للمراجعة';
+      
       await sql`
         INSERT INTO referral_logs (referral_id, user_id, action, notes, evidence_text, evidence_file) 
-        VALUES (${referralId}, ${teacher_id}, 'إنشاء التحويل', 'تم إنشاء التحويل وتحويله آلياً إلى وكيل شؤون الطلاب للمراجعة', ${remedial_plan}, ${remedial_plan_file})
+        VALUES (${referralId}, ${teacher_id}, ${logAction}, ${logNotes}, ${remedial_plan}, ${remedial_plan_file})
       `;
 
       // Notify Vice Principals and Principals
@@ -416,10 +738,12 @@ async function startServer() {
     const id = req.params.id;
     try {
       const referralResult = await sql`
-        SELECT r.*, s.name as student_name, s.national_id as student_national_id, s.grade as student_grade, s.section as student_section, u.name as teacher_name
+        SELECT r.*, s.name as student_name, s.national_id as student_national_id, s.grade as student_grade, s.section as student_section, u.name as teacher_name,
+               v.violation_name, v.degree as violation_degree, v.deduction_points as violation_points
         FROM referrals r
         JOIN students s ON r.student_id = s.id
         JOIN users u ON r.teacher_id = u.id
+        LEFT JOIN behavioral_violations_dict v ON r.violation_id = v.id
         WHERE r.id = ${id}
       `;
 
@@ -446,11 +770,43 @@ async function startServer() {
   });
 
   app.post("/api/referrals/:id/action", async (req, res) => {
-    const { user_id, action, notes, status, evidence_file, evidence_text } = req.body;
+    const { user_id, action, notes, status, evidence_file, evidence_text, violation_id, applied_remedial_actions } = req.body;
     const referralId = req.params.id;
 
     try {
       // Update referral status and latest evidence if provided
+      let updateQuery = sql`UPDATE referrals SET status = ${status}`;
+      if (evidence_file) updateQuery = sql`UPDATE referrals SET status = ${status}, evidence_file = ${evidence_file} WHERE id = ${referralId}`;
+      
+      // If VP is classifying the violation
+      if (violation_id) {
+        // Get student_id first
+        const referralData = await sql`SELECT student_id FROM referrals WHERE id = ${referralId}`;
+        if (referralData.length > 0) {
+          const student_id = referralData[0].student_id;
+          const { deductionPoints, violationName, occurrenceNumber } = await calculateBehavioralDeduction(student_id, violation_id);
+
+          await sql`
+            UPDATE referrals 
+            SET violation_id = ${violation_id}, 
+                applied_remedial_actions = ${applied_remedial_actions ? JSON.stringify(applied_remedial_actions) : null}
+            WHERE id = ${referralId}
+          `;
+
+          if (deductionPoints > 0) {
+            await sql`
+              INSERT INTO student_score_logs (student_id, action_type, points_changed, reason_or_evidence, created_by_user_id)
+              VALUES (${student_id}, 'deduction', ${deductionPoints}, ${`تصنيف مخالفة من الوكيل: ${violationName} (التكرار رقم ${occurrenceNumber})`}, ${user_id})
+            `;
+            await sql`
+              UPDATE students 
+              SET behavior_score = GREATEST(0, behavior_score - ${deductionPoints}) 
+              WHERE id = ${student_id}
+            `;
+          }
+        }
+      }
+
       if (evidence_file) {
         await sql`UPDATE referrals SET status = ${status}, evidence_file = ${evidence_file} WHERE id = ${referralId}`;
       } else {
@@ -810,14 +1166,37 @@ async function startServer() {
 
   app.post("/api/admin/users/:id/delete", async (req, res) => {
     const userId = req.params.id;
-    console.log(`[ADMIN] Request to soft delete user ID: ${userId}`);
+    console.log(`[ADMIN] Request to delete user ID: ${userId}`);
     try {
-      await sql`UPDATE users SET is_active = FALSE WHERE id = ${userId}`;
-      console.log(`- Successfully soft deleted user ${userId}`);
+      // Check if user has referrals
+      const referralsCount = await sql`SELECT count(*) FROM referrals WHERE teacher_id = ${userId} OR assigned_to_id = ${userId}`;
+      if (parseInt(referralsCount[0].count) > 0) {
+        return res.status(400).json({ success: false, error: "لا يمكن حذف المستخدم لوجود تحويلات مرتبطة به. يمكنك تعطيل حسابه بدلاً من ذلك." });
+      }
+      
+      await sql`DELETE FROM user_grades WHERE user_id = ${userId}`;
+      await sql`DELETE FROM users WHERE id = ${userId}`;
+      console.log(`- Successfully deleted user ${userId}`);
       res.json({ success: true });
     } catch (err) {
-      console.error(`[ADMIN] User soft deletion failed for ID ${userId}:`, err);
+      console.error(`[ADMIN] User deletion failed for ID ${userId}:`, err);
       res.status(500).json({ success: false, error: "فشل حذف المستخدم من قاعدة البيانات" });
+    }
+  });
+
+  app.post("/api/admin/referrals/:id/delete", async (req, res) => {
+    const referralId = req.params.id;
+    console.log(`[ADMIN] Request to delete referral ID: ${referralId}`);
+    try {
+      // Delete associated logs and notifications first
+      await sql`DELETE FROM referral_logs WHERE referral_id = ${referralId}`;
+      await sql`DELETE FROM notifications WHERE referral_id = ${referralId}`;
+      await sql`DELETE FROM referrals WHERE id = ${referralId}`;
+      console.log(`- Successfully deleted referral ${referralId}`);
+      res.json({ success: true });
+    } catch (err) {
+      console.error(`[ADMIN] Referral deletion failed for ID ${referralId}:`, err);
+      res.status(500).json({ success: false, error: "فشل حذف التحويل من قاعدة البيانات" });
     }
   });
 
@@ -963,6 +1342,22 @@ async function startServer() {
     } catch (err) {
       console.error(`[ADMIN] Failed to delete grade ${grade}:`, err);
       res.status(500).json({ error: "فشل حذف الصف. يرجى المحاولة مرة أخرى." });
+    }
+  });
+
+  app.post("/api/admin/students/:id/update", async (req, res) => {
+    const studentId = req.params.id;
+    const { name, national_id, grade, section } = req.body;
+    try {
+      await sql`
+        UPDATE students 
+        SET name = ${name}, national_id = ${national_id}, grade = ${grade}, section = ${section}
+        WHERE id = ${studentId}
+      `;
+      res.json({ success: true });
+    } catch (err) {
+      console.error(`[ADMIN] Failed to update student ${studentId}:`, err);
+      res.status(500).json({ success: false, error: "فشل تحديث بيانات الطالب" });
     }
   });
 

@@ -14,11 +14,20 @@ import {
 import { Student } from '../types';
 import { motion } from 'motion/react';
 
+interface Violation {
+  id: number;
+  violation_name: string;
+  degree: number;
+  deduction_points: number;
+  category: string;
+}
+
 const ReferralForm: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   
   const [students, setStudents] = useState<Student[]>([]);
+  const [violations, setViolations] = useState<Violation[]>([]);
   const [selectedGrade, setSelectedGrade] = useState('');
   const [selectedSection, setSelectedSection] = useState('');
   const [formData, setFormData] = useState({
@@ -28,24 +37,25 @@ const ReferralForm: React.FC = () => {
     reason: '',
     teacher_notes: '',
     remedial_plan: '',
-    remedial_plan_file: ''
+    remedial_plan_file: '',
   });
   const [fileError, setFileError] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    const fetchStudents = async () => {
+    const fetchData = async () => {
       try {
-        const res = await fetch(`/api/students?userId=${user?.id}`);
-        if (!res.ok) throw new Error('Failed to fetch students');
-        const data = await res.json().catch(() => []);
-        setStudents(data);
+        const response = await fetch(`/api/students?userId=${user?.id}`);
+        if (response.ok) {
+          const studentsData = await response.json();
+          setStudents(studentsData);
+        }
       } catch (err) {
         console.error(err);
       }
     };
-    if (user?.id) fetchStudents();
+    if (user?.id) fetchData();
   }, [user?.id]);
 
   const grades = Array.from(new Set(students.map(s => s.grade)));

@@ -164,7 +164,7 @@ const PrincipalDashboard: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat, idx) => (
           <motion.div 
-            key={idx}
+            key={`stat-${idx}-${stat.label}`}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: idx * 0.1 }}
@@ -252,7 +252,7 @@ const PrincipalDashboard: React.FC = () => {
           </div>
           <div className="mt-8 space-y-3">
             {reasonData.map((item, idx) => (
-              <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-slate-50">
+              <div key={`reason-item-${idx}-${item.name}`} className="flex items-center justify-between p-3 rounded-xl bg-slate-50">
                 <div className="flex items-center gap-3">
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[idx] }} />
                   <span className="text-sm font-bold text-slate-600">{item.name}</span>
@@ -276,7 +276,7 @@ const PrincipalDashboard: React.FC = () => {
         <div className="p-6 md:p-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {performance.length > 0 ? performance.map((p, idx) => (
             <motion.div 
-              key={idx}
+              key={`perf-${idx}-${p.name}`}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: idx * 0.1 }}
@@ -340,7 +340,7 @@ const PrincipalDashboard: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-50">
               {referrals.slice(0, 5).map((referral) => (
-                <tr key={referral.id} className="hover:bg-slate-50/30 transition-colors group">
+                <tr key={`desktop-ref-${referral.id}`} className="hover:bg-slate-50/30 transition-colors group">
                   <td className="px-10 py-6">
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center text-primary font-extrabold text-lg border border-slate-200">
@@ -394,7 +394,7 @@ const PrincipalDashboard: React.FC = () => {
           <div className="md:hidden divide-y divide-slate-50">
             {referrals.slice(0, 5).map((referral) => (
               <div 
-                key={referral.id}
+                key={`mobile-ref-${referral.id}`}
                 onClick={() => navigate(`/dashboard/referral/${referral.id}`)}
                 className="p-6 hover:bg-slate-50 transition-colors cursor-pointer"
               >

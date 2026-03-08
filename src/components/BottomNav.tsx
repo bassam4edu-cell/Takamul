@@ -6,7 +6,8 @@ import {
   Bell, 
   UserCircle,
   BarChart3,
-  FileText
+  FileText,
+  ClipboardList
 } from 'lucide-react';
 import { useAuth } from '../App';
 
@@ -25,6 +26,12 @@ const BottomNav: React.FC = () => {
       path: '/dashboard/referral/new', 
       icon: FilePlus,
       roles: ['teacher']
+    },
+    { 
+      title: 'التحويلات', 
+      path: '/dashboard/admin-referrals', 
+      icon: ClipboardList,
+      roles: ['admin']
     },
     { 
       title: 'السجل', 

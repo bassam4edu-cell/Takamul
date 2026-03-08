@@ -11,6 +11,7 @@ import {
   History,
   Send,
   ShieldAlert,
+  Search,
   ArrowRightLeft,
   Printer,
   Calendar,
@@ -24,11 +25,23 @@ import {
   ExternalLink,
   Upload,
   Info,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Trash2
 } from 'lucide-react';
 import { Referral, ReferralLog } from '../types';
 import { useAuth } from '../App';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
+
+interface Violation {
+  id: number;
+  violation_name: string;
+  degree: number;
+  deduction_points: number;
+  procedures: {
+    steps: string[];
+    general: string[];
+  };
+}
 
 const ReferralDetails: React.FC = () => {
   const { id } = useParams();
@@ -37,6 +50,11 @@ const ReferralDetails: React.FC = () => {
   
   const [data, setData] = useState<{ referral: Referral, logs: ReferralLog[], studentReferralsCount: number } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [violations, setViolations] = useState<Violation[]>([]);
+  const [violationSearch, setViolationSearch] = useState('');
+  const [selectedViolationId, setSelectedViolationId] = useState('');
+  const [appliedActions, setAppliedActions] = useState<string[]>([]);
+  const [activeProcTab, setActiveProcTab] = useState<'administrative' | 'general'>('administrative');
   const [actionNotes, setActionNotes] = useState('');
   const [meetingDate, setMeetingDate] = useState('');
   const [meetingTime, setMeetingTime] = useState('');
@@ -45,6 +63,8 @@ const ReferralDetails: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [evidenceFile, setEvidenceFile] = useState<string | null>(null);
   const [evidenceError, setEvidenceError] = useState('');
+  const [violationOccurrence, setViolationOccurrence] = useState(0);
+  const [fetchingOccurrence, setFetchingOccurrence] = useState(false);
   const [editForm, setEditForm] = useState({
     type: '',
     severity: '',
@@ -54,7 +74,60 @@ const ReferralDetails: React.FC = () => {
     remedial_plan_file: '',
     status: ''
   });
-  const [fileError, setFileError] = useState('');
+  const [showPrintHub, setShowPrintHub] = useState(false);
+  const [recommendedTemplates, setRecommendedTemplates] = useState<{id: number, name: string, icon: string}[]>([]);
+  const [showBonusModal, setShowBonusModal] = useState(false);
+  const [bonusPoints, setBonusPoints] = useState(0);
+  const [bonusReason, setBonusReason] = useState('');
+  const [submittingBonus, setSubmittingBonus] = useState(false);
+
+  const handleBonusPoints = async () => {
+    if (bonusPoints <= 0 || !bonusReason.trim()) {
+      alert('يرجى إدخال النقاط وسبب التعويض');
+      return;
+    }
+    setSubmittingBonus(true);
+    try {
+      const res = await fetch(`/api/students/${data?.referral.student_id}/score`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action_type: 'compensation',
+          points_changed: bonusPoints,
+          reason: bonusReason,
+          user_id: user?.id
+        })
+      });
+      if (res.ok) {
+        alert('تم إضافة نقاط التعويض بنجاح');
+        setShowBonusModal(false);
+        setBonusPoints(0);
+        setBonusReason('');
+        // Refresh data
+        const refreshRes = await fetch(`/api/referrals/${id}`);
+        if (refreshRes.ok) {
+          const d = await refreshRes.json().catch(() => null);
+          if (d) setData(d);
+        }
+        // Open template 9
+        const printWindow = window.open(`/print/9/${id}`, '_blank');
+        if (printWindow) {
+          printWindow.onload = () => {
+            setTimeout(() => {
+              printWindow.print();
+            }, 500);
+          };
+        }
+      } else {
+        alert('حدث خطأ أثناء إضافة النقاط');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('حدث خطأ في الاتصال بالخادم');
+    } finally {
+      setSubmittingBonus(false);
+    }
+  };
 
   // Utility to compress image
   const compressImage = (file: File, quality: number = 0.7): Promise<string> => {
@@ -105,20 +178,42 @@ const ReferralDetails: React.FC = () => {
   useEffect(() => {
     const fetchReferral = async () => {
       try {
-        const res = await fetch(`/api/referrals/${id}`);
-        if (!res.ok) throw new Error('Failed to fetch referral');
-        const d = await res.json().catch(() => null);
-        if (d) {
-          setData(d);
-          setEditForm({
-            type: d.referral.type,
-            severity: d.referral.severity,
-            reason: d.referral.reason,
-            teacher_notes: d.referral.teacher_notes,
-            remedial_plan: d.referral.remedial_plan || '',
-            remedial_plan_file: d.referral.remedial_plan_file || '',
-            status: d.referral.status
-          });
+        const [refRes, violRes] = await Promise.all([
+          fetch(`/api/referrals/${id}`),
+          fetch('/api/violations')
+        ]);
+        
+        if (refRes.ok) {
+          const d = await refRes.json().catch(() => null);
+          if (d) {
+            setData(d);
+            setEditForm({
+              type: d.referral.type,
+              severity: d.referral.severity,
+              reason: d.referral.reason,
+              teacher_notes: d.referral.teacher_notes,
+              remedial_plan: d.referral.remedial_plan || '',
+              remedial_plan_file: d.referral.remedial_plan_file || '',
+              status: d.referral.status
+            });
+            if (d.referral.violation_id) {
+              setSelectedViolationId(d.referral.violation_id.toString());
+              setAppliedActions(d.referral.applied_remedial_actions || []);
+              
+              // Fetch specific violation occurrence
+              setFetchingOccurrence(true);
+              fetch(`/api/students/${d.referral.student_id}/violations/${d.referral.violation_id}/occurrence`)
+                .then(res => res.json())
+                .then(occData => setViolationOccurrence(occData.count))
+                .catch(err => console.error(err))
+                .finally(() => setFetchingOccurrence(false));
+            }
+          }
+        }
+
+        if (violRes.ok) {
+          const vData = await violRes.json();
+          setViolations(vData);
         }
       } catch (err) {
         console.error(err);
@@ -237,6 +332,41 @@ const ReferralDetails: React.FC = () => {
     }
   };
 
+  const getRecommendedTemplates = (actions: string[], violationDegree: number) => {
+    const templates: {id: number, name: string, icon: string}[] = [];
+    const actionsStr = actions.join(' ');
+
+    if (actionsStr.includes('تعهد')) {
+      templates.push({ id: 1, name: 'تعهد سلوكي', icon: '📄' });
+    }
+    if (actionsStr.includes('إشعار ولي أمر')) {
+      templates.push({ id: 2, name: 'إشعار ولي أمر بمشكلة', icon: '📄' });
+    }
+    if (actionsStr.includes('دعوة ولي أمر') || actionsStr.includes('موعد جلسة')) {
+      templates.push({ id: 5, name: 'خطاب دعوة ولي أمر', icon: '📄' });
+    }
+    if (actionsStr.includes('الموجه الطلابي') || actionsStr.includes('لجنة التوجيه')) {
+      templates.push({ id: 10, name: 'إحالة طالب', icon: '📄' });
+      templates.push({ id: 12, name: 'خطة تعديل سلوك', icon: '📄' });
+    }
+    if (actionsStr.includes('غياب')) {
+      templates.push({ id: 4, name: 'تعهد الحضور', icon: '📄' });
+      templates.push({ id: 16, name: 'إجراءات الغياب', icon: '📄' });
+    }
+    if (violationDegree === 4 || violationDegree === 5) {
+      templates.push({ id: 13, name: 'محضر ضبط واقعة', icon: '📄' });
+      templates.push({ id: 11, name: 'اجتماع لجنة التوجيه', icon: '📄' });
+    }
+    if (actionsStr.includes('جهات أمنية') || actionsStr.includes('1919') || actionsStr.includes('حماية')) {
+      templates.push({ id: 14, name: 'عالية الخطورة', icon: '📄' });
+      templates.push({ id: 15, name: 'إيذاء', icon: '📄' });
+    }
+
+    // Deduplicate
+    const uniqueTemplates = Array.from(new Set(templates.map(t => t.id))).map(id => templates.find(t => t?.id === id)).filter(Boolean) as {id: number, name: string, icon: string}[];
+    return uniqueTemplates;
+  };
+
   const handleAction = async (action: string, status: string, customNotes?: string) => {
     const finalNotes = customNotes || actionNotes;
     if (!finalNotes.trim()) {
@@ -263,7 +393,9 @@ const ReferralDetails: React.FC = () => {
           notes: finalNotes,
           status,
           evidence_file: evidenceFile || (user?.role === 'teacher' ? editForm.remedial_plan_file : null),
-          evidence_text: user?.role === 'teacher' ? editForm.remedial_plan : null
+          evidence_text: user?.role === 'teacher' ? editForm.remedial_plan : null,
+          violation_id: selectedViolationId || null,
+          applied_remedial_actions: appliedActions
         }),
       });
 
@@ -279,6 +411,16 @@ const ReferralDetails: React.FC = () => {
             setMeetingTime('');
             setEvidenceFile(null);
             setShowMeetingInputs(false);
+            
+            // Show Smart Print Hub if Vice Principal and case is being forwarded or resolved
+            if (user?.role === 'vice_principal' && (status === 'pending_counselor' || status === 'resolved')) {
+              const selectedV = violations.find(v => v.id.toString() === selectedViolationId);
+              const templates = getRecommendedTemplates(appliedActions, selectedV?.degree || 0);
+              if (templates.length > 0) {
+                setRecommendedTemplates(templates);
+                setShowPrintHub(true);
+              }
+            }
           }
         }
       } else {
@@ -301,6 +443,11 @@ const ReferralDetails: React.FC = () => {
     const notes = `موعد الجلسة: ${meetingDate} الساعة ${meetingTime}\n\nملاحظات: ${actionNotes}`;
     await handleAction('تحديد موعد جلسة مع ولي الأمر', 'scheduled_meeting', notes);
   };
+
+  const filteredViolations = violations.filter(v => 
+    v.violation_name.toLowerCase().includes(violationSearch.toLowerCase()) ||
+    v.degree.toString() === violationSearch
+  );
 
   if (loading || !data) return (
     <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4">
@@ -568,6 +715,32 @@ const ReferralDetails: React.FC = () => {
               {isEditing ? 'إلغاء التعديل' : 'تعديل التحويل'}
             </button>
           )}
+
+          {user?.role === 'admin' && (
+            <button 
+              onClick={async () => {
+                if (window.confirm('هل أنت متأكد من رغبتك في حذف هذا التحويل نهائياً؟ لا يمكن التراجع عن هذا الإجراء.')) {
+                  try {
+                    const res = await fetch(`/api/admin/referrals/${id}/delete`, {
+                      method: 'POST'
+                    });
+                    if (res.ok) {
+                      navigate('/dashboard');
+                    } else {
+                      alert('فشل حذف التحويل');
+                    }
+                  } catch (err) {
+                    console.error(err);
+                    alert('حدث خطأ أثناء الحذف');
+                  }
+                }
+              }}
+              className="px-4 md:px-5 py-3 rounded-2xl text-[10px] md:text-xs font-extrabold border flex items-center gap-2 transition-all shadow-sm bg-red-50 text-red-700 border-red-100 hover:bg-red-100"
+            >
+              <Trash2 size={18} />
+              حذف التحويل
+            </button>
+          )}
           
           <button 
             type="button"
@@ -689,6 +862,71 @@ const ReferralDetails: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+              {referral.violation_name && (
+                <div className="md:col-span-2 bg-primary/5 border border-primary/10 p-6 rounded-3xl space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3 text-primary text-[10px] font-extrabold uppercase tracking-widest">
+                      <ShieldAlert size={16} />
+                      <span>المخالفة المسجلة (حسب اللائحة)</span>
+                    </div>
+                    <span className="bg-primary text-white text-[10px] font-black px-3 py-1 rounded-full">الدرجة {referral.violation_degree}</span>
+                  </div>
+                  <h3 className="text-lg font-black text-slate-900">{referral.violation_name}</h3>
+                  <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
+                    <span>نقاط الخصم:</span>
+                    <span className="text-rose-600 font-black">-{referral.violation_points} نقطة</span>
+                  </div>
+                  
+                  {referral.applied_remedial_actions && referral.applied_remedial_actions.length > 0 && (
+                    <div className="pt-4 border-t border-primary/10">
+                      <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest mb-3">الإجراءات العلاجية المنفذة من قبل المعلم:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {referral.applied_remedial_actions.map((action, i) => (
+                          <span key={i} className="bg-white text-primary text-[10px] font-bold px-3 py-1.5 rounded-xl border border-primary/20 flex items-center gap-2">
+                            <CheckCircle2 size={12} />
+                            {action}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* System Recommendation for VP */}
+                  {user?.role === 'vice_principal' && referral.status === 'pending_vp' && (
+                    <div className="mt-6 bg-slate-900 text-white p-6 rounded-3xl border border-white/10 shadow-xl relative overflow-hidden">
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full -mr-16 -mt-16 blur-2xl" />
+                      <div className="relative z-10 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3 text-primary text-[10px] font-black uppercase tracking-widest">
+                            <ShieldAlert size={16} />
+                            <span>توصية النظام الآلية للوكيل</span>
+                          </div>
+                          <span className="bg-white/10 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest">
+                            {fetchingOccurrence ? 'جاري الفحص...' : `التكرار رقم: ${violationOccurrence + 1}`}
+                          </span>
+                        </div>
+                        
+                        {violations.find(v => v.id.toString() === selectedViolationId)?.procedures.steps && (
+                          <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
+                            <p className="text-xs font-bold leading-relaxed text-slate-300">
+                              بناءً على لائحة السلوك والمواظبة، وبما أن هذا هو التكرار رقم ({violationOccurrence + 1}) لهذه المخالفة، فإن الإجراء النظامي المطلوب هو:
+                            </p>
+                            <p className="mt-3 text-sm font-black text-primary leading-relaxed">
+                              {violations.find(v => v.id.toString() === selectedViolationId)?.procedures.steps[Math.min(violationOccurrence, (violations.find(v => v.id.toString() === selectedViolationId)?.procedures.steps.length || 1) - 1)]}
+                            </p>
+                          </div>
+                        )}
+                        
+                        <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 italic">
+                          <Info size={12} />
+                          <span>يرجى التأكد من تطبيق هذا الإجراء وتوثيقه في خانة الإجراءات أدناه.</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="space-y-4">
                 <div className="flex items-center gap-3 text-slate-400 text-[10px] font-extrabold uppercase tracking-widest">
                   <div className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400">
@@ -1031,6 +1269,189 @@ const ReferralDetails: React.FC = () => {
               ) : (
                 <>
                   <div className="space-y-4">
+                    {user?.role === 'vice_principal' && !referral.violation_id && (
+                      <div className="bg-primary/5 border border-primary/10 p-6 rounded-3xl space-y-6 mb-6">
+                        <div className="flex items-center gap-3 text-primary font-black text-sm border-b border-primary/10 pb-4">
+                          <ShieldAlert size={18} />
+                          <span>تصنيف المخالفة (حسب اللائحة)</span>
+                        </div>
+                        
+                        <div className="space-y-4">
+                          <div className="relative">
+                            <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                            <input 
+                              type="text"
+                              placeholder="ابحث عن مخالفة لتصنيف الحالة..."
+                              value={violationSearch}
+                              onChange={(e) => setViolationSearch(e.target.value)}
+                              className="w-full bg-white border border-slate-200 rounded-2xl py-3 pr-11 pl-4 text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all font-bold"
+                            />
+                          </div>
+                          
+                          <select 
+                            value={selectedViolationId}
+                            onChange={(e) => setSelectedViolationId(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-2xl py-4 px-5 text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all font-bold text-slate-700"
+                          >
+                            <option value="">-- اختر التصنيف الرسمي للمخالفة --</option>
+                            {filteredViolations.map(v => (
+                              <option key={v.id} value={v.id}>الدرجة {v.degree}: {v.violation_name} (-{v.deduction_points} نقاط)</option>
+                            ))}
+                          </select>
+
+                          {selectedViolationId && (
+                            <div className="bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-sm animate-in fade-in slide-in-from-top-2">
+                              <div className="flex border-b border-slate-50">
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveProcTab('administrative')}
+                                  className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeProcTab === 'administrative' ? 'bg-primary text-white' : 'text-slate-400 hover:bg-slate-50'}`}
+                                >
+                                  الإجراءات النظامية
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveProcTab('general')}
+                                  className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeProcTab === 'general' ? 'bg-primary text-white' : 'text-slate-400 hover:bg-slate-50'}`}
+                                >
+                                  إجراءات عامة
+                                </button>
+                              </div>
+                              
+                              <div className="p-4 space-y-3 max-h-48 overflow-y-auto">
+                                {(activeProcTab === 'administrative' 
+                                  ? violations.find(v => v.id === parseInt(selectedViolationId))?.procedures.steps 
+                                  : violations.find(v => v.id === parseInt(selectedViolationId))?.procedures.general
+                                )?.map((proc, i) => {
+                                  const isRecommended = activeProcTab === 'administrative' && i === Math.min(violationOccurrence, (violations.find(v => v.id === parseInt(selectedViolationId))?.procedures.steps.length || 1) - 1);
+                                  return (
+                                    <label key={i} className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer relative overflow-hidden ${appliedActions.includes(proc) ? 'bg-primary/5 border-primary/20' : 'bg-slate-50/50 border-slate-100 hover:border-slate-200'}`}>
+                                      {isRecommended && (
+                                        <div className="absolute top-0 left-0 bg-primary text-white text-[7px] font-black px-2 py-0.5 rounded-br-lg uppercase tracking-widest">
+                                          موصى به
+                                        </div>
+                                      )}
+                                      <input 
+                                        type="checkbox"
+                                        checked={appliedActions.includes(proc)}
+                                        onChange={() => {
+                                          const current = [...appliedActions];
+                                          const idx = current.indexOf(proc);
+                                          if (idx > -1) current.splice(idx, 1);
+                                          else current.push(proc);
+                                          setAppliedActions(current);
+                                        }}
+                                        className="w-4 h-4 rounded text-primary focus:ring-primary mt-0.5"
+                                      />
+                                      <div className="flex-1">
+                                        <span className={`text-[10px] leading-relaxed font-bold ${appliedActions.includes(proc) ? 'text-primary' : 'text-slate-600'}`}>
+                                          {proc}
+                                        </span>
+                                        {isRecommended && (
+                                          <p className="text-[8px] text-primary font-black mt-0.5">يتناسب مع التكرار رقم {violationOccurrence + 1}</p>
+                                        )}
+
+                                        {/* Dynamic Action Box (Keyword Engine) */}
+                                        <AnimatePresence mode="wait">
+                                          {appliedActions.includes(proc) && (
+                                            <motion.div
+                                              initial={{ height: 0, opacity: 0 }}
+                                              animate={{ height: 'auto', opacity: 1 }}
+                                              exit={{ height: 0, opacity: 0 }}
+                                              className="overflow-hidden"
+                                            >
+                                              <div className="mt-6 p-6 bg-white rounded-[2rem] border border-slate-100 shadow-xl space-y-5 relative" onClick={(e) => e.stopPropagation()}>
+                                                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
+                                                
+                                                {(proc.includes('تعهد خطي') || proc.includes('تعهد')) && (
+                                                  <div className="flex flex-col gap-3">
+                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 px-2">
+                                                      <FileText size={12} className="text-primary" />
+                                                      <span>توثيق التعهد السلوكي</span>
+                                                    </p>
+                                                    <button className="w-full py-4 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-2xl text-xs font-black flex items-center justify-center gap-3 border border-slate-200 transition-all shadow-sm group">
+                                                      <span className="text-lg group-hover:scale-110 transition-transform">🖨️</span>
+                                                      <span>معاينة وطباعة التعهد السلوكي (1447هـ)</span>
+                                                    </button>
+                                                  </div>
+                                                )}
+
+                                                {(proc.includes('الموجه الطلابي') || proc.includes('لجنة التوجيه') || proc.includes('الموجه')) && (
+                                                  <div className="space-y-4">
+                                                    <div className="flex items-center justify-between px-2">
+                                                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                                        <Users size={14} className="text-primary" />
+                                                        <span>ملاحظات الوكيل للموجه الطلابي</span>
+                                                      </label>
+                                                      <span className="bg-primary/10 text-primary text-[8px] font-black px-2 py-0.5 rounded-full">إجراء إلزامي</span>
+                                                    </div>
+                                                    <textarea 
+                                                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-5 text-sm font-bold focus:ring-4 focus:ring-primary/10 outline-none transition-all shadow-sm min-h-[100px]"
+                                                      placeholder="اكتب مرئياتك أو أسباب التحويل للموجه هنا بالتفصيل..."
+                                                      value={actionNotes}
+                                                      onChange={(e) => setActionNotes(e.target.value)}
+                                                    />
+                                                    <div className="bg-primary/5 p-4 rounded-2xl border border-primary/10 flex items-center gap-3">
+                                                      <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-primary shadow-sm shrink-0">
+                                                        <Send size={20} />
+                                                      </div>
+                                                      <div className="flex-1">
+                                                        <p className="text-[10px] font-black text-primary">سيتم تحويل الحالة آلياً للموجه</p>
+                                                        <p className="text-[9px] text-slate-500 font-bold">عند حفظ المخالفة، ستنتقل لملف الموجه لاستكمال دراسة الحالة.</p>
+                                                      </div>
+                                                    </div>
+                                                  </div>
+                                                )}
+
+                                                {(proc.includes('ولي أمر') || proc.includes('ولي الأمر')) && (
+                                                  <div className="space-y-4">
+                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 px-2">
+                                                      <Users size={12} className="text-primary" />
+                                                      <span>التواصل مع ولي الأمر</span>
+                                                    </p>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                      <button className="py-4 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-2xl text-xs font-black flex items-center justify-center gap-3 border border-slate-200 transition-all shadow-sm group">
+                                                        <span className="text-lg group-hover:scale-110 transition-transform">🖨️</span>
+                                                        <span>طباعة إشعار استدعاء</span>
+                                                      </button>
+                                                      <button className="py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-black flex items-center justify-center gap-3 transition-all shadow-lg shadow-emerald-600/20 group">
+                                                        <span className="text-lg group-hover:scale-110 transition-transform">📱</span>
+                                                        <span>إرسال رسالة SMS فورية</span>
+                                                      </button>
+                                                    </div>
+                                                  </div>
+                                                )}
+
+                                                {(proc.includes('إدارة التعليم') || proc.includes('مدير التعليم') || proc.includes('نقل')) && (
+                                                  <div className="p-6 bg-rose-600 rounded-[1.5rem] text-white space-y-4 shadow-xl shadow-rose-600/30">
+                                                    <div className="flex items-center gap-3 font-black text-xs uppercase tracking-widest">
+                                                      <AlertCircle size={20} className="animate-pulse" />
+                                                      <span>إجراء جسيم يتطلب الرفع الرسمي</span>
+                                                    </div>
+                                                    <p className="text-[10px] font-bold text-rose-100 leading-relaxed">
+                                                      هذا الإجراء يتطلب محضر اجتماع رسمي من لجنة التوجيه والطلاب موقع من مدير المدرسة للرفع لإدارة التعليم.
+                                                    </p>
+                                                    <button className="w-full py-4 bg-white text-rose-600 hover:bg-rose-50 rounded-2xl text-xs font-black flex items-center justify-center gap-3 transition-all shadow-lg">
+                                                      <span>📄</span>
+                                                      <span>تجهيز محضر الرفع الرسمي</span>
+                                                    </button>
+                                                  </div>
+                                                )}
+                                              </div>
+                                            </motion.div>
+                                          )}
+                                        </AnimatePresence>
+                                      </div>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     <label className="text-[10px] font-extrabold text-slate-500 mr-1 uppercase tracking-widest">
                       {referral.status === 'scheduled_meeting' ? 'نتائج اللقاء مع ولي الأمر' : 'ملاحظات الإجراء'}
                     </label>
@@ -1071,18 +1492,6 @@ const ReferralDetails: React.FC = () => {
                     {user?.role === 'vice_principal' && (
                       <div className="space-y-6">
                         <div className="flex flex-col gap-3">
-                          {/* Hide Forward button if it's the first referral */}
-                          {!isFirstReferral && (
-                            <button
-                              onClick={() => handleAction('تحويل للموجه الطلابي', 'pending_counselor')}
-                              disabled={submitting}
-                              className="w-full sts-button-primary flex items-center justify-center gap-3"
-                            >
-                              <ArrowRightLeft size={20} />
-                              <span>تحويل للموجه</span>
-                            </button>
-                          )}
-                          
                           <button
                             onClick={() => handleAction('ارجاع التحويل للمعلم لاستكمال نواقص', 'returned_to_teacher')}
                             disabled={submitting}
@@ -1093,12 +1502,23 @@ const ReferralDetails: React.FC = () => {
                           </button>
                           
                           <button
-                            onClick={() => handleAction('إغلاق الحالة مباشرة', 'resolved')}
+                            onClick={() => {
+                              const needsCounselor = appliedActions.some(p => p.includes('الموجه') || p.includes('لجنة التوجيه'));
+                              handleAction(needsCounselor ? 'تحويل للموجه الطلابي' : 'إغلاق الحالة مباشرة', needsCounselor ? 'pending_counselor' : 'resolved');
+                            }}
                             disabled={submitting}
-                            className="w-full py-4 bg-emerald-600 text-white font-extrabold rounded-2xl hover:bg-emerald-700 transition-all flex items-center justify-center gap-3 shadow-lg shadow-emerald-600/20"
+                            className={`w-full py-4 text-white font-extrabold rounded-2xl transition-all flex items-center justify-center gap-3 shadow-lg ${
+                              appliedActions.some(p => p.includes('الموجه') || p.includes('لجنة التوجيه'))
+                                ? 'bg-primary hover:bg-primary/90 shadow-primary/20'
+                                : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20'
+                            }`}
                           >
-                            <CheckCircle2 size={20} />
-                            <span>معالجة وإغلاق</span>
+                            {appliedActions.some(p => p.includes('الموجه') || p.includes('لجنة التوجيه')) ? (
+                              <ArrowRightLeft size={20} />
+                            ) : (
+                              <CheckCircle2 size={20} />
+                            )}
+                            <span>{appliedActions.some(p => p.includes('الموجه') || p.includes('لجنة التوجيه')) ? 'حفظ وتحويل للموجه' : 'معالجة وإغلاق'}</span>
                           </button>
                         </div>
                       </div>
@@ -1141,6 +1561,77 @@ const ReferralDetails: React.FC = () => {
             </motion.div>
           )}
 
+          {/* Smart Print Hub Section (Real-time) */}
+          {(user?.role === 'vice_principal' || user?.role === 'counselor') && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white p-8 md:p-10 rounded-[2.5rem] shadow-sm border border-slate-100"
+            >
+              <div className="flex items-center justify-between mb-8">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center">
+                    <Printer size={24} />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-xl text-slate-800">مركز الطباعة الذكي</h3>
+                    <p className="text-sm text-slate-500 font-bold mt-1">النماذج الرسمية المقترحة بناءً على الإجراءات المحددة</p>
+                  </div>
+                </div>
+              </div>
+
+              {(() => {
+                const currentDegree = violations.find(v => v.id.toString() === selectedViolationId)?.degree || referral.violation_degree || 0;
+                const currentActions = appliedActions.length > 0 ? appliedActions : (referral.applied_remedial_actions || []);
+                const templates = getRecommendedTemplates(currentActions, currentDegree);
+
+                if (templates.length === 0) {
+                  return (
+                    <div className="text-center py-8 bg-slate-50 rounded-2xl border border-slate-100 border-dashed">
+                      <FileText size={32} className="mx-auto text-slate-300 mb-3" />
+                      <p className="text-slate-500 font-bold">لم يتم تحديد إجراءات تتطلب نماذج رسمية حتى الآن.</p>
+                      <button
+                        onClick={() => setShowPrintHub(true)}
+                        className="mt-4 text-sm font-bold text-primary hover:text-primary/80 transition-colors"
+                      >
+                        عرض جميع النماذج
+                      </button>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {templates.map((template) => (
+                      <button
+                        key={template.id}
+                        onClick={() => {
+                          const printWindow = window.open(`/print/${template.id}/${id}`, '_blank');
+                          if (printWindow) {
+                            printWindow.onload = () => {
+                              setTimeout(() => {
+                                printWindow.print();
+                              }, 500);
+                            };
+                          }
+                        }}
+                        className="group bg-white p-5 rounded-2xl border border-slate-200 hover:border-primary/30 hover:shadow-xl hover:shadow-primary/5 transition-all flex items-center gap-4 text-right"
+                      >
+                        <div className="w-12 h-12 bg-slate-50 group-hover:bg-primary/5 text-slate-400 group-hover:text-primary rounded-xl flex items-center justify-center transition-colors shrink-0">
+                          <Printer size={24} />
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-extrabold text-slate-700 group-hover:text-primary transition-colors">{template.name}</h4>
+                          <p className="text-xs text-slate-400 font-bold mt-1">نموذج رقم {template.id}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
+            </motion.div>
+          )}
+
           <div className="bg-slate-900 p-10 rounded-[2.5rem] text-white space-y-6 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-bl-[5rem] -mr-8 -mt-8" />
             <div className="relative z-10">
@@ -1155,6 +1646,94 @@ const ReferralDetails: React.FC = () => {
           </div>
         </div>
       </div>
+      
+      {/* Smart Print Hub Modal */}
+      <AnimatePresence>
+        {showPrintHub && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowPrintHub(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: "spring", duration: 0.5 }}
+              className="relative w-full max-w-2xl bg-white rounded-[2rem] shadow-2xl overflow-hidden flex flex-col"
+            >
+              <div className="p-8 md:p-10 border-b border-slate-100 bg-gradient-to-br from-emerald-50 to-white">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center shadow-inner">
+                      <CheckCircle2 size={32} />
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-black text-slate-800">تم حفظ الحالة بنجاح</h2>
+                      <p className="text-emerald-600 font-bold mt-1">النماذج الرسمية المقترحة للطباعة</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowPrintHub(false)}
+                    className="w-10 h-10 bg-white hover:bg-slate-50 text-slate-400 hover:text-slate-600 rounded-full flex items-center justify-center transition-colors shadow-sm border border-slate-100"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+                <p className="text-slate-500 font-bold leading-relaxed">
+                  بناءً على الإجراءات التي قمت بتحديدها، يقترح النظام طباعة النماذج التالية لاستكمال التوثيق الرسمي للحالة.
+                </p>
+              </div>
+
+              <div className="p-8 md:p-10 bg-slate-50/50 flex-1 overflow-y-auto">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {recommendedTemplates.map((template) => (
+                    <button
+                      key={template.id}
+                      onClick={() => {
+                        const printWindow = window.open(`/print/${template.id}/${id}`, '_blank');
+                        if (printWindow) {
+                          printWindow.onload = () => {
+                            setTimeout(() => {
+                              printWindow.print();
+                            }, 500);
+                          };
+                        }
+                      }}
+                      className="group bg-white p-5 rounded-2xl border border-slate-200 hover:border-primary/30 hover:shadow-xl hover:shadow-primary/5 transition-all flex items-center gap-4 text-right"
+                    >
+                      <div className="w-12 h-12 bg-slate-50 group-hover:bg-primary/5 text-slate-400 group-hover:text-primary rounded-xl flex items-center justify-center transition-colors shrink-0">
+                        <Printer size={24} />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-extrabold text-slate-700 group-hover:text-primary transition-colors">{template.name}</h4>
+                        <p className="text-xs text-slate-400 font-bold mt-1">نموذج رقم {template.id}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="p-6 border-t border-slate-100 bg-white flex justify-center">
+                <button
+                  onClick={() => {
+                    // Navigate to all templates or show a dropdown
+                    setShowPrintHub(false);
+                    // For now, just close. In a real app, might open a full list.
+                  }}
+                  className="text-sm font-bold text-slate-500 hover:text-primary transition-colors flex items-center gap-2"
+                >
+                  <FileText size={16} />
+                  <span>عرض جميع النماذج الأخرى</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   </div>
 );

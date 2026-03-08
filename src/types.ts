@@ -15,6 +15,9 @@ export interface Student {
   national_id: string;
   grade: string;
   section: string;
+  behavior_score?: number;
+  bonus_score?: number;
+  attendance_score?: number;
 }
 
 export interface Referral {
@@ -35,6 +38,11 @@ export interface Referral {
   remedial_plan_file?: string;
   status: 'pending_vp' | 'pending_counselor' | 'scheduled_meeting' | 'resolved' | 'closed' | 'returned_to_teacher';
   created_at: string;
+  violation_id?: number;
+  violation_name?: string;
+  violation_degree?: number;
+  violation_points?: number;
+  applied_remedial_actions?: string[];
 }
 
 export interface ReferralLog {

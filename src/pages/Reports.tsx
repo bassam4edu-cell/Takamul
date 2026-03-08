@@ -168,8 +168,8 @@ const Reports: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {referralStatus.map((ref, i) => (
-                <tr key={i} className="border-b border-slate-200">
+              {referralStatus.map((ref) => (
+                <tr key={`print-ref-${ref.id}`} className="border-b border-slate-200">
                   <td className="p-2 border border-slate-300 text-[9px] font-bold">#{ref.id}</td>
                   <td className="p-2 border border-slate-300 text-[9px] font-black">{ref.student_name}</td>
                   <td className="p-2 border border-slate-300 text-[9px] font-bold">{ref.student_national_id || '-'}</td>
@@ -196,8 +196,8 @@ const Reports: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {topStudents.map((student, i) => (
-                <tr key={i} className="border-b border-slate-200">
+              {topStudents.map((student) => (
+                <tr key={`print-student-${student.name}`} className="border-b border-slate-200">
                   <td className="p-3 border border-slate-300 text-xs font-black">{student.name}</td>
                   <td className="p-3 border border-slate-300 text-xs font-bold">{student.grade}</td>
                   <td className="p-3 border border-slate-300 text-xs font-black text-center">{student.referral_count}</td>
@@ -219,8 +219,8 @@ const Reports: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {teacherStats.map((stat, i) => (
-                <tr key={i} className="border-b border-slate-200">
+              {teacherStats.map((stat) => (
+                <tr key={`print-teacher-${stat.name}`} className="border-b border-slate-200">
                   <td className="p-3 border border-slate-300 text-xs font-black">{stat.name}</td>
                   <td className="p-3 border border-slate-300 text-xs font-black text-center">{stat.total_referrals}</td>
                   <td className="p-3 border border-slate-300 text-xs font-bold text-center text-emerald-600">{stat.resolved_count}</td>
@@ -336,8 +336,8 @@ const Reports: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {referralStatus.map((ref, i) => (
-                  <tr key={i} className="hover:bg-slate-50/50 transition-colors cursor-pointer" onClick={() => navigate(`/referral/${ref.id}`)}>
+                {referralStatus.map((ref) => (
+                  <tr key={`screen-ref-${ref.id}`} className="hover:bg-slate-50/50 transition-colors cursor-pointer" onClick={() => navigate(`/referral/${ref.id}`)}>
                     <td className="p-5 font-mono font-bold text-slate-400">#{ref.id}</td>
                     <td className="p-5 font-black text-slate-800">{ref.student_name}</td>
                     <td className="p-5 text-slate-600 font-bold">{ref.teacher_name}</td>
@@ -370,8 +370,8 @@ const Reports: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {topStudents.map((student, i) => (
-                  <tr key={i} className="hover:bg-slate-50/50 transition-colors">
+                {topStudents.map((student) => (
+                  <tr key={`screen-student-${student.name}`} className="hover:bg-slate-50/50 transition-colors">
                     <td className="p-5 font-black text-slate-800">{student.name}</td>
                     <td className="p-5 text-slate-500 font-bold">{student.grade}</td>
                     <td className="p-5 text-center">
@@ -399,8 +399,8 @@ const Reports: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {teacherStats.map((stat, i) => (
-                  <tr key={i} className="hover:bg-slate-50/50 transition-colors">
+                {teacherStats.map((stat) => (
+                  <tr key={`screen-teacher-${stat.name}`} className="hover:bg-slate-50/50 transition-colors">
                     <td className="p-5 font-black text-slate-800">{stat.name}</td>
                     <td className="p-5 text-center font-black">{stat.total_referrals}</td>
                     <td className="p-5 text-center font-black text-emerald-600">{stat.resolved_count}</td>

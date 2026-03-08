@@ -4,6 +4,7 @@ import { User } from './types';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import TeacherDashboard from './pages/TeacherDashboard';
+import CounselorDashboard from './pages/CounselorDashboard';
 import ReferralForm from './pages/ReferralForm';
 import ManagementDashboard from './pages/ManagementDashboard';
 import ReferralDetails from './pages/ReferralDetails';
@@ -13,7 +14,9 @@ import Reports from './pages/Reports';
 import Settings from './pages/Settings';
 import Notifications from './pages/Notifications';
 import AdminDashboard from './pages/AdminDashboard';
+import AdminReferrals from './pages/AdminReferrals';
 import PrincipalDashboard from './pages/PrincipalDashboard';
+import BehavioralViolations from './pages/BehavioralViolations';
 import Layout from './components/Layout';
 
 interface AuthContextType {
@@ -97,9 +100,19 @@ const App: React.FC = () => {
             <Route path="reports" element={<Reports />} />
             <Route path="settings" element={<Settings />} />
             <Route path="notifications" element={<Notifications />} />
+            <Route path="behavioral-violations" element={
+              <ProtectedRoute allowedRoles={['vice_principal', 'admin', 'principal']}>
+                <BehavioralViolations />
+              </ProtectedRoute>
+            } />
             <Route path="admin" element={
               <ProtectedRoute allowedRoles={['admin']}>
                 <AdminDashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="admin-referrals" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <AdminReferrals />
               </ProtectedRoute>
             } />
           </Route>
@@ -115,6 +128,7 @@ const App: React.FC = () => {
 const DashboardSwitcher = () => {
   const { user } = useAuth();
   if (user?.role === 'teacher') return <TeacherDashboard />;
+  if (user?.role === 'counselor') return <CounselorDashboard />;
   if (user?.role === 'admin') return <AdminDashboard />;
   if (user?.role === 'principal') return <PrincipalDashboard />;
   return <ManagementDashboard />;
