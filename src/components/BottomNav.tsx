@@ -7,7 +7,8 @@ import {
   UserCircle,
   BarChart3,
   FileText,
-  ClipboardList
+  ClipboardList,
+  Users
 } from 'lucide-react';
 import { useAuth } from '../App';
 
@@ -29,15 +30,27 @@ const BottomNav: React.FC = () => {
     },
     { 
       title: 'التحويلات', 
+      path: '/dashboard/referrals', 
+      icon: ClipboardList,
+      roles: ['vice_principal', 'counselor', 'principal']
+    },
+    { 
+      title: 'التحويلات', 
       path: '/dashboard/admin-referrals', 
       icon: ClipboardList,
       roles: ['admin']
     },
     { 
-      title: 'السجل', 
-      path: '/dashboard/student-record', 
-      icon: FileText,
-      roles: ['vice_principal', 'counselor', 'principal']
+      title: '📝 تحضير', 
+      path: '/dashboard/attendance/teacher', 
+      icon: Users,
+      roles: ['teacher']
+    },
+    { 
+      title: 'الرادار', 
+      path: '/dashboard/attendance/radar', 
+      icon: Users,
+      roles: ['vice_principal', 'principal']
     },
     { 
       title: 'التقارير', 

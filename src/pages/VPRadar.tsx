@@ -1,385 +1,632 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../App';
-import { Users, UserX, Clock, AlertTriangle, FileText, CheckCircle2, MessageSquare, RefreshCw, Printer, X, Calendar } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, Save, UserCheck, AlertCircle, Printer, Filter, Calendar, MessageSquare, AlertTriangle, Search, Hourglass } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
 
 const VPRadar: React.FC = () => {
   const { user } = useAuth();
-  const navigate = useNavigate();
-  const [data, setData] = useState<any>(null);
-  const [alerts, setAlerts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [showPrintModal, setShowPrintModal] = useState(false);
-  const [printGrade, setPrintGrade] = useState('');
-  const [printSection, setPrintSection] = useState('');
-  const [availableClasses, setAvailableClasses] = useState<{grade: string, section: string}[]>([]);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [grade, setGrade] = useState('all');
+  const [section, setSection] = useState('all');
+  
+  const [grades, setGrades] = useState<string[]>([]);
+  const [sections, setSections] = useState<string[]>([]);
+  
+  const [students, setStudents] = useState<any[]>([]);
+  const [attendance, setAttendance] = useState<Record<number, string>>({});
+  const [originalAttendance, setOriginalAttendance] = useState<Record<number, string>>({});
+  const [pendingClasses, setPendingClasses] = useState<{grade: string, section: string}[]>([]);
+  const [completedClasses, setCompletedClasses] = useState<{grade: string, section: string}[]>([]);
+  const [totalClassesCount, setTotalClassesCount] = useState(0);
+  
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
 
+  // Smart Dashboard States
+  const [hasSearched, setHasSearched] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'حاضر' | 'غائب' | 'متأخر'>('all');
+
+  // Check if there are unsaved changes
+  const hasUnsavedChanges = useMemo(() => {
+    return Object.keys(attendance).some(id => attendance[Number(id)] !== originalAttendance[Number(id)]);
+  }, [attendance, originalAttendance]);
+
+  // Fetch Grades
   useEffect(() => {
-    const fetchClasses = async () => {
+    const fetchGrades = async () => {
       try {
-        const res = await fetch('/api/attendance/classes');
+        const res = await fetch('/api/attendance/grades');
         if (res.ok) {
           const data = await res.json();
-          setAvailableClasses(data);
+          setGrades(data);
         }
       } catch (err) {
         console.error(err);
       }
     };
-    fetchClasses();
+    fetchGrades();
   }, []);
 
+  // Fetch Sections when Grade changes
+  useEffect(() => {
+    const fetchSections = async () => {
+      if (grade === 'all') {
+        setSections([]);
+        setSection('all');
+        return;
+      }
+      try {
+        const res = await fetch(`/api/attendance/sections/${grade}`);
+        if (res.ok) {
+          const data = await res.json();
+          setSections(data);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    fetchSections();
+  }, [grade]);
+
+  // Fetch Command Center Data & Pending Classes
   const fetchData = async () => {
-    setRefreshing(true);
+    setLoading(true);
     try {
-      const [radarRes, alertsRes] = await Promise.all([
-        fetch(`/api/attendance/radar?date=${selectedDate}`),
-        fetch('/api/attendance/check-limits')
+      const params = new URLSearchParams({
+        date,
+        grade,
+        section
+      });
+      
+      const [studentsRes, pendingRes] = await Promise.all([
+        fetch(`/api/attendance/command-center?${params}`),
+        fetch(`/api/attendance/pending-classes?date=${date}`)
       ]);
 
-      if (radarRes.ok) {
-        const radarData = await radarRes.json();
-        setData(radarData);
+      if (studentsRes.ok) {
+        const data = await studentsRes.json();
+        setStudents(data);
+        
+        const currentAttendance: Record<number, string> = {};
+        data.forEach((s: any) => {
+          currentAttendance[s.id] = s.status || 'حاضر';
+        });
+        setAttendance(currentAttendance);
+        setOriginalAttendance({...currentAttendance});
       }
-      if (alertsRes.ok) {
-        const alertsData = await alertsRes.json();
-        setAlerts(alertsData);
+
+      if (pendingRes.ok) {
+        const pendingData = await pendingRes.json();
+        // Filter pending classes based on selected grade/section if needed
+        let pending = pendingData.pending || [];
+        let completed = pendingData.completed || [];
+        
+        if (grade !== 'all') {
+          pending = pending.filter((c: any) => c.grade === grade);
+          completed = completed.filter((c: any) => c.grade === grade);
+        }
+        if (section !== 'all') {
+          pending = pending.filter((c: any) => c.section === section);
+          completed = completed.filter((c: any) => c.section === section);
+        }
+        setPendingClasses(pending);
+        setCompletedClasses(completed);
+        setTotalClassesCount(pendingData.total || 0);
       }
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   };
 
+  // Trigger fetch when filters change
   useEffect(() => {
     fetchData();
-    // Auto refresh every 30 seconds
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
-  }, [selectedDate]);
+    // We don't auto-set hasSearched to true here. 
+    // The user must explicitly click Search or a KPI to view the list.
+  }, [date, grade, section]);
 
-  const handleToggleExcuse = async (id: number, currentStatus: boolean) => {
+  // Poll for pending classes every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetch(`/api/attendance/pending-classes?date=${date}`)
+        .then(res => res.json())
+        .then(pendingData => {
+          let pending = pendingData.pending || [];
+          let completed = pendingData.completed || [];
+          if (grade !== 'all') {
+            pending = pending.filter((c: any) => c.grade === grade);
+            completed = completed.filter((c: any) => c.grade === grade);
+          }
+          if (section !== 'all') {
+            pending = pending.filter((c: any) => c.section === section);
+            completed = completed.filter((c: any) => c.section === section);
+          }
+          setPendingClasses(pending);
+          setCompletedClasses(completed);
+          setTotalClassesCount(pendingData.total || 0);
+        })
+        .catch(err => console.error('Failed to poll pending classes:', err));
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [date, grade, section]);
+
+  const handleSearchClick = () => {
+    setStatusFilter('all');
+    setHasSearched(true);
+  };
+
+  const handleKPIClick = (status: 'حاضر' | 'غائب' | 'متأخر') => {
+    setStatusFilter(status);
+    setHasSearched(true);
+  };
+
+  const handleStatusChange = (studentId: number, status: string) => {
+    setAttendance(prev => ({ ...prev, [studentId]: status }));
+  };
+
+  const handleSubmit = async () => {
+    setSubmitting(true);
     try {
-      const res = await fetch(`/api/attendance/toggle-excuse/${id}`, {
+      const records = students.map(s => ({
+        student_id: s.id,
+        status: attendance[s.id],
+        grade: s.grade,
+        section: s.section
+      }));
+
+      const res = await fetch('/api/attendance/submit-bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_excused: !currentStatus })
+        body: JSON.stringify({
+          records,
+          teacher_id: user?.id,
+          date,
+          period: 1 // Default period for daily attendance
+        })
       });
+
       if (res.ok) {
-        fetchData();
+        setSuccess(true);
+        setOriginalAttendance({...attendance});
+        setTimeout(() => setSuccess(false), 3000);
+        fetchData(); // Refresh to get updated teacher names and radar
       }
     } catch (err) {
       console.error(err);
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const handleSendSMS = (studentName: string) => {
-    alert(`تم إرسال رسالة SMS لولي أمر الطالب: ${studentName}\n"المكرم ولي أمر الطالب... نفيدكم بغياب ابنكم هذا اليوم"`);
+  const handlePrint = () => {
+    window.print();
   };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center min-h-[50vh]">
-        <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-      </div>
-    );
-  }
+  const handleSendSMS = (studentId: number) => {
+    alert(`تم إرسال رسالة نصية (SMS) لولي أمر الطالب بنجاح.`);
+  };
+
+  const handleBulkSMS = () => {
+    alert(`تم إرسال رسائل نصية (SMS) لجميع أولياء أمور الطلاب الغائبين بنجاح.`);
+  };
+
+  // KPIs
+  const totalPresent = students.filter(s => attendance[s.id] === 'حاضر').length;
+  const totalAbsent = students.filter(s => attendance[s.id] === 'غائب').length;
+  const totalLate = students.filter(s => attendance[s.id] === 'متأخر').length;
+
+  const progressPercentage = totalClassesCount > 0 ? Math.round((completedClasses.length / totalClassesCount) * 100) : 0;
+
+  // Filtered Students
+  const filteredStudents = useMemo(() => {
+    if (statusFilter === 'all') return students;
+    return students.filter(s => attendance[s.id] === statusFilter);
+  }, [students, attendance, statusFilter]);
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 pb-20">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-extrabold text-slate-800 flex items-center gap-3">
-            <span className="bg-primary/10 text-primary p-2 rounded-2xl">
-              <Users size={28} />
-            </span>
-            رادار التحضير المباشر
-          </h1>
-          <p className="text-slate-500 mt-2 font-medium">متابعة لحظية لحضور وغياب الطلاب</p>
+    <div className="max-w-7xl mx-auto p-4 pb-24 space-y-6">
+      
+      {/* Print Header (Only visible when printing) */}
+      <div className="hidden print:block mb-8 text-center border-b-2 border-slate-800 pb-6">
+        <div className="flex justify-between items-center mb-4">
+          <div className="text-right">
+            <p className="font-bold text-sm">المملكة العربية السعودية</p>
+            <p className="font-bold text-sm">وزارة التعليم</p>
+            <p className="font-bold text-sm">إدارة التعليم بمحافظة الخرج</p>
+            <p className="font-bold text-sm">المدرسة: ثانوية أم القرى</p>
+          </div>
+          <div className="text-center">
+            <img src="https://upload.wikimedia.org/wikipedia/ar/thumb/3/30/Ministry_of_Education_Saudi_Arabia.svg/1200px-Ministry_of_Education_Saudi_Arabia.svg.png" alt="Ministry Logo" className="h-16 mx-auto mb-2 grayscale" referrerPolicy="no-referrer" />
+          </div>
+          <div className="text-left">
+            <p className="font-bold text-sm">تاريخ التقرير: {date}</p>
+            <p className="font-bold text-sm">معتمد التقرير: {user?.name || 'الإدارة'}</p>
+          </div>
         </div>
-        <div className="flex gap-2 items-center">
-          <div className="relative">
-            <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input 
-              type="date" 
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="pl-4 pr-10 py-3 bg-white border border-slate-200 rounded-xl text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none shadow-sm font-bold"
+        <h1 className="text-2xl font-black mt-6">
+          تقرير الغياب اليومي - {grade === 'all' ? 'المدرسة كاملة' : `الصف ${grade}`} {section !== 'all' ? `- فصل ${section}` : ''}
+        </h1>
+      </div>
+
+      {/* Command Center Header & Filters (Hidden when printing) */}
+      <div className="print:hidden space-y-6">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <h2 className="text-2xl font-black text-slate-800 flex items-center gap-3">
+            <UserCheck className="text-primary w-8 h-8" />
+            رادار التحضير والغياب
+          </h2>
+          <button 
+            onClick={handlePrint}
+            className="w-full md:w-auto py-3 px-6 bg-slate-800 hover:bg-slate-900 text-white rounded-2xl text-sm font-black flex items-center justify-center gap-2 transition-all shadow-lg min-h-[44px]"
+          >
+            <Printer size={18} />
+            طباعة التقرير المخصص
+          </button>
+        </div>
+
+        {/* Overall Progress Bar */}
+        <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100">
+          <div className="flex justify-between items-center mb-3">
+            <span className="font-bold text-slate-700 text-sm">
+              تم تحضير {completedClasses.length} من أصل {totalClassesCount} فصلاً - {progressPercentage}%
+            </span>
+          </div>
+          <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+            <motion.div 
+              className="bg-emerald-500 h-1.5 rounded-full"
+              initial={{ width: 0 }}
+              animate={{ width: `${progressPercentage}%` }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
             />
           </div>
-          <button 
-            onClick={() => setShowPrintModal(true)}
-            className="p-3 bg-white border border-slate-200 rounded-xl text-slate-700 hover:text-primary hover:border-primary/30 transition-all shadow-sm flex items-center gap-2 font-bold"
-          >
-            <Printer size={20} />
-            <span className="hidden sm:inline">طباعة التقارير</span>
-          </button>
-          <button 
-            onClick={fetchData}
-            className={`p-3 bg-white border border-slate-200 rounded-xl text-slate-500 hover:text-primary hover:border-primary/30 transition-all shadow-sm ${refreshing ? 'animate-spin text-primary' : ''}`}
-          >
-            <RefreshCw size={20} />
-          </button>
         </div>
-      </div>
 
-      {/* Automated Behavior Alerts */}
-      <AnimatePresence>
-        {alerts.length > 0 && (
-          <motion.div 
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-red-50 border border-red-200 rounded-3xl p-6 shadow-sm"
-          >
-            <h3 className="text-red-800 font-extrabold text-lg flex items-center gap-2 mb-4">
-              <AlertTriangle className="text-red-600" />
-              تنبيهات تجاوز حد الغياب (بدون عذر)
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {alerts.map((alert, idx) => (
-                <div key={idx} className="bg-white p-4 rounded-2xl border border-red-100 shadow-sm flex flex-col justify-between">
-                  <div>
-                    <div className="flex justify-between items-start mb-2">
-                      <h4 className="font-bold text-slate-800">{alert.student.name}</h4>
-                      <span className="bg-red-100 text-red-700 text-xs font-black px-2 py-1 rounded-lg">
-                        {alert.days} أيام غياب
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-500 mb-4">{alert.student.grade} - {alert.student.section}</p>
-                  </div>
-                  <button
-                    onClick={() => navigate(`/print/17/${alert.student.id}`)} // Assuming template 17 is for absence
-                    className="w-full py-2 bg-red-600 text-white text-sm font-bold rounded-xl hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
+        {/* Hierarchical Grouping (Zen UI) */}
+        <div className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-slate-100 space-y-8">
+          {Object.entries(
+            [...pendingClasses.map(c => ({ ...c, status: 'pending' })), ...completedClasses.map(c => ({ ...c, status: 'completed' }))]
+              .reduce((acc, curr) => {
+                if (!acc[curr.grade]) acc[curr.grade] = [];
+                acc[curr.grade].push(curr);
+                return acc;
+              }, {} as Record<string, any[]>)
+          ).map(([gradeName, classes]) => (
+            <div key={gradeName} className="space-y-4">
+              <h3 className="text-xl font-black text-slate-800 border-b border-slate-100 pb-3">
+                {gradeName}
+              </h3>
+              <div className="flex flex-wrap gap-3">
+                {classes
+                  .sort((a, b) => a.section.localeCompare(b.section))
+                  .map((c, idx) => (
+                  <div 
+                    key={`${c.grade}-${c.section}-${idx}`} 
+                    className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold transition-all duration-500 border ${
+                      c.status === 'completed' 
+                        ? 'bg-[#dcfce7] text-[#166534] border-[#bbf7d0]' 
+                        : 'bg-[#f3f4f6] text-[#9ca3af] border-[#e5e7eb]'
+                    }`}
                   >
-                    <FileText size={16} />
-                    إصدار نموذج الغياب وخصم المواظبة
-                  </button>
-                </div>
-              ))}
+                    {c.grade} - {c.section}
+                    {c.status === 'completed' && <CheckCircle2 size={16} className="text-[#166534]" />}
+                  </div>
+                ))}
+              </div>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          ))}
+          {totalClassesCount === 0 && (
+            <div className="text-center text-slate-400 font-bold py-8">
+              لا توجد فصول مسجلة لهذا اليوم
+            </div>
+          )}
+        </div>
 
-      {/* Live Counters */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm relative overflow-hidden group">
-          <div className="absolute -left-6 -top-6 w-24 h-24 bg-emerald-50 rounded-full group-hover:scale-150 transition-transform duration-500" />
-          <div className="relative flex items-center justify-between">
-            <div>
-              <p className="text-emerald-600 font-bold mb-1">إجمالي الحضور</p>
-              <h2 className="text-4xl font-black text-slate-800">{data?.counters?.present || 0}</h2>
-            </div>
-            <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center">
-              <CheckCircle2 size={28} />
-            </div>
+        {/* Smart Filters */}
+        <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col md:flex-row items-center gap-4">
+          <div className="flex items-center gap-2 text-slate-800 font-black shrink-0">
+            <Filter size={18} className="text-primary" />
+            <h3>الفلاتر:</h3>
           </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-3xl border border-red-100 shadow-sm relative overflow-hidden group">
-          <div className="absolute -left-6 -top-6 w-24 h-24 bg-red-50 rounded-full group-hover:scale-150 transition-transform duration-500" />
-          <div className="relative flex items-center justify-between">
-            <div>
-              <p className="text-red-600 font-bold mb-1">إجمالي الغياب</p>
-              <h2 className="text-4xl font-black text-slate-800">{data?.counters?.absent || 0}</h2>
+          <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4 w-full">
+            <div className="relative">
+              <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 pr-12 pl-4 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none min-h-[44px]"
+              />
             </div>
-            <div className="w-14 h-14 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center">
-              <UserX size={28} />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-3xl border border-amber-100 shadow-sm relative overflow-hidden group">
-          <div className="absolute -left-6 -top-6 w-24 h-24 bg-amber-50 rounded-full group-hover:scale-150 transition-transform duration-500" />
-          <div className="relative flex items-center justify-between">
-            <div>
-              <p className="text-amber-600 font-bold mb-1">إجمالي المتأخرين</p>
-              <h2 className="text-4xl font-black text-slate-800">{data?.counters?.late || 0}</h2>
-            </div>
-            <div className="w-14 h-14 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center">
-              <Clock size={28} />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Actionable List */}
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-          <h3 className="font-extrabold text-lg text-slate-800 flex items-center gap-2">
-            <UserX className="text-slate-400" />
-            سجل غياب يوم: {selectedDate}
-          </h3>
-          <span className="bg-slate-200 text-slate-600 text-xs font-bold px-3 py-1 rounded-full">
-            {data?.actionableList?.length || 0} طالب
-          </span>
-        </div>
-        
-        <div className="overflow-x-auto">
-          <table className="w-full text-right">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 text-sm">
-                <th className="p-4 font-bold">اسم الطالب</th>
-                <th className="p-4 font-bold">الصف والفصل</th>
-                <th className="p-4 font-bold">الحالة</th>
-                <th className="p-4 font-bold">الحصة / المعلم</th>
-                <th className="p-4 font-bold">العذر</th>
-                <th className="p-4 font-bold">إجراءات سريعة</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {data?.actionableList?.map((record: any) => (
-                <tr key={record.id} className="hover:bg-slate-50/50 transition-colors">
-                  <td className="p-4 font-bold text-slate-800">{record.student_name}</td>
-                  <td className="p-4 text-slate-600 text-sm">{record.grade} - {record.section}</td>
-                  <td className="p-4">
-                    <span className={`px-3 py-1 rounded-lg text-xs font-bold ${
-                      record.status === 'غائب' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
-                    }`}>
-                      {record.status}
-                    </span>
-                  </td>
-                  <td className="p-4 text-slate-500 text-sm">
-                    الحصة {record.period} <br/>
-                    <span className="text-xs text-slate-400">{record.teacher_name}</span>
-                  </td>
-                  <td className="p-4">
-                    <button
-                      onClick={() => handleToggleExcuse(record.id, record.is_excused)}
-                      className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all border ${
-                        record.is_excused 
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' 
-                          : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      {record.is_excused ? 'بعذر طبي ✅' : 'بدون عذر ❌'}
-                    </button>
-                  </td>
-                  <td className="p-4">
-                    <button
-                      onClick={() => handleSendSMS(record.student_name)}
-                      className="flex items-center gap-2 bg-blue-50 text-blue-700 px-4 py-2 rounded-xl text-xs font-bold hover:bg-blue-100 transition-colors border border-blue-100"
-                    >
-                      <MessageSquare size={14} />
-                      إرسال SMS لولي الأمر
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {(!data?.actionableList || data.actionableList.length === 0) && (
-                <tr>
-                  <td colSpan={6} className="p-10 text-center text-slate-500 font-bold">
-                    <CheckCircle2 className="w-12 h-12 text-emerald-300 mx-auto mb-3" />
-                    لا يوجد غياب أو تأخر مسجل اليوم
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Print Modal */}
-      <AnimatePresence>
-        {showPrintModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+            <select
+              value={grade}
+              onChange={(e) => setGrade(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none min-h-[44px]"
             >
-              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-                <h3 className="font-extrabold text-lg text-slate-800 flex items-center gap-2">
-                  <Printer className="text-primary" />
-                  خيارات طباعة التقارير
-                </h3>
-                <button
-                  onClick={() => setShowPrintModal(false)}
-                  className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-full transition-colors"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-
-              <div className="p-6 space-y-6">
-                {/* Option 1: Daily Report */}
-                <div className="space-y-3">
-                  <h4 className="font-bold text-slate-700">1. تقرير الغياب اليومي الشامل</h4>
-                  <button
-                    onClick={() => {
-                      setShowPrintModal(false);
-                      navigate(`/print/daily-absence?date=${selectedDate}`);
-                    }}
-                    className="w-full py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 transition-all flex items-center justify-center gap-2 shadow-sm"
-                  >
-                    <FileText size={18} />
-                    طباعة التقرير الشامل
-                  </button>
-                </div>
-
-                <div className="h-px bg-slate-100 w-full"></div>
-
-                {/* Option 2: Filtered Report */}
-                <div className="space-y-4">
-                  <h4 className="font-bold text-slate-700">2. تقرير مخصص حسب الصف والفصل</h4>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">الصف</label>
-                      <select
-                        value={printGrade}
-                        onChange={(e) => {
-                          setPrintGrade(e.target.value);
-                          setPrintSection('');
-                        }}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-                      >
-                        <option value="">الكل</option>
-                        {Array.from(new Set(availableClasses.map(c => c.grade))).map(g => (
-                          <option key={g} value={g}>{g}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">الفصل</label>
-                      <select
-                        value={printSection}
-                        onChange={(e) => setPrintSection(e.target.value)}
-                        disabled={!printGrade}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none disabled:opacity-50"
-                      >
-                        <option value="">الكل</option>
-                        {availableClasses.filter(c => c.grade === printGrade).map(c => (
-                          <option key={c.section} value={c.section}>{c.section}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setShowPrintModal(false);
-                      let url = `/print/daily-absence?date=${selectedDate}`;
-                      if (printGrade && printSection) {
-                        url += `&grade=${encodeURIComponent(printGrade)}&section=${encodeURIComponent(printSection)}`;
-                      }
-                      navigate(url);
-                    }}
-                    disabled={!printGrade || !printSection}
-                    className="w-full py-3 bg-slate-800 text-white font-bold rounded-xl hover:bg-slate-900 transition-all flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Printer size={18} />
-                    طباعة التقرير المخصص
-                  </button>
-                </div>
-              </div>
-            </motion.div>
+              <option value="all">جميع الصفوف</option>
+              {grades.map(g => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </select>
+            <select
+              value={section}
+              onChange={(e) => setSection(e.target.value)}
+              disabled={grade === 'all'}
+              className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none disabled:opacity-50 min-h-[44px]"
+            >
+              <option value="all">جميع الفصول</option>
+              {sections.map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            <button
+              onClick={handleSearchClick}
+              className="w-full bg-primary hover:bg-primary/90 text-white rounded-2xl py-3 px-4 text-sm font-black flex items-center justify-center gap-2 transition-all min-h-[44px]"
+            >
+              <Search size={18} />
+              عرض السجلات
+            </button>
           </div>
+        </div>
+
+        {/* Clickable KPIs (Always visible) */}
+        <div className="grid grid-cols-3 gap-4">
+          <button
+            onClick={() => handleKPIClick('حاضر')}
+            className={`rounded-3xl p-4 md:p-6 flex flex-col items-center justify-center text-center transition-all border-2 ${
+              statusFilter === 'حاضر' || statusFilter === 'all'
+                ? 'bg-emerald-50 border-emerald-200 shadow-sm'
+                : 'bg-slate-50 border-transparent opacity-50 grayscale hover:opacity-100 hover:grayscale-0'
+            }`}
+          >
+            <CheckCircle2 className={`mb-2 w-8 h-8 ${statusFilter === 'حاضر' || statusFilter === 'all' ? 'text-emerald-500' : 'text-slate-400'}`} />
+            <p className={`text-xs md:text-sm font-bold mb-1 ${statusFilter === 'حاضر' || statusFilter === 'all' ? 'text-emerald-600' : 'text-slate-500'}`}>الحاضرين ✅</p>
+            <p className={`text-2xl md:text-4xl font-black ${statusFilter === 'حاضر' || statusFilter === 'all' ? 'text-emerald-700' : 'text-slate-600'}`}>{totalPresent}</p>
+          </button>
+          <button
+            onClick={() => handleKPIClick('غائب')}
+            className={`rounded-3xl p-4 md:p-6 flex flex-col items-center justify-center text-center transition-all border-2 ${
+              statusFilter === 'غائب' || statusFilter === 'all'
+                ? 'bg-rose-50 border-rose-200 shadow-sm'
+                : 'bg-slate-50 border-transparent opacity-50 grayscale hover:opacity-100 hover:grayscale-0'
+            }`}
+          >
+            <XCircle className={`mb-2 w-8 h-8 ${statusFilter === 'غائب' || statusFilter === 'all' ? 'text-rose-500' : 'text-slate-400'}`} />
+            <p className={`text-xs md:text-sm font-bold mb-1 ${statusFilter === 'غائب' || statusFilter === 'all' ? 'text-rose-600' : 'text-slate-500'}`}>الغائبين ❌</p>
+            <p className={`text-2xl md:text-4xl font-black ${statusFilter === 'غائب' || statusFilter === 'all' ? 'text-rose-700' : 'text-slate-600'}`}>{totalAbsent}</p>
+          </button>
+          <button
+            onClick={() => handleKPIClick('متأخر')}
+            className={`rounded-3xl p-4 md:p-6 flex flex-col items-center justify-center text-center transition-all border-2 ${
+              statusFilter === 'متأخر' || statusFilter === 'all'
+                ? 'bg-amber-50 border-amber-200 shadow-sm'
+                : 'bg-slate-50 border-transparent opacity-50 grayscale hover:opacity-100 hover:grayscale-0'
+            }`}
+          >
+            <Clock className={`mb-2 w-8 h-8 ${statusFilter === 'متأخر' || statusFilter === 'all' ? 'text-amber-500' : 'text-slate-400'}`} />
+            <p className={`text-xs md:text-sm font-bold mb-1 ${statusFilter === 'متأخر' || statusFilter === 'all' ? 'text-amber-600' : 'text-slate-500'}`}>المتأخرين ⏱️</p>
+            <p className={`text-2xl md:text-4xl font-black ${statusFilter === 'متأخر' || statusFilter === 'all' ? 'text-amber-700' : 'text-slate-600'}`}>{totalLate}</p>
+          </button>
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      {!hasSearched ? (
+        <div className="text-center p-16 bg-white rounded-3xl border border-slate-100 border-dashed print:hidden flex flex-col items-center justify-center">
+          <div className="w-20 h-20 bg-primary/5 rounded-full flex items-center justify-center mb-4">
+            <Search className="w-10 h-10 text-primary/40" />
+          </div>
+          <h3 className="text-xl font-black text-slate-800 mb-2">الرادار في وضع الاستعداد</h3>
+          <p className="text-slate-500 font-bold">🔍 الرجاء استخدام الفلاتر أو الضغط على بطاقات الإحصائيات لعرض الطلاب</p>
+        </div>
+      ) : loading ? (
+        <div className="flex justify-center p-10 print:hidden">
+          <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+        </div>
+      ) : filteredStudents.length > 0 ? (
+        <>
+          {/* Bulk Actions */}
+          <AnimatePresence>
+            {statusFilter === 'غائب' && (
+              <motion.div 
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="print:hidden overflow-hidden"
+              >
+                <button
+                  onClick={handleBulkSMS}
+                  className="w-full bg-rose-100 hover:bg-rose-200 text-rose-800 border border-rose-200 rounded-2xl py-4 px-6 text-sm font-black flex items-center justify-center gap-3 transition-all shadow-sm mb-6"
+                >
+                  <MessageSquare size={20} />
+                  إرسال SMS لجميع الغائبين المعروضين
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Enhanced Student Cards View (Hidden on Print) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 print:hidden">
+            {filteredStudents.map((student) => {
+              const absCount = student.total_absences || 0;
+              const isAbsent = attendance[student.id] === 'غائب';
+              
+              return (
+                <motion.div 
+                  key={student.id}
+                  layout
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.2 }}
+                  className={`bg-white p-5 rounded-3xl border transition-all shadow-sm flex flex-col sm:flex-row gap-4 items-center ${
+                    attendance[student.id] === 'حاضر' ? 'border-emerald-200 bg-emerald-50/10' :
+                    attendance[student.id] === 'غائب' ? 'border-rose-200 bg-rose-50/10' :
+                    'border-amber-200 bg-amber-50/10'
+                  }`}
+                >
+                  {/* Right: Info */}
+                  <div className="flex-1 w-full text-right">
+                    <span className="font-black text-slate-800 text-lg block mb-1">{student.name}</span>
+                    <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-lg inline-block">
+                      {student.grade} - {student.section}
+                    </span>
+                  </div>
+
+                  {/* Center: Toggles & Badges */}
+                  <div className="flex-[2] w-full flex flex-col gap-3">
+                    <div className="flex gap-2 w-full">
+                      <button
+                        onClick={() => handleStatusChange(student.id, 'حاضر')}
+                        className={`flex-1 min-h-[44px] rounded-xl text-sm font-bold flex items-center justify-center gap-1 transition-all ${
+                          attendance[student.id] === 'حاضر'
+                            ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                            : 'bg-slate-50 text-slate-400 border border-slate-100 hover:bg-slate-100'
+                        }`}
+                      >
+                        <CheckCircle2 size={16} />
+                        حاضر
+                      </button>
+                      <button
+                        onClick={() => handleStatusChange(student.id, 'غائب')}
+                        className={`flex-1 min-h-[44px] rounded-xl text-sm font-bold flex items-center justify-center gap-1 transition-all ${
+                          attendance[student.id] === 'غائب'
+                            ? 'bg-rose-100 text-rose-700 border border-rose-200'
+                            : 'bg-slate-50 text-slate-400 border border-slate-100 hover:bg-slate-100'
+                        }`}
+                      >
+                        <XCircle size={16} />
+                        غائب
+                      </button>
+                      <button
+                        onClick={() => handleStatusChange(student.id, 'متأخر')}
+                        className={`flex-1 min-h-[44px] rounded-xl text-sm font-bold flex items-center justify-center gap-1 transition-all ${
+                          attendance[student.id] === 'متأخر'
+                            ? 'bg-amber-100 text-amber-700 border border-amber-200'
+                            : 'bg-slate-50 text-slate-400 border border-slate-100 hover:bg-slate-100'
+                        }`}
+                      >
+                        <Clock size={16} />
+                        متأخر
+                      </button>
+                    </div>
+                    
+                    {/* Smart Badges */}
+                    {isAbsent && absCount > 3 && (
+                      <button 
+                        onClick={handlePrint}
+                        className={`w-full py-2 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all hover:opacity-90 ${
+                          absCount > 5 
+                            ? 'bg-red-100 text-red-700 border border-red-200' 
+                            : 'bg-orange-100 text-orange-700 border border-orange-200'
+                        }`}
+                      >
+                        <AlertTriangle size={14} />
+                        {absCount > 5 ? '🚨 تعهد واستدعاء: 5 أيام' : '⚠️ إنذار أول: 3 أيام'}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Left: Quick Actions */}
+                  <div className="flex sm:flex-col gap-2 w-full sm:w-auto shrink-0">
+                    {isAbsent && (
+                      <button
+                        onClick={() => handleSendSMS(student.id)}
+                        className="flex-1 sm:flex-none w-full sm:w-auto px-4 h-12 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 flex items-center justify-center gap-2 transition-all shadow-sm font-bold text-sm"
+                        title="إرسال SMS لولي الأمر"
+                      >
+                        <MessageSquare size={18} />
+                        إرسال SMS
+                      </button>
+                    )}
+                    {isAbsent && absCount > 3 && (
+                      <button
+                        onClick={handlePrint}
+                        className="flex-1 sm:flex-none w-full sm:w-auto px-4 h-12 rounded-xl bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200 flex items-center justify-center gap-2 transition-all shadow-sm font-bold text-sm"
+                        title="طباعة إنذار الغياب"
+                      >
+                        <Printer size={18} />
+                        طباعة
+                      </button>
+                    )}
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+
+          {/* Print Table View (Only visible on Print) */}
+          <div className="hidden print:block">
+            <table className="w-full text-right border-collapse border border-slate-300">
+              <thead>
+                <tr className="bg-[#f3f4f6]">
+                  <th className="border border-slate-300 p-3 text-sm font-black w-12 text-center">م</th>
+                  <th className="border border-slate-300 p-3 text-sm font-black">اسم الطالب</th>
+                  <th className="border border-slate-300 p-3 text-sm font-black w-24">الصف</th>
+                  <th className="border border-slate-300 p-3 text-sm font-black w-24">الفصل</th>
+                  <th className="border border-slate-300 p-3 text-sm font-black w-32 text-center">حالة الحضور</th>
+                  <th className="border border-slate-300 p-3 text-sm font-black w-48">ملاحظات الإدارة</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredStudents.map((student, index) => (
+                  <tr key={student.id} className="border-b border-slate-200">
+                    <td className="border border-slate-300 p-3 text-sm text-center">{index + 1}</td>
+                    <td className="border border-slate-300 p-3 text-sm font-bold">{student.name}</td>
+                    <td className="border border-slate-300 p-3 text-sm">{student.grade}</td>
+                    <td className="border border-slate-300 p-3 text-sm">{student.section}</td>
+                    <td className="border border-slate-300 p-3 text-sm text-center font-bold">
+                      {attendance[student.id]}
+                    </td>
+                    <td className="border border-slate-300 p-3 text-sm"></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : (
+        <div className="text-center p-10 bg-white rounded-3xl border border-slate-100 print:hidden">
+          <AlertCircle className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+          <p className="text-slate-500 font-bold">لا توجد بيانات مطابقة للبحث</p>
+        </div>
+      )}
+
+      {/* Fixed Bottom Action (Hidden on Print) */}
+      <AnimatePresence>
+        {filteredStudents.length > 0 && hasUnsavedChanges && (
+          <motion.div 
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            className="fixed bottom-20 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-slate-200 z-10 print:hidden"
+          >
+            <button
+              onClick={handleSubmit}
+              disabled={submitting}
+              className={`w-full max-w-md mx-auto min-h-[56px] rounded-2xl font-extrabold flex items-center justify-center gap-2 transition-all shadow-lg ${
+                success 
+                  ? 'bg-emerald-500 text-white shadow-emerald-500/20' 
+                  : 'bg-primary text-white hover:bg-primary/90 shadow-primary/20'
+              }`}
+            >
+              {submitting ? (
+                <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : success ? (
+                <>
+                  <CheckCircle2 size={20} />
+                  <span>تم حفظ التعديلات بنجاح</span>
+                </>
+              ) : (
+                <>
+                  <Save size={20} />
+                  <span>حفظ التعديلات في النظام</span>
+                </>
+              )}
+            </button>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

@@ -7,9 +7,9 @@ import TeacherDashboard from './pages/TeacherDashboard';
 import CounselorDashboard from './pages/CounselorDashboard';
 import ReferralForm from './pages/ReferralForm';
 import ManagementDashboard from './pages/ManagementDashboard';
+import ManagementReferrals from './pages/ManagementReferrals';
 import ReferralDetails from './pages/ReferralDetails';
 import StudentProfile from './pages/StudentProfile';
-import StudentComprehensiveRecord from './pages/StudentComprehensiveRecord';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
 import Notifications from './pages/Notifications';
@@ -18,8 +18,8 @@ import AdminReferrals from './pages/AdminReferrals';
 import PrincipalDashboard from './pages/PrincipalDashboard';
 import BehavioralViolations from './pages/BehavioralViolations';
 import PrintTemplate from './pages/PrintTemplate';
-import TeacherAttendance from './pages/TeacherAttendance';
 import VPRadar from './pages/VPRadar';
+import TeacherRollCall from './pages/TeacherRollCall';
 import DailyAbsenceReport from './pages/DailyAbsenceReport';
 import Layout from './components/Layout';
 
@@ -106,11 +106,16 @@ const App: React.FC = () => {
                 <ReferralForm />
               </ProtectedRoute>
             } />
+            <Route path="referrals" element={
+              <ProtectedRoute allowedRoles={['vice_principal', 'counselor', 'principal']}>
+                <ManagementReferrals />
+              </ProtectedRoute>
+            } />
             <Route path="referral/:id" element={<ReferralDetails />} />
             <Route path="student/:id" element={<StudentProfile />} />
             <Route path="attendance/teacher" element={
               <ProtectedRoute allowedRoles={['teacher']}>
-                <TeacherAttendance />
+                <TeacherRollCall />
               </ProtectedRoute>
             } />
             <Route path="attendance/radar" element={
@@ -118,11 +123,7 @@ const App: React.FC = () => {
                 <VPRadar />
               </ProtectedRoute>
             } />
-            <Route path="student-record" element={
-              <ProtectedRoute allowedRoles={['principal', 'vice_principal', 'counselor']}>
-                <StudentComprehensiveRecord />
-              </ProtectedRoute>
-            } />
+            <Route path="student-record" element={<Navigate to="/dashboard" replace />} />
             <Route path="reports" element={<Reports />} />
             <Route path="settings" element={<Settings />} />
             <Route path="notifications" element={<Notifications />} />

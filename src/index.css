@@ -58,3 +58,33 @@
     padding-bottom: env(safe-area-inset-bottom);
   }
 }
+
+@media print {
+  @page {
+    size: A4;
+    margin: 1cm;
+  }
+  
+  body {
+    background-color: white;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  /* Hide sidebar and header if they exist in the layout */
+  aside, nav, header {
+    display: none !important;
+  }
+
+  /* Ensure the main content takes full width */
+  main {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    background-color: white !important;
+  }
+}

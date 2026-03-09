@@ -369,7 +369,175 @@ async function startServer() {
     }
   });
 
-  app.get("/api/admin/performance", async (req, res) => {
+  // --- Dashboard Pulse Endpoint ---
+  app.get("/api/dashboard/pulse", async (req, res) => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+
+      // 1. Attendance Stats
+      const attendanceStats = await sql`
+        SELECT 
+          COUNT(CASE WHEN status = 'حاضر' THEN 1 END) as present,
+          COUNT(CASE WHEN status = 'غائب' THEN 1 END) as absent,
+          COUNT(*) as total
+        FROM attendance_records
+        WHERE date = ${today}
+      `;
+      const present = parseInt(attendanceStats[0].present || 0);
+      const absent = parseInt(attendanceStats[0].absent || 0);
+      const totalAttendance = parseInt(attendanceStats[0].total || 0);
+      const attendanceRate = totalAttendance > 0 ? Math.round((present / totalAttendance) * 100) : 0;
+
+      // 2. Pending Classes
+      const allClasses = await sql`
+        SELECT DISTINCT grade, section
+        FROM students
+        WHERE grade IS NOT NULL AND section IS NOT NULL
+      `;
+      const completedClasses = await sql`
+        SELECT DISTINCT s.grade, s.section
+        FROM students s
+        JOIN attendance_records ar ON ar.student_id = s.id
+        WHERE ar.date = ${today}
+      `;
+      const pendingClasses = allClasses.filter(c => 
+        !completedClasses.some(comp => comp.grade === c.grade && comp.section === c.section)
+      );
+
+      // 3. Behavioral Incidents Today
+      const incidentsToday = await sql`
+        SELECT COUNT(*) as count
+        FROM referrals
+        WHERE DATE(created_at) = ${today}
+      `;
+      const behavioralIncidentsCount = parseInt(incidentsToday[0].count || 0);
+
+      // 4. Active Referrals
+      const activeReferrals = await sql`
+        SELECT COUNT(*) as count
+        FROM referrals
+        WHERE status NOT IN ('resolved', 'closed')
+      `;
+      const activeReferralsCount = parseInt(activeReferrals[0].count || 0);
+
+      // 5. Actionable Alerts
+      const alerts = [];
+      
+      // Alert: Students with > 3 days absence
+      const absenceLimits = await sql`
+        SELECT 
+          student_id,
+          COUNT(DISTINCT date) as total_days
+        FROM attendance_records
+        WHERE status = 'غائب'
+        GROUP BY student_id
+        HAVING COUNT(DISTINCT date) >= 3
+      `;
+      if (absenceLimits.length > 0) {
+        alerts.push({
+          id: 'absences',
+          type: 'warning',
+          icon: '🚨',
+          message: `هناك ${absenceLimits.length} طلاب تجاوزوا 3 أيام غياب.`,
+          actionText: 'طباعة الإنذارات',
+          actionLink: '/dashboard/attendance/radar'
+        });
+      }
+
+      // Alert: Pending classes
+      if (pendingClasses.length > 0) {
+        alerts.push({
+          id: 'pending_classes',
+          type: 'alert',
+          icon: '⚠️',
+          message: `هناك ${pendingClasses.length} فصول لم يتم رفع تحضيرها للحصة الحالية.`,
+          actionText: 'إرسال تنبيه',
+          actionLink: '/dashboard/attendance/radar'
+        });
+      }
+
+      // Alert: Active referrals
+      const recentActiveReferrals = await sql`
+        SELECT r.id, s.name as student_name, u.name as teacher_name
+        FROM referrals r
+        JOIN students s ON r.student_id = s.id
+        JOIN users u ON r.teacher_id = u.id
+        WHERE r.status NOT IN ('resolved', 'closed')
+        ORDER BY r.created_at DESC
+        LIMIT 3
+      `;
+      recentActiveReferrals.forEach((ref: any) => {
+        alerts.push({
+          id: `ref_${ref.id}`,
+          type: 'info',
+          icon: '📝',
+          message: `إحالة للطالب (${ref.student_name}) مرفوعة من المعلم (${ref.teacher_name}) تنتظر الإجراء.`,
+          actionText: 'معالجة الحالة',
+          actionLink: `/dashboard/referral/${ref.id}`
+        });
+      });
+
+      // 6. Live Activity Stream
+      const activities = [];
+      
+      // Recent attendance
+      const recentAttendance = await sql`
+        SELECT ar.date, ar.period, s.grade, s.section, u.name as teacher_name, COUNT(*) as absent_count
+        FROM attendance_records ar
+        JOIN students s ON ar.student_id = s.id
+        JOIN users u ON ar.teacher_id = u.id
+        WHERE ar.date = ${today} AND ar.status = 'غائب'
+        GROUP BY ar.date, ar.period, s.grade, s.section, u.name
+        ORDER BY ar.period DESC
+        LIMIT 5
+      `;
+      recentAttendance.forEach((ar: any) => {
+        activities.push({
+          id: `att_${ar.grade}_${ar.section}_${ar.period}`,
+          icon: '❌',
+          message: `تم رصد غياب ${ar.absent_count} طلاب في فصل ${ar.grade}/${ar.section} من قبل المعلم ${ar.teacher_name}.`,
+          time: 'اليوم'
+        });
+      });
+
+      // Recent referral logs
+      const recentLogs = await sql`
+        SELECT l.action, l.created_at, u.name as user_name, s.name as student_name
+        FROM referral_logs l
+        JOIN users u ON l.user_id = u.id
+        JOIN referrals r ON l.referral_id = r.id
+        JOIN students s ON r.student_id = s.id
+        ORDER BY l.created_at DESC
+        LIMIT 5
+      `;
+      recentLogs.forEach((log: any) => {
+        let icon = 'ℹ️';
+        if (log.action.includes('حل') || log.action.includes('إغلاق')) icon = '🤝';
+        else if (log.action.includes('إحالة')) icon = '📝';
+        
+        activities.push({
+          id: `log_${log.created_at}`,
+          icon,
+          message: `${log.user_name} قام بـ: ${log.action} للطالب ${log.student_name}.`,
+          time: new Date(log.created_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })
+        });
+      });
+
+      res.json({
+        attendanceRate,
+        absentCount: absent,
+        pendingClassesCount: pendingClasses.length,
+        behavioralIncidentsCount,
+        activeReferralsCount,
+        alerts,
+        activities
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch dashboard pulse" });
+    }
+  });
+  app.get("/api/reports/performance", async (req, res) => {
     try {
       const performance = await sql`
         SELECT 
@@ -610,19 +778,121 @@ async function startServer() {
         return res.status(404).json({ error: "Student not found" });
       }
 
-      const referrals = await sql`
+      // 2. Calculate Live Scores
+      const absencesResult = await sql`
+        SELECT COUNT(*) as unexcused_absences 
+        FROM attendance_records 
+        WHERE student_id = ${id} AND status = 'غائب' AND is_excused = FALSE
+      `;
+      const unexcusedAbsences = parseInt(absencesResult[0].unexcused_absences || 0);
+      const attendanceScore = Math.max(0, 100 - unexcusedAbsences);
+
+      const scoreLogs = await sql`
+        SELECT action_type, SUM(points_changed) as total_points
+        FROM student_score_logs
+        WHERE student_id = ${id}
+        GROUP BY action_type
+      `;
+      let behaviorDeductions = 0;
+      let reinforcementPoints = 0;
+      scoreLogs.forEach((log: any) => {
+        if (log.action_type === 'deduction') behaviorDeductions += parseInt(log.total_points || 0);
+        if (log.action_type === 'bonus' || log.action_type === 'compensation') reinforcementPoints += parseInt(log.total_points || 0);
+      });
+      const behaviorScore = Math.max(0, 100 - behaviorDeductions);
+
+      // 3. Master Timeline (Union Query)
+      const timeline = await sql`
         SELECT 
-          r.*, 
-          u_teacher.name as teacher_name,
-          (SELECT action FROM referral_logs WHERE referral_id = r.id ORDER BY created_at DESC LIMIT 1) as last_action,
-          (SELECT u.name FROM referral_logs rl JOIN users u ON rl.user_id = u.id WHERE rl.referral_id = r.id ORDER BY rl.created_at DESC LIMIT 1) as last_actor_name
+          'referral' as event_type,
+          r.id as event_id,
+          r.created_at as event_date,
+          u.name as actor_name,
+          r.reason as description,
+          r.type as category,
+          r.status as status
         FROM referrals r
-        JOIN users u_teacher ON r.teacher_id = u_teacher.id
+        JOIN users u ON r.teacher_id = u.id
+        WHERE r.student_id = ${id}
+
+        UNION ALL
+
+        SELECT 
+          'attendance' as event_type,
+          a.id as event_id,
+          a.created_at as event_date,
+          u.name as actor_name,
+          a.status as description,
+          CASE WHEN a.is_excused THEN 'excused' ELSE 'unexcused' END as category,
+          'completed' as status
+        FROM attendance_records a
+        JOIN users u ON a.teacher_id = u.id
+        WHERE a.student_id = ${id} AND a.status != 'حاضر'
+
+        UNION ALL
+
+        SELECT 
+          'score_log' as event_type,
+          s.id as event_id,
+          s.created_at as event_date,
+          u.name as actor_name,
+          s.reason_or_evidence as description,
+          s.action_type as category,
+          'completed' as status
+        FROM student_score_logs s
+        JOIN users u ON s.created_by_user_id = u.id
+        WHERE s.student_id = ${id}
+
+        ORDER BY event_date DESC
+      `;
+
+      // 4. Detailed Tabs Data
+      const attendanceRecords = await sql`
+        SELECT a.*, u.name as teacher_name
+        FROM attendance_records a
+        JOIN users u ON a.teacher_id = u.id
+        WHERE a.student_id = ${id}
+        ORDER BY a.date DESC
+      `;
+
+      const behaviorRecords = await sql`
+        SELECT r.*, v.violation_name, v.degree, u.name as teacher_name
+        FROM referrals r
+        JOIN behavioral_violations_dict v ON r.violation_id = v.id
+        JOIN users u ON r.teacher_id = u.id
+        WHERE r.student_id = ${id} AND r.type = 'behavior'
+        ORDER BY r.created_at DESC
+      `;
+
+      const counselorNotes = await sql`
+        SELECT r.id, r.remedial_plan, r.created_at, u.name as counselor_name
+        FROM referrals r
+        JOIN users u ON r.assigned_to_id = u.id
+        WHERE r.student_id = ${id} AND r.remedial_plan IS NOT NULL
+        ORDER BY r.created_at DESC
+      `;
+
+      const referrals = await sql`
+        SELECT r.*, u.name as teacher_name
+        FROM referrals r
+        JOIN users u ON r.teacher_id = u.id
         WHERE r.student_id = ${id}
         ORDER BY r.created_at DESC
       `;
 
-      res.json({ student: studentResult[0], referrals });
+      res.json({ 
+        student: {
+          ...studentResult[0],
+          live_attendance_score: attendanceScore,
+          live_behavior_score: behaviorScore,
+          reinforcement_points: reinforcementPoints
+        }, 
+        timeline,
+        attendanceRecords,
+        behaviorRecords,
+        counselorNotes,
+        referrals
+      });
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to fetch student profile" });
@@ -1406,6 +1676,110 @@ async function startServer() {
   // Attendance System Endpoints
   // ==========================================
 
+  // 0. Get available grades
+  app.get("/api/attendance/grades", async (req, res) => {
+    try {
+      const grades = await sql`
+        SELECT DISTINCT grade 
+        FROM students 
+        WHERE grade IS NOT NULL
+        ORDER BY grade ASC
+      `;
+      res.json(grades.map(g => g.grade));
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch grades" });
+    }
+  });
+
+  // 0.1 Get sections for a specific grade
+  app.get("/api/attendance/sections/:grade", async (req, res) => {
+    const { grade } = req.params;
+    try {
+      const sections = await sql`
+        SELECT DISTINCT section 
+        FROM students 
+        WHERE grade = ${grade} AND section IS NOT NULL
+        ORDER BY section ASC
+      `;
+      res.json(sections.map(s => s.section));
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch sections" });
+    }
+  });
+
+  // 0.2 Get Command Center Data (Dynamic Print Engine & KPIs)
+  app.get("/api/attendance/command-center", async (req, res) => {
+    const { date, grade, section } = req.query;
+    try {
+      const students = await sql`
+        SELECT 
+          s.id, 
+          s.name, 
+          s.grade,
+          s.section,
+          COALESCE(ar.status, 'حاضر') as status,
+          u.name as teacher_name,
+          (
+            SELECT COUNT(*) 
+            FROM attendance_records ar_hist 
+            WHERE ar_hist.student_id = s.id AND ar_hist.status = 'غائب'
+          ) as total_absences
+        FROM students s
+        LEFT JOIN attendance_records ar 
+          ON s.id = ar.student_id 
+          AND ar.date = ${date as string}
+        LEFT JOIN users u
+          ON ar.teacher_id = u.id
+        WHERE 
+          (${grade === 'all' ? sql`1=1` : sql`s.grade = ${grade as string}`})
+          AND 
+          (${section === 'all' ? sql`1=1` : sql`s.section = ${section as string}`})
+        ORDER BY s.grade ASC, s.section ASC, s.name ASC
+      `;
+      res.json(students);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch command center data" });
+    }
+  });
+
+  // 0.3 Get Pending Classes
+  app.get("/api/attendance/pending-classes", async (req, res) => {
+    const { date } = req.query;
+    try {
+      const allClasses = await sql`
+        SELECT DISTINCT grade, section
+        FROM students
+        WHERE grade IS NOT NULL AND section IS NOT NULL
+        ORDER BY grade ASC, section ASC
+      `;
+
+      const completedClasses = await sql`
+        SELECT DISTINCT s.grade, s.section
+        FROM students s
+        JOIN attendance_records ar ON ar.student_id = s.id
+        WHERE ar.date = ${date as string}
+        AND s.grade IS NOT NULL AND s.section IS NOT NULL
+        ORDER BY s.grade ASC, s.section ASC
+      `;
+
+      const pending = allClasses.filter(c => 
+        !completedClasses.some(comp => comp.grade === c.grade && comp.section === c.section)
+      );
+
+      res.json({
+        pending,
+        completed: completedClasses,
+        total: allClasses.length
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch pending classes" });
+    }
+  });
+
   // 0. Get available classes
   app.get("/api/attendance/classes", async (req, res) => {
     try {
@@ -1429,28 +1803,85 @@ async function startServer() {
     const { grade, section } = JSON.parse(decodeURIComponent(classId));
     
     try {
-      const students = await sql`
-        SELECT 
-          s.id, 
-          s.name, 
-          s.national_id,
-          ar.status
-        FROM students s
-        LEFT JOIN attendance_records ar 
-          ON s.id = ar.student_id 
-          AND ar.date = ${date} 
-          AND ar.period = ${period}
-        WHERE s.grade = ${grade} AND s.section = ${section}
-        ORDER BY s.name ASC
+      const existingRecords = await sql`
+        SELECT ar.student_id, ar.status, u.name as teacher_name
+        FROM attendance_records ar
+        JOIN students s ON ar.student_id = s.id
+        LEFT JOIN users u ON ar.teacher_id = u.id
+        WHERE s.grade = ${grade as string} 
+          AND s.section = ${section as string}
+          AND ar.date = ${date as string}
+          AND ar.period = ${Number(period)}
       `;
-      res.json(students);
+
+      const isSubmitted = existingRecords.length > 0;
+      const submitterName = isSubmitted ? existingRecords[0].teacher_name : null;
+
+      const students = await sql`
+        SELECT id, name, national_id, grade, section
+        FROM students
+        WHERE grade = ${grade as string} AND section = ${section as string}
+        ORDER BY name ASC
+      `;
+
+      const studentsWithStatus = students.map(s => {
+        const record = existingRecords.find(r => r.student_id === s.id);
+        return {
+          ...s,
+          status: record ? record.status : 'حاضر'
+        };
+      });
+
+      res.json({
+        isSubmitted,
+        submitterName,
+        students: studentsWithStatus
+      });
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to fetch students" });
     }
   });
 
-  // 2. Submit attendance (Teacher Interface)
+  // 2.1 Submit bulk attendance (Command Center)
+  app.post("/api/attendance/submit-bulk", async (req, res) => {
+    const { records, teacher_id, date, period } = req.body;
+    
+    try {
+      // We will loop through the records and upsert them.
+      // Since we don't have a unique constraint on (student_id, date, period) in this basic setup,
+      // we'll delete the existing records for these students on this date and period, then insert.
+      
+      const studentIds = records.map((r: any) => r.student_id);
+      
+      if (studentIds.length > 0) {
+        // Delete existing records for these students on this date and period
+        for (const studentId of studentIds) {
+          await sql`
+            DELETE FROM attendance_records 
+            WHERE student_id = ${studentId} 
+            AND date = ${date} 
+            AND period = ${period}
+          `;
+        }
+        
+        for (const record of records) {
+          // We need class_id. In our system, class_id was stored as JSON string of {grade, section}.
+          const classId = JSON.stringify({ grade: record.grade, section: record.section });
+          
+          await sql`
+            INSERT INTO attendance_records (student_id, teacher_id, class_id, date, period, status)
+            VALUES (${record.student_id}, ${teacher_id}, ${classId}, ${date}, ${period}, ${record.status})
+          `;
+        }
+      }
+
+      res.json({ success: true });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to submit bulk attendance" });
+    }
+  });
   app.post("/api/attendance/submit", async (req, res) => {
     const { records, teacher_id, class_id, period, date } = req.body;
     

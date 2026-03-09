@@ -70,7 +70,7 @@ const TeacherDashboard: React.FC = () => {
           <p className="text-sm md:text-base text-slate-500 mt-1">إليك نظرة عامة على تحويلات الطلاب الخاصة بك.</p>
         </div>
         <Link 
-          to="/referral/new"
+          to="/dashboard/referral/new"
           className="sts-button-accent px-6 md:px-8 py-3 md:py-4 flex items-center justify-center gap-3 shadow-xl shadow-accent/20 w-full md:w-auto"
         >
           <Plus size={22} />
