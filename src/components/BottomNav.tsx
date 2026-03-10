@@ -53,6 +53,12 @@ const BottomNav: React.FC = () => {
       roles: ['vice_principal', 'principal']
     },
     { 
+      title: 'السجل', 
+      path: '/dashboard/student-record', 
+      icon: FileText,
+      roles: ['vice_principal', 'counselor', 'principal', 'admin']
+    },
+    { 
       title: 'التقارير', 
       path: '/dashboard/reports', 
       icon: BarChart3,

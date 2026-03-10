@@ -19,6 +19,7 @@ import PrincipalDashboard from './pages/PrincipalDashboard';
 import BehavioralViolations from './pages/BehavioralViolations';
 import PrintTemplate from './pages/PrintTemplate';
 import VPRadar from './pages/VPRadar';
+import StudentRecordSearch from './pages/StudentRecordSearch';
 import TeacherRollCall from './pages/TeacherRollCall';
 import DailyAbsenceReport from './pages/DailyAbsenceReport';
 import Layout from './components/Layout';
@@ -123,7 +124,11 @@ const App: React.FC = () => {
                 <VPRadar />
               </ProtectedRoute>
             } />
-            <Route path="student-record" element={<Navigate to="/dashboard" replace />} />
+            <Route path="student-record" element={
+              <ProtectedRoute allowedRoles={['vice_principal', 'counselor', 'principal', 'admin']}>
+                <StudentRecordSearch />
+              </ProtectedRoute>
+            } />
             <Route path="reports" element={<Reports />} />
             <Route path="settings" element={<Settings />} />
             <Route path="notifications" element={<Notifications />} />

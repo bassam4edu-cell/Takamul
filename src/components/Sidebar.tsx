@@ -71,6 +71,12 @@ const Sidebar: React.FC = () => {
       roles: ['admin']
     },
     { 
+      title: 'السجل الشامل للطالب', 
+      path: '/dashboard/student-record', 
+      icon: FileText,
+      roles: ['vice_principal', 'counselor', 'principal', 'admin']
+    },
+    { 
       title: 'المشكلات السلوكية', 
       path: '/dashboard/behavioral-violations', 
       icon: ShieldCheck,

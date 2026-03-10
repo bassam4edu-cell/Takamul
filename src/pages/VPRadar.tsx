@@ -27,6 +27,11 @@ const VPRadar: React.FC = () => {
   const [hasSearched, setHasSearched] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'all' | 'حاضر' | 'غائب' | 'متأخر'>('all');
 
+  // Report Engine States
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [selectedReportType, setSelectedReportType] = useState<'daily' | 'warnings_3' | 'warnings_5' | 'excused_form'>('daily');
+  const [selectedStudentForReport, setSelectedStudentForReport] = useState<any>(null);
+
   // Check if there are unsaved changes
   const hasUnsavedChanges = useMemo(() => {
     return Object.keys(attendance).some(id => attendance[Number(id)] !== originalAttendance[Number(id)]);
@@ -202,7 +207,20 @@ const VPRadar: React.FC = () => {
   };
 
   const handlePrint = () => {
-    window.print();
+    setSelectedReportType('daily');
+    setIsPrintModalOpen(true);
+  };
+
+  const getReportStudents = () => {
+    let list = filteredStudents;
+    if (selectedReportType === 'warnings_3') {
+      list = students.filter(s => (s.total_absences || 0) >= 3);
+    } else if (selectedReportType === 'warnings_5') {
+      list = students.filter(s => (s.total_absences || 0) >= 5);
+    } else if (selectedReportType === 'daily') {
+      list = filteredStudents.filter(s => attendance[s.id] === 'غائب');
+    }
+    return list;
   };
 
   const handleSendSMS = (studentId: number) => {
@@ -228,27 +246,138 @@ const VPRadar: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto p-4 pb-24 space-y-6">
+      <style>{`
+        @media print {
+          @page { size: A4 portrait; margin: 10mm; }
+          body { font-family: 'Tajawal', 'Cairo', sans-serif; background: white; }
+          .print-table { border-collapse: collapse; width: 100%; border: 1px solid #000; }
+          .print-table th, .print-table td { border: 1px solid #000; padding: 4px 8px; font-size: 11pt; text-align: right; color: #000; }
+          .print-table th { background-color: #f3f4f6 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; font-weight: bold; }
+          .print-table tr:nth-child(even) { background-color: #f9fafb !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-table tr:nth-child(odd) { background-color: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print\\:hidden { display: none !important; }
+          .print-container { display: block !important; width: 100%; }
+        }
+      `}</style>
       
-      {/* Print Header (Only visible when printing) */}
-      <div className="hidden print:block mb-8 text-center border-b-2 border-slate-800 pb-6">
-        <div className="flex justify-between items-center mb-4">
-          <div className="text-right">
-            <p className="font-bold text-sm">المملكة العربية السعودية</p>
-            <p className="font-bold text-sm">وزارة التعليم</p>
-            <p className="font-bold text-sm">إدارة التعليم بمحافظة الخرج</p>
-            <p className="font-bold text-sm">المدرسة: ثانوية أم القرى</p>
+      {/* Print Views (Only visible when printing) */}
+      <div className="hidden print:block w-full bg-white text-black print-container">
+        {selectedReportType === 'excused_form' && selectedStudentForReport ? (
+          <div className="p-4" dir="rtl">
+            <div className="flex justify-between items-start mb-8 border-b-2 border-black pb-4">
+              <div className="text-right font-bold text-sm leading-relaxed">
+                <p>المملكة العربية السعودية</p>
+                <p>وزارة التعليم</p>
+                <p>المنطقة: إدارة التعليم بمحافظة الخرج</p>
+                <p>المدرسة: ثانوية أم القرى</p>
+              </div>
+              <div className="text-center">
+                <img src="https://upload.wikimedia.org/wikipedia/ar/thumb/3/30/Ministry_of_Education_Saudi_Arabia.svg/1200px-Ministry_of_Education_Saudi_Arabia.svg.png" alt="Ministry Logo" className="h-20 mx-auto grayscale" referrerPolicy="no-referrer" />
+              </div>
+              <div className="text-left font-bold text-sm leading-relaxed" dir="ltr">
+                <p>Kingdom of Saudi Arabia</p>
+                <p>Ministry of Education</p>
+              </div>
+            </div>
+
+            <h1 className="text-2xl font-black text-center mb-8 underline underline-offset-8">(نموذج إجراءات الغياب بعذر)</h1>
+
+            <div className="mb-8 font-bold text-lg flex flex-wrap gap-8 bg-gray-50 p-4 border border-black rounded-lg print:bg-gray-50 print:border-black">
+              <p>اسم الطالب: <span className="border-b border-black border-dashed px-4">{selectedStudentForReport.name}</span></p>
+              <p>المرحلة: <span className="border-b border-black border-dashed px-4">الثانوية</span></p>
+              <p>الصف: <span className="border-b border-black border-dashed px-4">{selectedStudentForReport.grade} - {selectedStudentForReport.section}</span></p>
+            </div>
+
+            <table className="print-table mb-12">
+              <thead>
+                <tr>
+                  <th className="w-32 text-center">عدد أيام الغياب</th>
+                  <th>الإجراء المتخذ</th>
+                  <th className="w-32 text-center">تاريخ الإجراء</th>
+                  <th className="w-32 text-center">توقيع الطالب</th>
+                  <th className="w-32 text-center">توقيع ولي الأمر</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="font-bold text-center">3 أيام</td>
+                  <td></td>
+                  <td></td>
+                  <td></td>
+                  <td></td>
+                </tr>
+                <tr>
+                  <td className="font-bold text-center">5 أيام</td>
+                  <td></td>
+                  <td></td>
+                  <td></td>
+                  <td></td>
+                </tr>
+                <tr>
+                  <td className="font-bold text-center">10 أيام</td>
+                  <td></td>
+                  <td></td>
+                  <td></td>
+                  <td></td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div className="flex justify-between items-center mt-16 font-bold text-lg">
+              <p>مدير المدرسة: <span className="border-b border-black border-dashed px-8">{user?.name || 'الإدارة'}</span></p>
+              <p>التوقيع: ........................</p>
+              <p>التاريخ: ..../..../144..هـ</p>
+            </div>
           </div>
-          <div className="text-center">
-            <img src="https://upload.wikimedia.org/wikipedia/ar/thumb/3/30/Ministry_of_Education_Saudi_Arabia.svg/1200px-Ministry_of_Education_Saudi_Arabia.svg.png" alt="Ministry Logo" className="h-16 mx-auto mb-2 grayscale" referrerPolicy="no-referrer" />
+        ) : (
+          <div className="p-4" dir="rtl">
+            <div className="flex justify-between items-start mb-6 border-b-2 border-black pb-4">
+              <div className="text-right font-bold text-sm leading-relaxed">
+                <p>المملكة العربية السعودية</p>
+                <p>وزارة التعليم</p>
+                <p>إدارة التعليم بمحافظة الخرج</p>
+              </div>
+              <div className="text-center">
+                <img src="https://upload.wikimedia.org/wikipedia/ar/thumb/3/30/Ministry_of_Education_Saudi_Arabia.svg/1200px-Ministry_of_Education_Saudi_Arabia.svg.png" alt="Ministry Logo" className="h-16 mx-auto mb-2 grayscale" referrerPolicy="no-referrer" />
+                <h2 className="text-lg font-black mt-2">
+                  {selectedReportType === 'daily' ? 'تقرير الغياب اليومي' :
+                   selectedReportType === 'warnings_3' ? 'تقرير إنذارات الغياب (3 أيام فأكثر)' :
+                   'تقرير إنذارات الغياب (5 أيام فأكثر)'}
+                </h2>
+                <p className="text-sm font-bold mt-1">تاريخ: {date}</p>
+              </div>
+              <div className="text-left font-bold text-sm leading-relaxed">
+                <p>المدرسة: ثانوية أم القرى بالخرج</p>
+                <p>رقم التقرير: {Math.floor(Math.random() * 10000)}</p>
+              </div>
+            </div>
+
+            <table className="print-table">
+              <thead>
+                <tr>
+                  <th className="w-10 text-center">م</th>
+                  <th>اسم الطالب</th>
+                  <th className="w-32 text-center">رقم الهوية</th>
+                  <th className="w-32 text-center">الصف والفصل</th>
+                  <th className="w-32 text-center">عدد أيام الغياب</th>
+                  <th className="w-48">ملاحظات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {getReportStudents().map((student, index) => (
+                  <tr key={student.id}>
+                    <td className="text-center">{index + 1}</td>
+                    <td className="font-bold">{student.name}</td>
+                    <td className="text-center">{student.national_id || '---'}</td>
+                    <td className="text-center">{student.grade} - {student.section}</td>
+                    <td className="text-center font-bold">{student.total_absences || 0}</td>
+                    <td></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <div className="text-left">
-            <p className="font-bold text-sm">تاريخ التقرير: {date}</p>
-            <p className="font-bold text-sm">معتمد التقرير: {user?.name || 'الإدارة'}</p>
-          </div>
-        </div>
-        <h1 className="text-2xl font-black mt-6">
-          تقرير الغياب اليومي - {grade === 'all' ? 'المدرسة كاملة' : `الصف ${grade}`} {section !== 'all' ? `- فصل ${section}` : ''}
-        </h1>
+        )}
       </div>
 
       {/* Command Center Header & Filters (Hidden when printing) */}
@@ -556,36 +685,6 @@ const VPRadar: React.FC = () => {
               );
             })}
           </div>
-
-          {/* Print Table View (Only visible on Print) */}
-          <div className="hidden print:block">
-            <table className="w-full text-right border-collapse border border-slate-300">
-              <thead>
-                <tr className="bg-[#f3f4f6]">
-                  <th className="border border-slate-300 p-3 text-sm font-black w-12 text-center">م</th>
-                  <th className="border border-slate-300 p-3 text-sm font-black">اسم الطالب</th>
-                  <th className="border border-slate-300 p-3 text-sm font-black w-24">الصف</th>
-                  <th className="border border-slate-300 p-3 text-sm font-black w-24">الفصل</th>
-                  <th className="border border-slate-300 p-3 text-sm font-black w-32 text-center">حالة الحضور</th>
-                  <th className="border border-slate-300 p-3 text-sm font-black w-48">ملاحظات الإدارة</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredStudents.map((student, index) => (
-                  <tr key={student.id} className="border-b border-slate-200">
-                    <td className="border border-slate-300 p-3 text-sm text-center">{index + 1}</td>
-                    <td className="border border-slate-300 p-3 text-sm font-bold">{student.name}</td>
-                    <td className="border border-slate-300 p-3 text-sm">{student.grade}</td>
-                    <td className="border border-slate-300 p-3 text-sm">{student.section}</td>
-                    <td className="border border-slate-300 p-3 text-sm text-center font-bold">
-                      {attendance[student.id]}
-                    </td>
-                    <td className="border border-slate-300 p-3 text-sm"></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         </>
       ) : (
         <div className="text-center p-10 bg-white rounded-3xl border border-slate-100 print:hidden">
@@ -627,6 +726,99 @@ const VPRadar: React.FC = () => {
               )}
             </button>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Report Selection Modal */}
+      <AnimatePresence>
+        {isPrintModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm print:hidden">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl shadow-xl w-full max-w-lg overflow-hidden"
+            >
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                  <Printer className="text-primary" />
+                  محرك التقارير الاحترافي
+                </h3>
+                <button onClick={() => setIsPrintModalOpen(false)} className="text-slate-400 hover:text-rose-500 transition-colors">
+                  <XCircle size={24} />
+                </button>
+              </div>
+              
+              <div className="p-6 space-y-6">
+                <div className="space-y-3">
+                  <label className="block text-sm font-bold text-slate-700">اختر نوع التقرير:</label>
+                  
+                  <label className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all ${selectedReportType === 'daily' ? 'border-primary bg-primary/5' : 'border-slate-200 hover:border-primary/30'}`}>
+                    <input type="radio" name="reportType" value="daily" checked={selectedReportType === 'daily'} onChange={() => setSelectedReportType('daily')} className="w-5 h-5 text-primary focus:ring-primary" />
+                    <span className="font-bold text-slate-700">تقرير الغياب اليومي (حسب الفلاتر)</span>
+                  </label>
+                  
+                  <label className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all ${selectedReportType === 'warnings_3' ? 'border-amber-500 bg-amber-50' : 'border-slate-200 hover:border-amber-500/30'}`}>
+                    <input type="radio" name="reportType" value="warnings_3" checked={selectedReportType === 'warnings_3'} onChange={() => setSelectedReportType('warnings_3')} className="w-5 h-5 text-amber-500 focus:ring-amber-500" />
+                    <span className="font-bold text-slate-700">تقرير إنذارات الغياب (3 أيام فأكثر)</span>
+                  </label>
+                  
+                  <label className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all ${selectedReportType === 'warnings_5' ? 'border-rose-500 bg-rose-50' : 'border-slate-200 hover:border-rose-500/30'}`}>
+                    <input type="radio" name="reportType" value="warnings_5" checked={selectedReportType === 'warnings_5'} onChange={() => setSelectedReportType('warnings_5')} className="w-5 h-5 text-rose-500 focus:ring-rose-500" />
+                    <span className="font-bold text-slate-700">تقرير إنذارات الغياب (5 أيام فأكثر)</span>
+                  </label>
+                  
+                  <label className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all ${selectedReportType === 'excused_form' ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 hover:border-indigo-500/30'}`}>
+                    <input type="radio" name="reportType" value="excused_form" checked={selectedReportType === 'excused_form'} onChange={() => setSelectedReportType('excused_form')} className="w-5 h-5 text-indigo-500 focus:ring-indigo-500" />
+                    <span className="font-bold text-slate-700">نموذج إجراءات الغياب بعذر (طالب محدد)</span>
+                  </label>
+                </div>
+
+                {selectedReportType === 'excused_form' && (
+                  <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                    <label className="block text-sm font-bold text-slate-700">اختر الطالب:</label>
+                    <select 
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                      value={selectedStudentForReport?.id || ''}
+                      onChange={(e) => {
+                        const st = students.find(s => s.id === Number(e.target.value));
+                        setSelectedStudentForReport(st || null);
+                      }}
+                    >
+                      <option value="">-- اختر طالباً --</option>
+                      {students.filter(s => (s.total_absences || 0) > 0).map(s => (
+                        <option key={s.id} value={s.id}>{s.name} ({s.grade} - {s.section})</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+              
+              <div className="p-6 border-t border-slate-100 bg-slate-50 flex gap-3">
+                <button 
+                  onClick={() => setIsPrintModalOpen(false)}
+                  className="flex-1 py-3 px-4 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-all"
+                >
+                  إلغاء
+                </button>
+                <button 
+                  onClick={() => {
+                    if (selectedReportType === 'excused_form' && !selectedStudentForReport) {
+                      alert('الرجاء اختيار الطالب أولاً');
+                      return;
+                    }
+                    setTimeout(() => {
+                      window.print();
+                    }, 100);
+                  }}
+                  className="flex-1 py-3 px-4 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-900 transition-all flex items-center justify-center gap-2 shadow-lg"
+                >
+                  <Printer size={18} />
+                  طباعة التقرير
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>
