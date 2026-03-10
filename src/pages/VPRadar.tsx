@@ -248,20 +248,22 @@ const VPRadar: React.FC = () => {
     <div className="max-w-7xl mx-auto p-4 pb-24 space-y-6">
       <style>{`
         @media print {
-          @page { size: A4 portrait; margin: 10mm; }
-          body { font-family: 'Tajawal', 'Cairo', sans-serif; background: white; }
+          @page { size: A4 portrait; margin: 15mm; }
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: white; }
+          body * { visibility: hidden; }
+          #printable-report, #printable-report * { visibility: visible; }
+          #printable-report { position: absolute; left: 0; top: 0; width: 100%; direction: rtl; font-family: 'Tajawal', 'Cairo', sans-serif; }
           .print-table { border-collapse: collapse; width: 100%; border: 1px solid #000; }
           .print-table th, .print-table td { border: 1px solid #000; padding: 4px 8px; font-size: 11pt; text-align: right; color: #000; }
-          .print-table th { background-color: #f3f4f6 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; font-weight: bold; }
-          .print-table tr:nth-child(even) { background-color: #f9fafb !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .print-table tr:nth-child(odd) { background-color: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-table th { background-color: #f3f4f6 !important; font-weight: bold; }
+          .print-table tr:nth-child(even) { background-color: #f9fafb !important; }
+          .print-table tr:nth-child(odd) { background-color: #ffffff !important; }
           .print\\:hidden { display: none !important; }
-          .print-container { display: block !important; width: 100%; }
         }
       `}</style>
       
       {/* Print Views (Only visible when printing) */}
-      <div className="hidden print:block w-full bg-white text-black print-container">
+      <div id="printable-report" className="hidden print:block w-full bg-white text-black">
         {selectedReportType === 'excused_form' && selectedStudentForReport ? (
           <div className="p-4" dir="rtl">
             <div className="flex justify-between items-start mb-8 border-b-2 border-black pb-4">
@@ -271,21 +273,18 @@ const VPRadar: React.FC = () => {
                 <p>المنطقة: إدارة التعليم بمحافظة الخرج</p>
                 <p>المدرسة: ثانوية أم القرى</p>
               </div>
-              <div className="text-center">
-                <img src="https://upload.wikimedia.org/wikipedia/ar/thumb/3/30/Ministry_of_Education_Saudi_Arabia.svg/1200px-Ministry_of_Education_Saudi_Arabia.svg.png" alt="Ministry Logo" className="h-20 mx-auto grayscale" referrerPolicy="no-referrer" />
-              </div>
               <div className="text-left font-bold text-sm leading-relaxed" dir="ltr">
                 <p>Kingdom of Saudi Arabia</p>
                 <p>Ministry of Education</p>
               </div>
             </div>
 
-            <h1 className="text-2xl font-black text-center mb-8 underline underline-offset-8">(نموذج إجراءات الغياب بعذر)</h1>
+            <h1 className="text-2xl font-black text-center mb-8">(نموذج إجراءات الغياب بعذر)</h1>
 
             <div className="mb-8 font-bold text-lg flex flex-wrap gap-8 bg-gray-50 p-4 border border-black rounded-lg print:bg-gray-50 print:border-black">
-              <p>اسم الطالب: <span className="border-b border-black border-dashed px-4">{selectedStudentForReport.name}</span></p>
-              <p>المرحلة: <span className="border-b border-black border-dashed px-4">الثانوية</span></p>
-              <p>الصف: <span className="border-b border-black border-dashed px-4">{selectedStudentForReport.grade} - {selectedStudentForReport.section}</span></p>
+              <p>اسم الطالب: <span className="font-bold">{selectedStudentForReport.name}</span></p>
+              <p>المرحلة: الثانوية</p>
+              <p>الصف: {selectedStudentForReport.grade}</p>
             </div>
 
             <table className="print-table mb-12">
@@ -324,58 +323,62 @@ const VPRadar: React.FC = () => {
             </table>
 
             <div className="flex justify-between items-center mt-16 font-bold text-lg">
-              <p>مدير المدرسة: <span className="border-b border-black border-dashed px-8">{user?.name || 'الإدارة'}</span></p>
-              <p>التوقيع: ........................</p>
-              <p>التاريخ: ..../..../144..هـ</p>
+              <p>مدير المدرسة: .......</p>
+              <p>التوقيع: .......</p>
+              <p>التاريخ: .......</p>
             </div>
           </div>
         ) : (
           <div className="p-4" dir="rtl">
-            <div className="flex justify-between items-start mb-6 border-b-2 border-black pb-4">
+            <div className="grid grid-cols-3 gap-4 mb-6 border-b-2 border-black pb-4">
               <div className="text-right font-bold text-sm leading-relaxed">
                 <p>المملكة العربية السعودية</p>
                 <p>وزارة التعليم</p>
                 <p>إدارة التعليم بمحافظة الخرج</p>
               </div>
-              <div className="text-center">
-                <img src="https://upload.wikimedia.org/wikipedia/ar/thumb/3/30/Ministry_of_Education_Saudi_Arabia.svg/1200px-Ministry_of_Education_Saudi_Arabia.svg.png" alt="Ministry Logo" className="h-16 mx-auto mb-2 grayscale" referrerPolicy="no-referrer" />
-                <h2 className="text-lg font-black mt-2">
+              <div className="text-center flex flex-col items-center justify-center">
+                <h2 className="text-lg font-black underline underline-offset-4">
                   {selectedReportType === 'daily' ? 'تقرير الغياب اليومي' :
                    selectedReportType === 'warnings_3' ? 'تقرير إنذارات الغياب (3 أيام فأكثر)' :
                    'تقرير إنذارات الغياب (5 أيام فأكثر)'}
                 </h2>
-                <p className="text-sm font-bold mt-1">تاريخ: {date}</p>
               </div>
               <div className="text-left font-bold text-sm leading-relaxed">
                 <p>المدرسة: ثانوية أم القرى بالخرج</p>
+                <p>التاريخ: {date}</p>
                 <p>رقم التقرير: {Math.floor(Math.random() * 10000)}</p>
               </div>
             </div>
 
-            <table className="print-table">
+            <table className="print-table mb-12">
               <thead>
                 <tr>
                   <th className="w-10 text-center">م</th>
-                  <th>اسم الطالب</th>
-                  <th className="w-32 text-center">رقم الهوية</th>
+                  <th className="whitespace-nowrap">اسم الطالب الرباعي</th>
+                  <th className="w-32 text-center whitespace-nowrap">رقم الهوية</th>
                   <th className="w-32 text-center">الصف والفصل</th>
-                  <th className="w-32 text-center">عدد أيام الغياب</th>
-                  <th className="w-48">ملاحظات</th>
+                  <th className="w-24 text-center">الغياب</th>
+                  <th className="w-full">ملاحظات</th>
                 </tr>
               </thead>
               <tbody>
                 {getReportStudents().map((student, index) => (
                   <tr key={student.id}>
                     <td className="text-center">{index + 1}</td>
-                    <td className="font-bold">{student.name}</td>
-                    <td className="text-center">{student.national_id || '---'}</td>
+                    <td className="font-bold whitespace-nowrap">{student.name}</td>
+                    <td className="text-center whitespace-nowrap">{student.national_id || '---'}</td>
                     <td className="text-center">{student.grade} - {student.section}</td>
                     <td className="text-center font-bold">{student.total_absences || 0}</td>
-                    <td></td>
+                    <td className="w-full"></td>
                   </tr>
                 ))}
               </tbody>
             </table>
+
+            <div className="flex justify-between items-center mt-16 font-bold text-lg">
+              <p>وكيل شؤون الطلاب: {user?.name || 'الإدارة'} / التوقيع....</p>
+              <p>مدير المدرسة: ....... / التوقيع....</p>
+            </div>
           </div>
         )}
       </div>
