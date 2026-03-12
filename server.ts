@@ -171,6 +171,13 @@ async function initDb() {
       )
     `;
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS system_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT
+      )
+    `;
+
     try {
       await sql`ALTER TABLE attendance_records ADD COLUMN IF NOT EXISTS excuse_reason TEXT`;
     } catch (e) {
@@ -366,24 +373,58 @@ async function startServer() {
   app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
   // API Routes
-  app.post("/api/whatsapp/send", async (req, res) => {
-    const { phoneNumber, studentName } = req.body;
-    const INSTANCE_ID = process.env.ULTRAMSG_INSTANCE_ID || "YOUR_INSTANCE_ID";
-    const TOKEN = process.env.ULTRAMSG_TOKEN || "YOUR_TOKEN";
-
+  app.get("/api/settings", async (req, res) => {
     try {
-      const payload = {
-        token: TOKEN,
-        to: phoneNumber,
-        body: `المكرم ولي أمر الطالب: *${studentName}*\nنفيدكم بأن ابنكم غائب هذا اليوم، نأمل التواصل مع إدارة المدرسة أو تبرير الغياب.\n\n*إدارة ثانوية أم القرى*`
-      };
+      const settings = await sql`SELECT key, value FROM system_settings`;
+      const settingsMap = settings.reduce((acc: any, row: any) => {
+        acc[row.key] = row.value;
+        return acc;
+      }, {});
+      res.json(settingsMap);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch settings" });
+    }
+  });
 
-      const response = await fetch(`https://api.ultramsg.com/${INSTANCE_ID}/messages/chat`, {
+  app.post("/api/settings", async (req, res) => {
+    const { settings } = req.body;
+    try {
+      for (const [key, value] of Object.entries(settings)) {
+        await sql`
+          INSERT INTO system_settings (key, value)
+          VALUES (${key}, ${value as string})
+          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+        `;
+      }
+      res.json({ success: true });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to save settings" });
+    }
+  });
+
+  app.post("/api/whatsapp/send", async (req, res) => {
+    const { phoneNumber, studentName, instanceId, token } = req.body;
+    
+    try {
+      if (!instanceId || !token) {
+        return res.status(400).json({ success: false, code: 'MISSING_WHATSAPP_CREDENTIALS', message: "لم يتم ربط بوابة الواتساب. يرجى التوجه إلى (إعدادات الرسائل) وإدخال مفاتيح الربط أولاً." });
+      }
+
+      const currentDate = new Date().toLocaleDateString('ar-SA');
+      const messageBody = `ابنكم ${studentName} غائب اليوم ، ${currentDate} ، ثانوية أم القرى`;
+
+      const response = await fetch(`https://api.ultramsg.com/${instanceId}/messages/chat`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/x-www-form-urlencoded'
         },
-        body: JSON.stringify(payload)
+        body: new URLSearchParams({
+          token: token,
+          to: phoneNumber,
+          body: messageBody
+        })
       });
 
       if (!response.ok) {
@@ -395,6 +436,47 @@ async function startServer() {
     } catch (error: any) {
       console.error("[WHATSAPP] Error:", error);
       res.status(500).json({ success: false, message: error.message || "Failed to send WhatsApp message" });
+    }
+  });
+
+  app.get("/api/whatsapp/status", async (req, res) => {
+    const { instanceId, token } = req.query;
+    if (!instanceId || !token) {
+      return res.status(400).json({ error: "Missing instanceId or token" });
+    }
+    try {
+      const response = await fetch(`https://api.ultramsg.com/${instanceId}/instance/status?token=${token}`);
+      if (!response.ok) throw new Error(`Ultramsg API error: ${response.statusText}`);
+      const data = await response.json();
+      res.json(data);
+    } catch (error: any) {
+      console.error("[WHATSAPP STATUS] Error:", error);
+      res.status(500).json({ error: "Failed to fetch status" });
+    }
+  });
+
+  app.get("/api/whatsapp/qr", async (req, res) => {
+    const { instanceId, token } = req.query;
+    if (!instanceId || !token) {
+      return res.status(400).json({ error: "Missing instanceId or token" });
+    }
+    try {
+      const response = await fetch(`https://api.ultramsg.com/${instanceId}/instance/qr?token=${token}`);
+      if (!response.ok) throw new Error(`Ultramsg API error: ${response.statusText}`);
+      
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const data = await response.json();
+        res.json(data);
+      } else {
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        const base64 = buffer.toString('base64');
+        res.json({ qrCode: `data:${contentType || 'image/png'};base64,${base64}` });
+      }
+    } catch (error: any) {
+      console.error("[WHATSAPP QR] Error:", error);
+      res.status(500).json({ error: "Failed to fetch QR code" });
     }
   });
 
@@ -1468,45 +1550,6 @@ async function startServer() {
     }
   });
 
-  app.post("/api/admin/import-national-ids", async (req, res) => {
-    const { base64 } = req.body;
-    if (!base64) return res.status(400).json({ error: "No file data provided" });
-
-    try {
-      const buffer = Buffer.from(base64.split(",")[1], 'base64');
-      const workbook = XLSX.read(buffer, { type: 'buffer' });
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-      const data = XLSX.utils.sheet_to_json(worksheet) as any[];
-
-      let updatedCount = 0;
-      let notFoundCount = 0;
-
-      for (const row of data) {
-        const name = row["الاسم"] || row["Name"];
-        const nationalId = row["رقم الهوية"] || row["National ID"] || row["ID"];
-
-        if (name && nationalId) {
-          const result = await sql`UPDATE students SET national_id = ${nationalId.toString()} WHERE name = ${name}`;
-          // result in neon-serverless doesn't return rowCount easily in some versions, 
-          // but we can assume if it didn't throw, it tried.
-          // To be more precise, we could check if student exists first.
-          const check = await sql`SELECT id FROM students WHERE name = ${name}`;
-          if (check.length > 0) {
-            updatedCount++;
-          } else {
-            notFoundCount++;
-          }
-        }
-      }
-
-      res.json({ success: true, updatedCount, notFoundCount });
-    } catch (err) {
-      console.error("Import error:", err);
-      res.status(500).json({ error: "Failed to process Excel file" });
-    }
-  });
-
   app.post("/api/admin/users/:id/delete", async (req, res) => {
     const userId = req.params.id;
     console.log(`[ADMIN] Request to delete user ID: ${userId}`);
@@ -1531,6 +1574,58 @@ async function startServer() {
     } catch (err) {
       console.error(`[ADMIN] User deletion failed for ID ${userId}:`, err);
       res.status(500).json({ success: false, error: "فشل حذف المستخدم من قاعدة البيانات" });
+    }
+  });
+
+  app.post("/api/admin/database/students/delete", async (req, res) => {
+    try {
+      console.log(`[ADMIN] Request to delete ALL students`);
+      // Delete all related records first
+      await sql`DELETE FROM notifications`;
+      await sql`DELETE FROM referral_logs`;
+      await sql`DELETE FROM referrals`;
+      await sql`DELETE FROM student_score_logs`;
+      await sql`DELETE FROM attendance_records`;
+      // Finally delete all students
+      await sql`DELETE FROM students`;
+      
+      console.log(`- Successfully deleted all students and related records`);
+      res.json({ success: true });
+    } catch (err) {
+      console.error(`[ADMIN] Failed to delete all students:`, err);
+      res.status(500).json({ success: false, error: "فشل حذف قاعدة بيانات الطلاب" });
+    }
+  });
+
+  app.post("/api/admin/database/users/delete", async (req, res) => {
+    try {
+      console.log(`[ADMIN] Request to delete ALL users except admins`);
+      // Get all non-admin users
+      const nonAdmins = await sql`SELECT id FROM users WHERE role != 'admin'`;
+      if (nonAdmins.length > 0) {
+        const userIds = nonAdmins.map((u: any) => u.id);
+        
+        // Set references to NULL
+        await sql`UPDATE referrals SET teacher_id = NULL WHERE teacher_id = ANY(${userIds})`;
+        await sql`UPDATE referrals SET assigned_to_id = NULL WHERE assigned_to_id = ANY(${userIds})`;
+        await sql`UPDATE referral_logs SET user_id = NULL WHERE user_id = ANY(${userIds})`;
+        await sql`UPDATE notifications SET sender_id = NULL WHERE sender_id = ANY(${userIds})`;
+        await sql`UPDATE notifications SET recipient_id = NULL WHERE recipient_id = ANY(${userIds})`;
+        await sql`UPDATE attendance_records SET teacher_id = NULL WHERE teacher_id = ANY(${userIds})`;
+        await sql`UPDATE student_score_logs SET created_by_user_id = NULL WHERE created_by_user_id = ANY(${userIds})`;
+        
+        // Delete user grades
+        await sql`DELETE FROM user_grades WHERE user_id = ANY(${userIds})`;
+        
+        // Delete users
+        await sql`DELETE FROM users WHERE id = ANY(${userIds})`;
+      }
+      
+      console.log(`- Successfully deleted all non-admin users`);
+      res.json({ success: true });
+    } catch (err) {
+      console.error(`[ADMIN] Failed to delete all users:`, err);
+      res.status(500).json({ success: false, error: "فشل حذف المستخدمين" });
     }
   });
 
@@ -1695,6 +1790,48 @@ async function startServer() {
     }
   });
 
+  app.post("/api/admin/classes/delete", async (req, res) => {
+    const { grade, section } = req.body;
+    if (!grade || !section) return res.status(400).json({ error: "Grade and section are required" });
+
+    try {
+      console.log(`[ADMIN] Request to delete entire class: ${grade} - ${section}`);
+      
+      // 1. Find all students in this class
+      const studentsInClass = await sql`SELECT id FROM students WHERE grade = ${grade} AND section = ${section}`;
+      
+      if (studentsInClass.length > 0) {
+        const studentIds = studentsInClass.map((s: any) => s.id);
+        
+        // 2. Find all referrals for these students
+        const referrals = await sql`SELECT id FROM referrals WHERE student_id = ANY(${studentIds})`;
+        
+        if (referrals.length > 0) {
+          const refIds = referrals.map((r: any) => r.id);
+          // 3. Delete notifications for these referrals
+          await sql`DELETE FROM notifications WHERE referral_id = ANY(${refIds})`;
+          // 4. Delete logs for these referrals
+          await sql`DELETE FROM referral_logs WHERE referral_id = ANY(${refIds})`;
+          // 5. Delete the referrals
+          await sql`DELETE FROM referrals WHERE id = ANY(${refIds})`;
+        }
+        
+        // 5. Delete the students' score logs and attendance records
+        await sql`DELETE FROM student_score_logs WHERE student_id = ANY(${studentIds})`;
+        await sql`DELETE FROM attendance_records WHERE student_id = ANY(${studentIds})`;
+
+        // 6. Delete the students
+        await sql`DELETE FROM students WHERE id = ANY(${studentIds})`;
+      }
+      
+      console.log(`- Successfully deleted class ${grade} - ${section}`);
+      res.json({ success: true });
+    } catch (err) {
+      console.error(`[ADMIN] Failed to delete class ${grade} - ${section}:`, err);
+      res.status(500).json({ error: "فشل حذف الفصل. يرجى المحاولة مرة أخرى." });
+    }
+  });
+
   app.post("/api/admin/grades/delete", async (req, res) => {
     const { grade } = req.body;
     if (!grade) return res.status(400).json({ error: "Grade is required" });
@@ -1834,6 +1971,7 @@ async function startServer() {
           s.name, 
           s.grade,
           s.section,
+          s.parent_phone,
           COALESCE(ar.status, 'حاضر') as status,
           ar.is_excused,
           ar.excuse_reason,
@@ -1941,7 +2079,7 @@ async function startServer() {
       const submitterName = isSubmitted ? existingRecords[0].teacher_name : null;
 
       const students = await sql`
-        SELECT id, name, national_id, grade, section
+        SELECT id, name, national_id, grade, section, parent_phone
         FROM students
         WHERE grade = ${grade as string} AND section = ${section as string}
         ORDER BY name ASC
@@ -2134,9 +2272,11 @@ async function startServer() {
       if (grade && section) {
         reportData = await sql`
           SELECT 
+            s.id,
             s.name as student_name,
             s.grade,
             s.section,
+            s.parent_phone,
             ar.status,
             ar.period
           FROM attendance_records ar
@@ -2150,9 +2290,11 @@ async function startServer() {
       } else {
         reportData = await sql`
           SELECT 
+            s.id,
             s.name as student_name,
             s.grade,
             s.section,
+            s.parent_phone,
             ar.status,
             ar.period
           FROM attendance_records ar

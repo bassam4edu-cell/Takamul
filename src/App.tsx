@@ -15,6 +15,7 @@ import Settings from './pages/Settings';
 import Notifications from './pages/Notifications';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminReferrals from './pages/AdminReferrals';
+import MessageSettings from './pages/MessageSettings';
 import PrincipalDashboard from './pages/PrincipalDashboard';
 import BehavioralViolations from './pages/BehavioralViolations';
 import PrintTemplate from './pages/PrintTemplate';
@@ -145,6 +146,11 @@ const App: React.FC = () => {
             <Route path="admin-referrals" element={
               <ProtectedRoute allowedRoles={['admin']}>
                 <AdminReferrals />
+              </ProtectedRoute>
+            } />
+            <Route path="message-settings" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <MessageSettings />
               </ProtectedRoute>
             } />
           </Route>

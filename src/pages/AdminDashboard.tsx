@@ -32,9 +32,7 @@ const AdminDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
-  const [importingNationalIds, setImportingNationalIds] = useState(false);
   const [importSuccess, setImportSuccess] = useState<number | null>(null);
-  const [importNationalIdsResult, setImportNationalIdsResult] = useState<{ updated: number, notFound: number } | null>(null);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [editingPasswordUserId, setEditingPasswordUserId] = useState<number | null>(null);
   const [newPassword, setNewPassword] = useState('');
@@ -218,6 +216,39 @@ const AdminDashboard: React.FC = () => {
   const [deletingUserId, setDeletingUserId] = useState<number | null>(null);
   const [deletingStudentId, setDeletingStudentId] = useState<number | null>(null);
   const [deletingGrade, setDeletingGrade] = useState<string | null>(null);
+  const [deletingSection, setDeletingSection] = useState<string | null>(null);
+  const [deletingAllStudents, setDeletingAllStudents] = useState(false);
+  const [deletingAllUsers, setDeletingAllUsers] = useState(false);
+
+  const deleteAllStudents = async () => {
+    setDeletingAllStudents(false);
+    try {
+      const res = await fetch('/api/admin/database/students/delete', { method: 'POST' });
+      if (res.ok) {
+        fetchStudents();
+      } else {
+        alert('فشل حذف قاعدة بيانات الطلاب');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('حدث خطأ أثناء الاتصال بالخادم');
+    }
+  };
+
+  const deleteAllUsers = async () => {
+    setDeletingAllUsers(false);
+    try {
+      const res = await fetch('/api/admin/database/users/delete', { method: 'POST' });
+      if (res.ok) {
+        fetchUsers();
+      } else {
+        alert('فشل حذف المستخدمين');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('حدث خطأ أثناء الاتصال بالخادم');
+    }
+  };
 
   const deleteUser = (userId: number) => {
     setDeletingUserId(null);
@@ -259,6 +290,28 @@ const AdminDashboard: React.FC = () => {
       }
     } catch (err) {
       alert('حدث خطأ أثناء حذف الصف');
+    }
+  };
+
+  const deleteSection = async (grade: string, section: string) => {
+    setDeletingSection(null);
+    try {
+      const res = await fetch('/api/admin/classes/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ grade, section }),
+      });
+      if (res.ok) {
+        fetchStudents();
+        fetchGrades();
+        fetchUsers();
+        setSelectedSectionFilter('');
+      } else {
+        const data = await res.json().catch(() => ({ error: 'فشل حذف الفصل' }));
+        alert(data.error || 'فشل حذف الفصل');
+      }
+    } catch (err) {
+      alert('حدث خطأ أثناء حذف الفصل');
     }
   };
 
@@ -573,40 +626,6 @@ const AdminDashboard: React.FC = () => {
     reader.readAsArrayBuffer(file);
   };
 
-  const handleNationalIdImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setImportingNationalIds(true);
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      try {
-        const base64 = evt.target?.result as string;
-        const res = await fetch('/api/admin/import-national-ids', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ base64 }),
-        });
-        
-        const result = await res.json().catch(() => ({ success: false, error: 'فشل معالجة الملف' }));
-        if (result.success) {
-          setImportNationalIdsResult({ updated: result.updatedCount, notFound: result.notFoundCount });
-          fetchStudents();
-          setTimeout(() => setImportNationalIdsResult(null), 10000);
-        } else {
-          alert('فشل استيراد البيانات: ' + (result.error || 'خطأ غير معروف'));
-        }
-      } catch (err) {
-        console.error('File upload error:', err);
-        alert('حدث خطأ أثناء قراءة الملف');
-      } finally {
-        setImportingNationalIds(false);
-        e.target.value = '';
-      }
-    };
-    reader.readAsDataURL(file);
-  };
-
   const getRoleLabel = (role: string) => {
     switch (role) {
       case 'teacher': return 'معلم';
@@ -809,7 +828,7 @@ const AdminDashboard: React.FC = () => {
                     <span>إضافة طالب</span>
                   </button>
 
-                  {deletingGrade === selectedGradeFilter && selectedGradeFilter ? (
+                  {deletingGrade === selectedGradeFilter && selectedGradeFilter && !selectedSectionFilter ? (
                     <div className="flex items-center gap-3 bg-red-50 px-4 py-2 rounded-2xl border border-red-100 animate-pulse">
                       <span className="text-xs font-extrabold text-red-600">حذف الصف بجميع طلابه؟</span>
                       <button 
@@ -826,7 +845,7 @@ const AdminDashboard: React.FC = () => {
                       </button>
                     </div>
                   ) : (
-                    selectedGradeFilter && (
+                    selectedGradeFilter && !selectedSectionFilter && (
                       <button 
                         onClick={() => setDeletingGrade(selectedGradeFilter)}
                         className="flex items-center gap-2 px-4 py-3 bg-red-50 text-red-600 rounded-2xl text-xs font-extrabold hover:bg-red-100 transition-all border border-red-100"
@@ -834,6 +853,35 @@ const AdminDashboard: React.FC = () => {
                       >
                         <Trash2 size={16} />
                         <span>حذف الصف</span>
+                      </button>
+                    )
+                  )}
+
+                  {deletingSection === selectedSectionFilter && selectedSectionFilter && selectedGradeFilter ? (
+                    <div className="flex items-center gap-3 bg-red-50 px-4 py-2 rounded-2xl border border-red-100 animate-pulse">
+                      <span className="text-xs font-extrabold text-red-600">حذف الفصل بجميع طلابه؟</span>
+                      <button 
+                        onClick={() => deleteSection(selectedGradeFilter, selectedSectionFilter)}
+                        className="bg-red-600 text-white px-4 py-1.5 rounded-xl text-xs font-extrabold hover:bg-red-700 shadow-sm"
+                      >
+                        نعم
+                      </button>
+                      <button 
+                        onClick={() => setDeletingSection(null)}
+                        className="bg-slate-200 text-slate-600 px-4 py-1.5 rounded-xl text-xs font-extrabold hover:bg-slate-300"
+                      >
+                        لا
+                      </button>
+                    </div>
+                  ) : (
+                    selectedSectionFilter && selectedGradeFilter && (
+                      <button 
+                        onClick={() => setDeletingSection(selectedSectionFilter)}
+                        className="flex items-center gap-2 px-4 py-3 bg-red-50 text-red-600 rounded-2xl text-xs font-extrabold hover:bg-red-100 transition-all border border-red-100"
+                        title="حذف هذا الفصل بالكامل"
+                      >
+                        <Trash2 size={16} />
+                        <span>حذف الفصل</span>
                       </button>
                     )
                   )}
@@ -1160,44 +1208,76 @@ const AdminDashboard: React.FC = () => {
           <div className="space-y-8">
             <div className="sts-card p-10 space-y-6 border-none shadow-2xl shadow-slate-200/50">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center">
-                  <Shield size={24} />
+                <div className="w-12 h-12 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center">
+                  <Trash2 size={24} />
                 </div>
-                <h2 className="text-xl font-extrabold text-slate-800">تحديث الهويات</h2>
+                <h2 className="text-xl font-extrabold text-slate-800">إدارة قواعد البيانات</h2>
               </div>
               <p className="text-sm text-slate-500 font-bold leading-relaxed">
-                تحديث أرقام الهوية للطلاب الحاليين بناءً على الاسم. استخدم هذا الخيار فقط عند الحاجة لتصحيح الهويات.
+                استخدم هذه الخيارات بحذر شديد. حذف قواعد البيانات إجراء لا يمكن التراجع عنه وسيؤدي إلى مسح جميع السجلات المرتبطة.
               </p>
-              <div className="relative">
-                <input 
-                  type="file" 
-                  accept=".xlsx, .xls"
-                  onChange={handleNationalIdImport}
-                  className="hidden" 
-                  id="id-upload"
-                  disabled={importingNationalIds}
-                />
-                <label 
-                  htmlFor="id-upload"
-                  className={`w-full flex items-center justify-center gap-4 p-6 border-2 border-dashed border-slate-200 rounded-3xl cursor-pointer hover:bg-slate-50 hover:border-amber-500/50 transition-all ${importingNationalIds ? 'opacity-50 cursor-not-allowed' : ''}`}
-                >
-                  <Upload size={20} className="text-amber-600" />
-                  <span className="font-extrabold text-slate-700">{importingNationalIds ? 'جاري التحديث...' : 'رفع ملف الهويات'}</span>
-                </label>
-              </div>
-              {importNationalIdsResult && (
-                <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <CheckCircle2 className="text-amber-600" size={18} />
-                    <span className="text-xs font-black text-amber-800">تم تحديث {importNationalIdsResult.updated} طالب.</span>
-                  </div>
-                  {importNationalIdsResult.notFound > 0 && (
-                    <span className="text-[10px] font-black text-red-600 bg-red-50 px-3 py-1 rounded-lg">
-                      {importNationalIdsResult.notFound} لم يتم العثور عليهم
-                    </span>
+              
+              <div className="space-y-4 pt-4 border-t border-slate-100">
+                <div className="flex flex-col gap-3">
+                  {deletingAllStudents ? (
+                    <div className="flex items-center justify-between bg-red-50 p-4 rounded-2xl border border-red-100 animate-pulse">
+                      <span className="text-sm font-extrabold text-red-600">هل أنت متأكد من حذف جميع الطلاب؟</span>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={deleteAllStudents}
+                          className="bg-red-600 text-white px-4 py-2 rounded-xl text-xs font-extrabold hover:bg-red-700 shadow-sm"
+                        >
+                          نعم، احذف
+                        </button>
+                        <button 
+                          onClick={() => setDeletingAllStudents(false)}
+                          className="bg-slate-200 text-slate-600 px-4 py-2 rounded-xl text-xs font-extrabold hover:bg-slate-300"
+                        >
+                          إلغاء
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={() => setDeletingAllStudents(true)}
+                      className="w-full flex items-center justify-center gap-3 p-4 bg-white border-2 border-red-100 text-red-600 rounded-2xl font-extrabold hover:bg-red-50 transition-all"
+                    >
+                      <Trash2 size={18} />
+                      <span>حذف قاعدة بيانات الطلاب بالكامل</span>
+                    </button>
                   )}
                 </div>
-              )}
+
+                <div className="flex flex-col gap-3">
+                  {deletingAllUsers ? (
+                    <div className="flex items-center justify-between bg-red-50 p-4 rounded-2xl border border-red-100 animate-pulse">
+                      <span className="text-sm font-extrabold text-red-600">هل أنت متأكد من حذف جميع المستخدمين؟</span>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={deleteAllUsers}
+                          className="bg-red-600 text-white px-4 py-2 rounded-xl text-xs font-extrabold hover:bg-red-700 shadow-sm"
+                        >
+                          نعم، احذف
+                        </button>
+                        <button 
+                          onClick={() => setDeletingAllUsers(false)}
+                          className="bg-slate-200 text-slate-600 px-4 py-2 rounded-xl text-xs font-extrabold hover:bg-slate-300"
+                        >
+                          إلغاء
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={() => setDeletingAllUsers(true)}
+                      className="w-full flex items-center justify-center gap-3 p-4 bg-white border-2 border-red-100 text-red-600 rounded-2xl font-extrabold hover:bg-red-50 transition-all"
+                    >
+                      <Users size={18} />
+                      <span>حذف جميع المستخدمين (باستثناء الإدارة)</span>
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
 
             <div className="bg-slate-900 p-10 rounded-[3rem] text-white space-y-8 relative overflow-hidden shadow-2xl shadow-slate-900/20">

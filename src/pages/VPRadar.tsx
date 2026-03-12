@@ -26,6 +26,7 @@ const VPRadar: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [isSendingBulk, setIsSendingBulk] = useState(false);
 
   // Smart Dashboard States
   const [hasSearched, setHasSearched] = useState(false);
@@ -252,46 +253,98 @@ const VPRadar: React.FC = () => {
 
   const sendWhatsAppMessage = async (phoneNumber: string, studentName: string) => {
     try {
+      const instanceId = localStorage.getItem('ultramsg_instance_id');
+      const token = localStorage.getItem('ultramsg_token');
+
+      if (!instanceId || !token) {
+        return { 
+          success: false, 
+          code: 'MISSING_WHATSAPP_CREDENTIALS', 
+          message: 'بيانات الربط مفقودة. يرجى إعداد خدمة الواتساب من شاشة إعدادات الرسائل.' 
+        };
+      }
+
       const response = await fetch('/api/whatsapp/send', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ phoneNumber, studentName })
+        body: JSON.stringify({ phoneNumber, studentName, instanceId, token })
       });
       
+      const data = await response.json();
+      
       if (!response.ok) {
+        if (data.code === 'MISSING_WHATSAPP_CREDENTIALS') {
+          return { success: false, code: data.code, message: data.message };
+        }
         throw new Error('Failed to send WhatsApp message');
       }
+      return { success: true };
     } catch (error) {
       console.error("Failed to send WhatsApp message", error);
-      // We don't throw here to prevent the bulk loop from breaking, 
-      // but in a real app you might want to track failures.
+      return { success: false, message: 'حدث خطأ أثناء الإرسال' };
     }
   };
 
   const handleSendWhatsApp = async (student: any) => {
-    // Assuming student has a phone number, using a placeholder if not
-    const phoneNumber = student.parent_phone || "+966500000000"; 
-    alert(`جاري إرسال رسالة واتساب لولي أمر الطالب ${student.name}...`);
-    await sendWhatsAppMessage(phoneNumber, student.name);
+    if (!student.parent_phone || student.parent_phone.trim() === '') {
+      alert('رقم الجوال غير مسجل لهذا الطالب');
+      return;
+    }
+    
+    // Show loading state or alert
+    const result = await sendWhatsAppMessage(student.parent_phone, student.name);
+    
+    if (!result.success) {
+      if (result.code === 'MISSING_WHATSAPP_CREDENTIALS') {
+        alert(`⚠️ تعذر الإرسال: ${result.message}`);
+      } else {
+        alert('حدث خطأ أثناء الإرسال.');
+      }
+      return;
+    }
+    
     alert(`تم إرسال رسالة واتساب لولي أمر الطالب بنجاح.`);
   };
 
   const handleBulkWhatsApp = async () => {
     const absentStudents = filteredStudents.filter(s => attendance[s.id] === 'غائب');
-    if (absentStudents.length === 0) return;
+    const validStudents = absentStudents.filter(s => s.parent_phone && s.parent_phone.trim() !== '');
+    const skippedCount = absentStudents.length - validStudents.length;
 
-    alert(`جاري إرسال رسائل الواتساب...`);
+    if (validStudents.length === 0) {
+      alert(`لا يوجد طلاب غائبين بأرقام جوال مسجلة.`);
+      return;
+    }
+
+    setIsSendingBulk(true);
+    let sentCount = 0;
+    let hasCredentialError = false;
     
-    for (const student of absentStudents) {
-      const phoneNumber = student.parent_phone || "+966500000000";
-      await sendWhatsAppMessage(phoneNumber, student.name);
+    for (const student of validStudents) {
+      const result = await sendWhatsAppMessage(student.parent_phone, student.name);
+      
+      if (!result.success) {
+        if (result.code === 'MISSING_WHATSAPP_CREDENTIALS') {
+          alert(`⚠️ تعذر الإرسال: ${result.message}`);
+          hasCredentialError = true;
+          break; // Stop the loop
+        }
+        // Continue to next student if it's a normal error
+        continue;
+      }
+      
+      sentCount++;
       // Delay of 2000ms between messages to prevent bans
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
     
-    alert(`تم الإرسال بنجاح.`);
+    setIsSendingBulk(false);
+    
+    if (!hasCredentialError) {
+      alert(`تم إرسال ${sentCount} رسالة بنجاح، وتخطي ${skippedCount} طالب لعدم وجود رقم.`);
+    }
   };
 
   // KPIs
@@ -727,10 +780,11 @@ const VPRadar: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <button
                     onClick={handleBulkWhatsApp}
-                    className="w-full bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-200 rounded-2xl py-4 px-6 text-sm font-black flex items-center justify-center gap-3 transition-all shadow-sm"
+                    disabled={isSendingBulk}
+                    className={`w-full bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-200 rounded-2xl py-4 px-6 text-sm font-black flex items-center justify-center gap-3 transition-all shadow-sm ${isSendingBulk ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     <MessageSquare size={20} />
-                    إرسال واتساب لجميع الغائبين المعروضين
+                    {isSendingBulk ? 'جاري الإرسال...' : 'إرسال واتساب لجميع الغائبين المعروضين'}
                   </button>
                   {(() => {
                     const absentStudents = filteredStudents.filter(s => attendance[s.id] === 'غائب');
@@ -891,8 +945,9 @@ const VPRadar: React.FC = () => {
                     {isAbsent && (
                       <button
                         onClick={() => handleSendWhatsApp(student)}
-                        className="flex-1 sm:flex-none w-full sm:w-auto px-4 h-12 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 flex items-center justify-center gap-2 transition-all shadow-sm font-bold text-sm"
-                        title="إرسال واتساب لولي الأمر"
+                        disabled={!student.parent_phone || student.parent_phone.trim() === ''}
+                        className={`flex-1 sm:flex-none w-full sm:w-auto px-4 h-12 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 flex items-center justify-center gap-2 transition-all shadow-sm font-bold text-sm ${(!student.parent_phone || student.parent_phone.trim() === '') ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        title={(!student.parent_phone || student.parent_phone.trim() === '') ? '⚠️ رقم الجوال غير مسجل' : 'إرسال واتساب لولي الأمر'}
                       >
                         <MessageSquare size={18} />
                         إرسال واتساب 💬

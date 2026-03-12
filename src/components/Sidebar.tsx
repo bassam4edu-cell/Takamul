@@ -13,7 +13,8 @@ import {
   BarChart3,
   UserCircle,
   Bell,
-  FileText
+  FileText,
+  MessageSquare
 } from 'lucide-react';
 import { useAuth } from '../App';
 import { clsx, type ClassValue } from 'clsx';
@@ -68,6 +69,12 @@ const Sidebar: React.FC = () => {
       title: 'إدارة التحويلات', 
       path: '/dashboard/admin-referrals', 
       icon: ClipboardList,
+      roles: ['admin']
+    },
+    { 
+      title: 'إعدادات الرسائل', 
+      path: '/dashboard/message-settings', 
+      icon: MessageSquare,
       roles: ['admin']
     },
     { 

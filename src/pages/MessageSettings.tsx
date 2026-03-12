@@ -1,0 +1,319 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useAuth } from '../App';
+import { Save, Eye, EyeOff, MessageSquare, ShieldAlert, CheckCircle2, QrCode, RefreshCw, Trash2 } from 'lucide-react';
+import { motion } from 'framer-motion';
+
+const MessageSettings: React.FC = () => {
+  const { user } = useAuth();
+  const [instanceId, setInstanceId] = useState('');
+  const [token, setToken] = useState('');
+  const [showToken, setShowToken] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [showConfirmClear, setShowConfirmClear] = useState(false);
+
+  // WhatsApp Connection State
+  const [waStatus, setWaStatus] = useState<string | null>(null);
+  const [waQR, setWaQR] = useState<string | null>(null);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    // Load from localStorage on mount
+    const savedInstanceId = localStorage.getItem('ultramsg_instance_id');
+    const savedToken = localStorage.getItem('ultramsg_token');
+    
+    if (savedInstanceId) setInstanceId(savedInstanceId);
+    if (savedToken) setToken(savedToken);
+  }, []);
+
+  const checkWhatsAppStatus = async (currentInstanceId: string, currentToken: string) => {
+    if (!currentInstanceId || !currentToken) return;
+    
+    try {
+      const res = await fetch(`/api/whatsapp/status?instanceId=${currentInstanceId}&token=${currentToken}`);
+      if (res.ok) {
+        const data = await res.json();
+        const status = data.status?.state || data.state || 'disconnected';
+        setWaStatus(status);
+        
+        if (status === 'connected' || status === 'authenticated') {
+          setWaQR(null); // Clear QR if connected
+        } else if (status === 'disconnected' || status === 'unauthenticated') {
+          fetchWhatsAppQR(currentInstanceId, currentToken);
+        }
+      }
+    } catch (err) {
+      console.error("Error checking WhatsApp status:", err);
+    }
+  };
+
+  const fetchWhatsAppQR = async (currentInstanceId: string, currentToken: string) => {
+    try {
+      const res = await fetch(`/api/whatsapp/qr?instanceId=${currentInstanceId}&token=${currentToken}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.qrCode) {
+          setWaQR(data.qrCode);
+        } else if (data.qr) {
+          setWaQR(data.qr);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching WhatsApp QR:", err);
+    }
+  };
+
+  // Start polling when instanceId and token are available in localStorage
+  useEffect(() => {
+    const savedInstanceId = localStorage.getItem('ultramsg_instance_id');
+    const savedToken = localStorage.getItem('ultramsg_token');
+
+    if (savedInstanceId && savedToken) {
+      // Initial check
+      checkWhatsAppStatus(savedInstanceId, savedToken);
+      
+      // Setup polling every 5 seconds
+      pollingIntervalRef.current = setInterval(() => {
+        checkWhatsAppStatus(savedInstanceId, savedToken);
+      }, 5000);
+    }
+
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, [success]); // Re-run effect when success changes (after saving)
+
+  const handleSave = () => {
+    setSaving(true);
+    setSuccess(false);
+    
+    localStorage.setItem('ultramsg_instance_id', instanceId);
+    localStorage.setItem('ultramsg_token', token);
+    
+    setTimeout(() => {
+      setSaving(false);
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+      checkWhatsAppStatus(instanceId, token);
+    }, 500);
+  };
+
+  const handleClearData = () => {
+    setShowConfirmClear(true);
+  };
+
+  const confirmClearData = () => {
+    localStorage.removeItem('ultramsg_instance_id');
+    localStorage.removeItem('ultramsg_token');
+    setInstanceId('');
+    setToken('');
+    setWaStatus(null);
+    setWaQR(null);
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+    }
+    setShowConfirmClear(false);
+  };
+
+  if (user?.role !== 'admin') {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-slate-500">
+        <ShieldAlert size={48} className="mb-4 text-red-400" />
+        <h2 className="text-2xl font-bold">غير مصرح لك بالدخول</h2>
+        <p>هذه الصفحة مخصصة لمدير النظام فقط.</p>
+      </div>
+    );
+  }
+
+  const isConnected = waStatus === 'connected' || waStatus === 'authenticated';
+  const hasSavedData = !!localStorage.getItem('ultramsg_instance_id');
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-8 pb-20">
+      <div className="flex items-center gap-3 mb-8">
+        <div className="w-12 h-12 bg-slate-800 rounded-2xl flex items-center justify-center shadow-lg">
+          <MessageSquare className="text-white w-6 h-6" />
+        </div>
+        <div>
+          <h1 className="text-3xl font-black text-slate-800">إعدادات الرسائل</h1>
+          <p className="text-slate-500 font-medium mt-1">إدارة الربط التقني والخدمات الخارجية</p>
+        </div>
+      </div>
+
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden"
+      >
+        <div className="p-6 md:p-8 border-b border-slate-100 bg-slate-50/50">
+          <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+            <span className="w-2 h-6 bg-emerald-500 rounded-full inline-block"></span>
+            بوابة إرسال الواتساب (Ultramsg)
+          </h2>
+          <p className="text-slate-500 mt-2 text-sm">
+            قم بإدخال بيانات الربط الخاصة بخدمة Ultramsg لتفعيل إرسال الرسائل التلقائية لأولياء الأمور.
+          </p>
+        </div>
+
+        <div className="p-6 md:p-8 space-y-6">
+          <div className="space-y-2">
+            <label className="block text-sm font-bold text-slate-700">رقم الجلسة (Instance ID)</label>
+            <input
+              type="text"
+              value={instanceId}
+              onChange={(e) => setInstanceId(e.target.value)}
+              placeholder="مثال: instance12345"
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all bg-slate-50 focus:bg-white text-left"
+              dir="ltr"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-sm font-bold text-slate-700">رمز الأمان (Token)</label>
+            <div className="relative">
+              <input
+                type={showToken ? "text" : "password"}
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                placeholder="أدخل رمز الأمان الخاص بالبوابة"
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all bg-slate-50 focus:bg-white text-left pr-12"
+                dir="ltr"
+              />
+              <button
+                type="button"
+                onClick={() => setShowToken(!showToken)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+              >
+                {showToken ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
+            </div>
+          </div>
+
+          <div className="pt-4 flex items-center gap-4 flex-wrap">
+            <button
+              onClick={handleSave}
+              disabled={saving || !instanceId || !token}
+              className="px-8 py-3 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold flex items-center gap-2 transition-all shadow-md disabled:opacity-70"
+            >
+              <Save size={20} />
+              {saving ? 'جاري الحفظ...' : 'حفظ الإعدادات'}
+            </button>
+            
+            {hasSavedData && !showConfirmClear && (
+              <button
+                onClick={handleClearData}
+                className="px-6 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl font-bold flex items-center gap-2 transition-all"
+              >
+                <Trash2 size={20} />
+                فك الارتباط ومسح البيانات
+              </button>
+            )}
+
+            {showConfirmClear && (
+              <div className="flex items-center gap-2 bg-red-50 p-2 rounded-xl border border-red-100">
+                <span className="text-red-800 font-bold text-sm px-2">هل أنت متأكد؟</span>
+                <button
+                  onClick={confirmClearData}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-sm transition-all shadow-sm"
+                >
+                  نعم، امسح
+                </button>
+                <button
+                  onClick={() => setShowConfirmClear(false)}
+                  className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-600 rounded-lg font-bold text-sm transition-all border border-slate-200"
+                >
+                  إلغاء
+                </button>
+              </div>
+            )}
+            
+            {success && (
+              <motion.span 
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="text-emerald-600 font-bold text-sm flex items-center gap-1"
+              >
+                تم الحفظ بنجاح ✓
+              </motion.span>
+            )}
+          </div>
+        </div>
+      </motion.div>
+
+      {/* WhatsApp Connection Widget */}
+      {hasSavedData && (
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden"
+        >
+          <div className="p-6 md:p-8 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+            <div>
+              <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                <span className="w-2 h-6 bg-blue-500 rounded-full inline-block"></span>
+                حالة الربط مع الواتساب
+              </h2>
+              <p className="text-slate-500 mt-2 text-sm">
+                مراقبة حالة الاتصال ومسح رمز الاستجابة السريعة (QR Code) لتفعيل الخدمة.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 text-sm font-medium text-slate-500">
+              <RefreshCw size={16} className="animate-spin" />
+              تحديث تلقائي
+            </div>
+          </div>
+
+          <div className="p-6 md:p-8 flex flex-col items-center justify-center min-h-[300px]">
+            {isConnected ? (
+              <motion.div 
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="flex flex-col items-center text-center space-y-4"
+              >
+                <div className="w-24 h-24 bg-emerald-100 rounded-full flex items-center justify-center">
+                  <CheckCircle2 className="w-12 h-12 text-emerald-500" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-slate-800">الجوال متصل بنجاح ومستعد للإرسال</h3>
+                  <p className="text-slate-500 mt-2">نظام إرسال الواتساب جاهز للعمل</p>
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex flex-col items-center text-center space-y-6 w-full max-w-md"
+              >
+                <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 w-full flex flex-col items-center">
+                  {waQR ? (
+                    <img 
+                      src={waQR.startsWith('data:image') ? waQR : `data:image/png;base64,${waQR}`} 
+                      alt="WhatsApp QR Code" 
+                      className="w-64 h-64 object-contain rounded-xl"
+                    />
+                  ) : (
+                    <div className="w-64 h-64 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400">
+                      <QrCode size={48} />
+                    </div>
+                  )}
+                </div>
+                
+                <div className="space-y-2">
+                  <h3 className="text-xl font-bold text-slate-800">بانتظار مسح الرمز...</h3>
+                  <p className="text-slate-500 font-medium">
+                    افتح واتساب في جوالك &gt; الأجهزة المرتبطة &gt; امسح هذا الرمز
+                  </p>
+                </div>
+              </motion.div>
+            )}
+          </div>
+        </motion.div>
+      )}
+    </div>
+  );
+};
+
+export default MessageSettings;
