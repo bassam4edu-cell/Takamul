@@ -76,17 +76,29 @@ const BehavioralViolations: React.FC = () => {
   const [showCounselorModal, setShowCounselorModal] = useState(false);
 
   const recommendedStep = selectedFormViolation?.procedures.steps[Math.min(occurrenceCount, (selectedFormViolation?.procedures.steps.length || 1) - 1)] || '';
+  
+  // Specific cases for General Procedures
+  const vName = selectedFormViolation?.violation_name || '';
+  const vDegree = selectedFormViolation?.degree || 0;
+  
+  const needs1919 = vDegree >= 4 && (vName.includes('تحرش') || vName.includes('ابتزاز') || vName.includes('إيذاء') || vName.includes('تنمر'));
+  const needsSecurity = vDegree >= 5 && (vName.includes('أسلحة') || vName.includes('مخدرات') || vName.includes('اعتداء') || vName.includes('جرائم معلوماتية') || vName.includes('تزوير') || vName.includes('نار'));
+  const needsAmbulance = vDegree >= 4 && (vName.includes('اعتداء') || vName.includes('مشاجرة') || vName.includes('إصابة') || vName.includes('أسلحة') || vName.includes('نار'));
+
   const activeProcedures = selectedFormViolation ? [
     recommendedStep,
-    ...(selectedFormViolation.procedures.general || [])
+    ...(selectedFormViolation.procedures.general || []).filter(proc => {
+      if (proc.includes('1919') || proc.includes('مركز البلاغات')) return needs1919;
+      if (proc.includes('الجهات الأمنية')) return needsSecurity;
+      if (proc.includes('الهلال الأحمر') || proc.includes('مركز صحي')) return needsAmbulance;
+      return true; // Keep any other general procedures if they exist
+    })
   ] : [];
 
   const activeProceduresText = activeProcedures.join(' ');
   const needsPledge = activeProceduresText.includes('تعهد خطي') || activeProceduresText.includes('تعهد');
   const needsParent = activeProceduresText.includes('ولي أمر') || activeProceduresText.includes('ولي الأمر');
   const needsCounselor = activeProceduresText.includes('الموجه الطلابي') || activeProceduresText.includes('لجنة التوجيه') || activeProceduresText.includes('الموجه');
-  const needs1919 = activeProceduresText.includes('مركز البلاغات') || activeProceduresText.includes('1919');
-  const needsSecurity = activeProceduresText.includes('الجهات الأمنية');
   const needsCommittee = activeProceduresText.includes('انعقاد لجنة التوجيه');
   const needsOfficial = activeProceduresText.includes('إدارة التعليم') || activeProceduresText.includes('مدير التعليم') || activeProceduresText.includes('نقل');
 
@@ -642,6 +654,13 @@ const BehavioralViolations: React.FC = () => {
                         </button>
                       )}
 
+                      {needsAmbulance && (
+                        <button className="w-full py-5 bg-red-50 hover:bg-red-100 text-red-700 rounded-2xl text-sm font-black flex items-center justify-center gap-3 border border-red-200 transition-all shadow-sm">
+                          <span className="text-xl">🚑</span>
+                          <span>استدعاء الهلال الأحمر (997)</span>
+                        </button>
+                      )}
+
                       {needsCommittee && (
                         <button className="w-full py-5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-2xl text-sm font-black flex items-center justify-center gap-3 border border-amber-200 transition-all shadow-sm">
                           <span className="text-xl">👥</span>
@@ -656,7 +675,7 @@ const BehavioralViolations: React.FC = () => {
                         </button>
                       )}
 
-                      {!needsPledge && !needsParent && !needsCounselor && !needs1919 && !needsSecurity && !needsCommittee && !needsOfficial && (
+                      {!needsPledge && !needsParent && !needsCounselor && !needs1919 && !needsSecurity && !needsAmbulance && !needsCommittee && !needsOfficial && (
                         <div className="text-center py-12 bg-slate-50 rounded-2xl border border-slate-100">
                           <CheckCircle2 className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                           <p className="text-slate-500 text-sm font-bold">لا توجد أدوات تنفيذ إضافية مطلوبة لهذه المخالفة.</p>

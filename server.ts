@@ -33,11 +33,18 @@ async function initDb() {
       CREATE TABLE IF NOT EXISTS students (
         id SERIAL PRIMARY KEY,
         name TEXT,
-        national_id TEXT UNIQUE,
+        national_id TEXT,
         grade TEXT,
-        section TEXT
+        section TEXT,
+        parent_phone TEXT
       )
     `;
+
+    try {
+      await sql`ALTER TABLE students ADD COLUMN parent_phone TEXT`;
+    } catch (e) {
+      // Column might already exist, ignore
+    }
 
     await sql`
       CREATE TABLE IF NOT EXISTS referrals (
@@ -65,6 +72,7 @@ async function initDb() {
     await sql`ALTER TABLE students ADD COLUMN IF NOT EXISTS behavior_score INT DEFAULT 80`;
     await sql`ALTER TABLE students ADD COLUMN IF NOT EXISTS bonus_score INT DEFAULT 0`;
     await sql`ALTER TABLE students ADD COLUMN IF NOT EXISTS attendance_score INT DEFAULT 100`;
+    await sql`ALTER TABLE students ADD COLUMN IF NOT EXISTS parent_phone TEXT`;
 
     // Behavioral Violations Dictionary Table (Official 1447 AH)
     await sql`
@@ -158,9 +166,16 @@ async function initDb() {
         period INTEGER,
         status TEXT, -- 'حاضر', 'غائب', 'متأخر', 'مستأذن'
         is_excused BOOLEAN DEFAULT FALSE,
+        excuse_reason TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `;
+
+    try {
+      await sql`ALTER TABLE attendance_records ADD COLUMN IF NOT EXISTS excuse_reason TEXT`;
+    } catch (e) {
+      // Ignore if column already exists or other error
+    }
 
     // Seed data if empty
     const usersCount = await sql`SELECT COUNT(*) as count FROM users`;
@@ -188,6 +203,23 @@ async function initDb() {
     const principalExists = await sql`SELECT * FROM users WHERE role = 'principal'`;
     if (principalExists.length === 0) {
       await sql`INSERT INTO users (name, email, password, role) VALUES ('د. خالد المنصور', 'principal@school.edu', 'password', 'principal')`;
+    }
+
+    // Seed mock attendance data for today if empty
+    const attendanceCount = await sql`SELECT COUNT(*) as count FROM attendance_records WHERE date = CURRENT_DATE`;
+    if (parseInt(attendanceCount[0].count) === 0) {
+      const teacher = await sql`SELECT id FROM users WHERE role = 'teacher' LIMIT 1`;
+      const students = await sql`SELECT id, grade, section FROM students WHERE grade = 'الصف الثالث' AND section = 'أ'`;
+      
+      if (teacher.length > 0 && students.length > 0) {
+        const teacherId = teacher[0].id;
+        for (const student of students) {
+          await sql`
+            INSERT INTO attendance_records (student_id, teacher_id, class_id, date, period, status, created_at)
+            VALUES (${student.id}, ${teacherId}, 'الصف الثالث-أ', CURRENT_DATE, 3, 'حاضر', CURRENT_TIMESTAMP - INTERVAL '2 hours')
+          `;
+        }
+      }
     }
 
     // Seed Behavioral Violations Dictionary
@@ -330,13 +362,45 @@ async function startServer() {
   // تعديل المنفذ ليتوافق مع خوادم Render
   const PORT = Number(process.env.PORT) || 3000;
 
-  app.use(express.json({ limit: '2mb' }));
-  app.use(express.urlencoded({ limit: '2mb', extended: true }));
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
   // API Routes
+  app.post("/api/whatsapp/send", async (req, res) => {
+    const { phoneNumber, studentName } = req.body;
+    const INSTANCE_ID = process.env.ULTRAMSG_INSTANCE_ID || "YOUR_INSTANCE_ID";
+    const TOKEN = process.env.ULTRAMSG_TOKEN || "YOUR_TOKEN";
+
+    try {
+      const payload = {
+        token: TOKEN,
+        to: phoneNumber,
+        body: `المكرم ولي أمر الطالب: *${studentName}*\nنفيدكم بأن ابنكم غائب هذا اليوم، نأمل التواصل مع إدارة المدرسة أو تبرير الغياب.\n\n*إدارة ثانوية أم القرى*`
+      };
+
+      const response = await fetch(`https://api.ultramsg.com/${INSTANCE_ID}/messages/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Ultramsg API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      res.json({ success: true, data });
+    } catch (error: any) {
+      console.error("[WHATSAPP] Error:", error);
+      res.status(500).json({ success: false, message: error.message || "Failed to send WhatsApp message" });
+    }
+  });
+
   app.post("/api/login", async (req, res) => {
-    const { email, password, role } = req.body;
-    console.log(`[LOGIN] Attempt for email: ${email}, role: ${role}`);
+    const { email, password } = req.body;
+    console.log(`[LOGIN] Attempt for email: ${email}`);
     
     try {
       // البحث عن المستخدم بالبريد الإلكتروني فقط أولاً للتأكد من وجوده
@@ -353,15 +417,10 @@ async function startServer() {
         return res.status(401).json({ success: false, message: "كلمة المرور غير صحيحة" });
       }
 
-      if (user.role !== role) {
-        console.log(`[LOGIN] Role mismatch for: ${email}. Expected: ${user.role}, Got: ${role}`);
-        return res.status(401).json({ success: false, message: "نوع الحساب المختار غير صحيح لهذا المستخدم" });
-      }
-
       const gradesResult = await sql`SELECT grade FROM user_grades WHERE user_id = ${user.id}`;
       const grades = gradesResult.map((g: any) => g.grade);
       
-      console.log(`[LOGIN] Success for: ${email}`);
+      console.log(`[LOGIN] Success for: ${email}, Role: ${user.role}`);
       res.json({ success: true, user: { ...user, assigned_grades: grades } });
     } catch (err) {
       console.error("[LOGIN] Error:", err);
@@ -458,10 +517,10 @@ async function startServer() {
 
       // Alert: Active referrals
       const recentActiveReferrals = await sql`
-        SELECT r.id, s.name as student_name, u.name as teacher_name
+        SELECT r.id, s.name as student_name, COALESCE(u.name, 'مستخدم محذوف') as teacher_name
         FROM referrals r
         JOIN students s ON r.student_id = s.id
-        JOIN users u ON r.teacher_id = u.id
+        LEFT JOIN users u ON r.teacher_id = u.id
         WHERE r.status NOT IN ('resolved', 'closed')
         ORDER BY r.created_at DESC
         LIMIT 3
@@ -482,10 +541,10 @@ async function startServer() {
       
       // Recent attendance
       const recentAttendance = await sql`
-        SELECT ar.date, ar.period, s.grade, s.section, u.name as teacher_name, COUNT(*) as absent_count
+        SELECT ar.date, ar.period, s.grade, s.section, COALESCE(u.name, 'مستخدم محذوف') as teacher_name, COUNT(*) as absent_count
         FROM attendance_records ar
         JOIN students s ON ar.student_id = s.id
-        JOIN users u ON ar.teacher_id = u.id
+        LEFT JOIN users u ON ar.teacher_id = u.id
         WHERE ar.date = ${today} AND ar.status = 'غائب'
         GROUP BY ar.date, ar.period, s.grade, s.section, u.name
         ORDER BY ar.period DESC
@@ -502,9 +561,9 @@ async function startServer() {
 
       // Recent referral logs
       const recentLogs = await sql`
-        SELECT l.action, l.created_at, u.name as user_name, s.name as student_name
+        SELECT l.action, l.created_at, COALESCE(u.name, 'مستخدم محذوف') as user_name, s.name as student_name
         FROM referral_logs l
-        JOIN users u ON l.user_id = u.id
+        LEFT JOIN users u ON l.user_id = u.id
         JOIN referrals r ON l.referral_id = r.id
         JOIN students s ON r.student_id = s.id
         ORDER BY l.created_at DESC
@@ -611,9 +670,9 @@ async function startServer() {
     const { id } = req.params;
     try {
       const logs = await sql`
-        SELECT l.*, u.name as creator_name
+        SELECT l.*, COALESCE(u.name, 'مستخدم محذوف') as creator_name
         FROM student_score_logs l
-        JOIN users u ON l.created_by_user_id = u.id
+        LEFT JOIN users u ON l.created_by_user_id = u.id
         WHERE l.student_id = ${id}
         ORDER BY l.created_at DESC
       `;
@@ -635,47 +694,47 @@ async function startServer() {
       if (grades.length > 0) {
         if (userRole === 'teacher') {
           referrals = await sql`
-            SELECT r.*, s.name as student_name, s.national_id as student_national_id, s.grade as student_grade, s.section as student_section, u.name as teacher_name
+            SELECT r.*, s.name as student_name, s.national_id as student_national_id, s.grade as student_grade, s.section as student_section, COALESCE(u.name, 'مستخدم محذوف') as teacher_name
             FROM referrals r
             JOIN students s ON r.student_id = s.id
-            JOIN users u ON r.teacher_id = u.id
+            LEFT JOIN users u ON r.teacher_id = u.id
             WHERE s.grade = ANY(${grades}) AND r.teacher_id = ${userId}
             ORDER BY r.created_at DESC
           `;
         } else {
           referrals = await sql`
-            SELECT r.*, s.name as student_name, s.national_id as student_national_id, s.grade as student_grade, s.section as student_section, u.name as teacher_name
+            SELECT r.*, s.name as student_name, s.national_id as student_national_id, s.grade as student_grade, s.section as student_section, COALESCE(u.name, 'مستخدم محذوف') as teacher_name
             FROM referrals r
             JOIN students s ON r.student_id = s.id
-            JOIN users u ON r.teacher_id = u.id
+            LEFT JOIN users u ON r.teacher_id = u.id
             WHERE s.grade = ANY(${grades})
             ORDER BY r.created_at DESC
           `;
         }
       } else if (userRole === 'teacher') {
         referrals = await sql`
-          SELECT r.*, s.name as student_name, s.national_id as student_national_id, s.grade as student_grade, s.section as student_section, u.name as teacher_name
+          SELECT r.*, s.name as student_name, s.national_id as student_national_id, s.grade as student_grade, s.section as student_section, COALESCE(u.name, 'مستخدم محذوف') as teacher_name
           FROM referrals r
           JOIN students s ON r.student_id = s.id
-          JOIN users u ON r.teacher_id = u.id
+          LEFT JOIN users u ON r.teacher_id = u.id
           WHERE r.teacher_id = ${userId}
           ORDER BY r.created_at DESC
         `;
       } else {
         referrals = await sql`
-          SELECT r.*, s.name as student_name, s.national_id as student_national_id, s.grade as student_grade, s.section as student_section, u.name as teacher_name
+          SELECT r.*, s.name as student_name, s.national_id as student_national_id, s.grade as student_grade, s.section as student_section, COALESCE(u.name, 'مستخدم محذوف') as teacher_name
           FROM referrals r
           JOIN students s ON r.student_id = s.id
-          JOIN users u ON r.teacher_id = u.id
+          LEFT JOIN users u ON r.teacher_id = u.id
           ORDER BY r.created_at DESC
         `;
       }
     } else {
       referrals = await sql`
-        SELECT r.*, s.name as student_name, s.national_id as student_national_id, s.grade as student_grade, s.section as student_section, u.name as teacher_name
+        SELECT r.*, s.name as student_name, s.national_id as student_national_id, s.grade as student_grade, s.section as student_section, COALESCE(u.name, 'مستخدم محذوف') as teacher_name
         FROM referrals r
         JOIN students s ON r.student_id = s.id
-        JOIN users u ON r.teacher_id = u.id
+        LEFT JOIN users u ON r.teacher_id = u.id
         ORDER BY r.created_at DESC
       `;
     }
@@ -807,12 +866,12 @@ async function startServer() {
           'referral' as event_type,
           r.id as event_id,
           r.created_at as event_date,
-          u.name as actor_name,
+          COALESCE(u.name, 'مستخدم محذوف') as actor_name,
           r.reason as description,
           r.type as category,
           r.status as status
         FROM referrals r
-        JOIN users u ON r.teacher_id = u.id
+        LEFT JOIN users u ON r.teacher_id = u.id
         WHERE r.student_id = ${id}
 
         UNION ALL
@@ -821,12 +880,12 @@ async function startServer() {
           'attendance' as event_type,
           a.id as event_id,
           a.created_at as event_date,
-          u.name as actor_name,
+          COALESCE(u.name, 'مستخدم محذوف') as actor_name,
           a.status as description,
           CASE WHEN a.is_excused THEN 'excused' ELSE 'unexcused' END as category,
           'completed' as status
         FROM attendance_records a
-        JOIN users u ON a.teacher_id = u.id
+        LEFT JOIN users u ON a.teacher_id = u.id
         WHERE a.student_id = ${id} AND a.status != 'حاضر'
 
         UNION ALL
@@ -835,12 +894,12 @@ async function startServer() {
           'score_log' as event_type,
           s.id as event_id,
           s.created_at as event_date,
-          u.name as actor_name,
+          COALESCE(u.name, 'مستخدم محذوف') as actor_name,
           s.reason_or_evidence as description,
           s.action_type as category,
           'completed' as status
         FROM student_score_logs s
-        JOIN users u ON s.created_by_user_id = u.id
+        LEFT JOIN users u ON s.created_by_user_id = u.id
         WHERE s.student_id = ${id}
 
         ORDER BY event_date DESC
@@ -848,34 +907,34 @@ async function startServer() {
 
       // 4. Detailed Tabs Data
       const attendanceRecords = await sql`
-        SELECT a.*, u.name as teacher_name
+        SELECT a.*, COALESCE(u.name, 'مستخدم محذوف') as teacher_name
         FROM attendance_records a
-        JOIN users u ON a.teacher_id = u.id
+        LEFT JOIN users u ON a.teacher_id = u.id
         WHERE a.student_id = ${id}
         ORDER BY a.date DESC
       `;
 
       const behaviorRecords = await sql`
-        SELECT r.*, v.violation_name, v.degree, u.name as teacher_name
+        SELECT r.*, v.violation_name, v.degree, COALESCE(u.name, 'مستخدم محذوف') as teacher_name
         FROM referrals r
         JOIN behavioral_violations_dict v ON r.violation_id = v.id
-        JOIN users u ON r.teacher_id = u.id
+        LEFT JOIN users u ON r.teacher_id = u.id
         WHERE r.student_id = ${id} AND r.type = 'behavior'
         ORDER BY r.created_at DESC
       `;
 
       const counselorNotes = await sql`
-        SELECT r.id, r.remedial_plan, r.created_at, u.name as counselor_name
+        SELECT r.id, r.remedial_plan, r.created_at, COALESCE(u.name, 'مستخدم محذوف') as counselor_name
         FROM referrals r
-        JOIN users u ON r.assigned_to_id = u.id
+        LEFT JOIN users u ON r.assigned_to_id = u.id
         WHERE r.student_id = ${id} AND r.remedial_plan IS NOT NULL
         ORDER BY r.created_at DESC
       `;
 
       const referrals = await sql`
-        SELECT r.*, u.name as teacher_name
+        SELECT r.*, COALESCE(u.name, 'مستخدم محذوف') as teacher_name
         FROM referrals r
-        JOIN users u ON r.teacher_id = u.id
+        LEFT JOIN users u ON r.teacher_id = u.id
         WHERE r.student_id = ${id}
         ORDER BY r.created_at DESC
       `;
@@ -1022,11 +1081,11 @@ async function startServer() {
     const id = req.params.id;
     try {
       const referralResult = await sql`
-        SELECT r.*, s.name as student_name, s.national_id as student_national_id, s.grade as student_grade, s.section as student_section, s.behavior_score as student_behavior_score, u.name as teacher_name,
+        SELECT r.*, s.name as student_name, s.national_id as student_national_id, s.grade as student_grade, s.section as student_section, s.behavior_score as student_behavior_score, COALESCE(u.name, 'مستخدم محذوف') as teacher_name,
                v.violation_name, v.degree as violation_degree, v.deduction_points as violation_points
         FROM referrals r
         JOIN students s ON r.student_id = s.id
-        JOIN users u ON r.teacher_id = u.id
+        LEFT JOIN users u ON r.teacher_id = u.id
         LEFT JOIN behavioral_violations_dict v ON r.violation_id = v.id
         WHERE r.id = ${id}
       `;
@@ -1039,9 +1098,9 @@ async function startServer() {
       const studentReferralsCount = await sql`SELECT COUNT(*) as count FROM referrals WHERE student_id = ${studentId}`;
 
       const logs = await sql`
-        SELECT l.*, u.name as user_name, u.role as user_role
+        SELECT l.*, COALESCE(u.name, 'مستخدم محذوف') as user_name, u.role as user_role
         FROM referral_logs l
-        JOIN users u ON l.user_id = u.id
+        LEFT JOIN users u ON l.user_id = u.id
         WHERE l.referral_id = ${id}
         ORDER BY l.created_at DESC
       `;
@@ -1190,7 +1249,7 @@ async function startServer() {
     const { userId } = req.query;
     try {
       const notifications = await sql`
-        SELECT n.*, u.name as sender_name
+        SELECT n.*, COALESCE(u.name, 'مستخدم محذوف') as sender_name
         FROM notifications n
         LEFT JOIN users u ON n.sender_id = u.id
         WHERE n.recipient_id = ${userId}
@@ -1258,7 +1317,7 @@ async function startServer() {
           s.name as student_name, 
           s.national_id as student_national_id,
           s.grade as student_grade, 
-          u.name as teacher_name, 
+          COALESCE(u.name, 'مستخدم محذوف') as teacher_name, 
           r.status, 
           r.reason, 
           r.type,
@@ -1267,7 +1326,7 @@ async function startServer() {
           (SELECT created_at FROM referral_logs WHERE referral_id = r.id AND (action LIKE '%إغلاق%' OR action LIKE '%حل%') ORDER BY created_at DESC LIMIT 1) as closed_at
         FROM referrals r
         JOIN students s ON r.student_id = s.id
-        JOIN users u ON r.teacher_id = u.id
+        LEFT JOIN users u ON r.teacher_id = u.id
         ORDER BY r.created_at DESC
       `;
       res.json(data);
@@ -1320,9 +1379,9 @@ async function startServer() {
     try {
       const studentId = req.params.id;
       const referrals = await sql`
-        SELECT r.*, u.name as teacher_name
+        SELECT r.*, COALESCE(u.name, 'مستخدم محذوف') as teacher_name
         FROM referrals r
-        JOIN users u ON r.teacher_id = u.id
+        LEFT JOIN users u ON r.teacher_id = u.id
         WHERE r.student_id = ${studentId}
         ORDER BY r.created_at DESC
       `;
@@ -1452,14 +1511,21 @@ async function startServer() {
     const userId = req.params.id;
     console.log(`[ADMIN] Request to delete user ID: ${userId}`);
     try {
-      // Check if user has referrals
-      const referralsCount = await sql`SELECT count(*) FROM referrals WHERE teacher_id = ${userId} OR assigned_to_id = ${userId}`;
-      if (parseInt(referralsCount[0].count) > 0) {
-        return res.status(400).json({ success: false, error: "لا يمكن حذف المستخدم لوجود تحويلات مرتبطة به. يمكنك تعطيل حسابه بدلاً من ذلك." });
-      }
+      // Set references to NULL to avoid foreign key constraint violations
+      await sql`UPDATE referrals SET teacher_id = NULL WHERE teacher_id = ${userId}`;
+      await sql`UPDATE referrals SET assigned_to_id = NULL WHERE assigned_to_id = ${userId}`;
+      await sql`UPDATE referral_logs SET user_id = NULL WHERE user_id = ${userId}`;
+      await sql`UPDATE notifications SET sender_id = NULL WHERE sender_id = ${userId}`;
+      await sql`UPDATE notifications SET recipient_id = NULL WHERE recipient_id = ${userId}`;
+      await sql`UPDATE attendance_records SET teacher_id = NULL WHERE teacher_id = ${userId}`;
+      await sql`UPDATE student_score_logs SET created_by_user_id = NULL WHERE created_by_user_id = ${userId}`;
       
+      // Delete user grades
       await sql`DELETE FROM user_grades WHERE user_id = ${userId}`;
+      
+      // Delete user
       await sql`DELETE FROM users WHERE id = ${userId}`;
+      
       console.log(`- Successfully deleted user ${userId}`);
       res.json({ success: true });
     } catch (err) {
@@ -1530,42 +1596,83 @@ async function startServer() {
         await sql`DELETE FROM notifications`;
         await sql`DELETE FROM referral_logs`;
         await sql`DELETE FROM referrals`;
+        await sql`DELETE FROM student_score_logs`;
+        await sql`DELETE FROM attendance_records`;
         await sql`DELETE FROM students`;
         console.log("[IMPORT] Database wiped successfully.");
       }
 
       // 2. Process Students Loop
       let importedCount = 0;
-      for (const student of students) {
-        // Validation: Skip empty rows or rows without a name
-        if (!student.name || String(student.name).trim() === "") {
-          continue; 
+      
+      // Filter valid students first
+      const validStudents = students.filter((s: any) => s.name && String(s.name).trim() !== "");
+      
+      if (clearExisting && validStudents.length > 0) {
+        // Fast path: Bulk insert since database is empty
+        const chunkSize = 500;
+        for (let i = 0; i < validStudents.length; i += chunkSize) {
+          const chunk = validStudents.slice(i, i + chunkSize);
+          
+          await Promise.all(chunk.map(async (s: any) => {
+            const name = String(s.name).trim();
+            const national_id = s.national_id ? String(s.national_id).trim() : null;
+            const grade = s.grade ? String(s.grade).trim() : null;
+            const section = s.section ? String(s.section).trim() : null;
+            const parent_phone = s.parent_phone ? String(s.parent_phone).trim() : null;
+            
+            await sql`
+              INSERT INTO students (name, national_id, grade, section, parent_phone) 
+              VALUES (${name}, ${national_id}, ${grade}, ${section}, ${parent_phone})
+            `;
+          }));
+          
+          importedCount += chunk.length;
+          console.log(`[IMPORT] Bulk inserted ${importedCount}/${validStudents.length} students...`);
         }
+      } else {
+        // Slow path: Upsert logic
+        const chunkSize = 50;
+        for (let i = 0; i < validStudents.length; i += chunkSize) {
+          const chunk = validStudents.slice(i, i + chunkSize);
+          
+          await Promise.all(chunk.map(async (student: any) => {
+            const name = String(student.name).trim();
+            const national_id = student.national_id ? String(student.national_id).trim() : null;
+            const grade = student.grade ? String(student.grade).trim() : null;
+            const section = student.section ? String(student.section).trim() : null;
+            const parent_phone = student.parent_phone ? String(student.parent_phone).trim() : null;
 
-        const name = String(student.name).trim();
-        const national_id = student.national_id ? String(student.national_id).trim() : null;
-        const grade = student.grade ? String(student.grade).trim() : null;
-        const section = student.section ? String(student.section).trim() : null;
-
-        if (national_id && national_id !== "") {
-          // Upsert based on national_id
-          await sql`
-            INSERT INTO students (name, national_id, grade, section) 
-            VALUES (${name}, ${national_id}, ${grade}, ${section})
-            ON CONFLICT (national_id) 
-            DO UPDATE SET 
-              name = EXCLUDED.name,
-              grade = EXCLUDED.grade,
-              section = EXCLUDED.section
-          `;
-        } else {
-          // Insert without national_id (allows multiple students without IDs)
-          await sql`
-            INSERT INTO students (name, grade, section) 
-            VALUES (${name}, ${grade}, ${section})
-          `;
+            if (national_id && national_id !== "") {
+              // Upsert based on national_id without relying on UNIQUE constraint
+              const existing = await sql`SELECT id FROM students WHERE national_id = ${national_id} LIMIT 1`;
+              if (existing.length > 0) {
+                await sql`
+                  UPDATE students SET 
+                    name = ${name},
+                    grade = ${grade},
+                    section = ${section},
+                    parent_phone = ${parent_phone}
+                  WHERE id = ${existing[0].id}
+                `;
+              } else {
+                await sql`
+                  INSERT INTO students (name, national_id, grade, section, parent_phone) 
+                  VALUES (${name}, ${national_id}, ${grade}, ${section}, ${parent_phone})
+                `;
+              }
+            } else {
+              // Insert without national_id
+              await sql`
+                INSERT INTO students (name, grade, section, parent_phone) 
+                VALUES (${name}, ${grade}, ${section}, ${parent_phone})
+              `;
+            }
+          }));
+          
+          importedCount += chunk.length;
+          console.log(`[IMPORT] Processed ${importedCount}/${validStudents.length} students...`);
         }
-        importedCount++;
       }
 
       console.log(`[IMPORT] Successfully processed ${importedCount} students`);
@@ -1614,11 +1721,15 @@ async function startServer() {
           await sql`DELETE FROM referrals WHERE id = ANY(${refIds})`;
         }
         
-        // 5. Delete the students
+        // 5. Delete the students' score logs and attendance records
+        await sql`DELETE FROM student_score_logs WHERE student_id = ANY(${studentIds})`;
+        await sql`DELETE FROM attendance_records WHERE student_id = ANY(${studentIds})`;
+
+        // 6. Delete the students
         await sql`DELETE FROM students WHERE id = ANY(${studentIds})`;
       }
 
-      // 6. Remove this grade from user assignments
+      // 7. Remove this grade from user assignments
       await sql`DELETE FROM user_grades WHERE grade = ${grade}`;
       
       console.log(`[ADMIN] Successfully deleted grade ${grade} and all associated data`);
@@ -1631,11 +1742,11 @@ async function startServer() {
 
   app.post("/api/admin/students/:id/update", async (req, res) => {
     const studentId = req.params.id;
-    const { name, national_id, grade, section } = req.body;
+    const { name, national_id, grade, section, parent_phone } = req.body;
     try {
       await sql`
         UPDATE students 
-        SET name = ${name}, national_id = ${national_id}, grade = ${grade}, section = ${section}
+        SET name = ${name}, national_id = ${national_id}, grade = ${grade}, section = ${section}, parent_phone = ${parent_phone}
         WHERE id = ${studentId}
       `;
       res.json({ success: true });
@@ -1661,7 +1772,11 @@ async function startServer() {
         await sql`DELETE FROM referrals WHERE id = ANY(${refIds})`;
       }
 
-      // 5. Delete the student
+      // 5. Delete the student's score logs and attendance records
+      await sql`DELETE FROM student_score_logs WHERE student_id = ${studentId}`;
+      await sql`DELETE FROM attendance_records WHERE student_id = ${studentId}`;
+
+      // 6. Delete the student
       await sql`DELETE FROM students WHERE id = ${studentId}`;
       res.json({ success: true });
     } catch (err) {
@@ -1720,7 +1835,9 @@ async function startServer() {
           s.grade,
           s.section,
           COALESCE(ar.status, 'حاضر') as status,
-          u.name as teacher_name,
+          ar.is_excused,
+          ar.excuse_reason,
+          COALESCE(u.name, 'مستخدم محذوف') as teacher_name,
           (
             SELECT COUNT(*) 
             FROM attendance_records ar_hist 
@@ -1757,12 +1874,18 @@ async function startServer() {
       `;
 
       const completedClasses = await sql`
-        SELECT DISTINCT s.grade, s.section
+        SELECT DISTINCT ON (s.grade, s.section) 
+          s.grade, 
+          s.section,
+          COALESCE(u.name, 'مستخدم محذوف') as teacher_name,
+          ar.period,
+          ar.created_at as timestamp
         FROM students s
         JOIN attendance_records ar ON ar.student_id = s.id
+        LEFT JOIN users u ON ar.teacher_id = u.id
         WHERE ar.date = ${date as string}
         AND s.grade IS NOT NULL AND s.section IS NOT NULL
-        ORDER BY s.grade ASC, s.section ASC
+        ORDER BY s.grade ASC, s.section ASC, ar.created_at DESC
       `;
 
       const pending = allClasses.filter(c => 
@@ -1804,7 +1927,7 @@ async function startServer() {
     
     try {
       const existingRecords = await sql`
-        SELECT ar.student_id, ar.status, u.name as teacher_name
+        SELECT ar.student_id, ar.status, COALESCE(u.name, 'مستخدم محذوف') as teacher_name
         FROM attendance_records ar
         JOIN students s ON ar.student_id = s.id
         LEFT JOIN users u ON ar.teacher_id = u.id
@@ -1870,8 +1993,8 @@ async function startServer() {
           const classId = JSON.stringify({ grade: record.grade, section: record.section });
           
           await sql`
-            INSERT INTO attendance_records (student_id, teacher_id, class_id, date, period, status)
-            VALUES (${record.student_id}, ${teacher_id}, ${classId}, ${date}, ${period}, ${record.status})
+            INSERT INTO attendance_records (student_id, teacher_id, class_id, date, period, status, is_excused, excuse_reason)
+            VALUES (${record.student_id}, ${teacher_id}, ${classId}, ${date}, ${period}, ${record.status}, ${record.is_excused || false}, ${record.excuse_reason || null})
           `;
         }
       }
@@ -1932,10 +2055,10 @@ async function startServer() {
           ar.status,
           ar.is_excused,
           ar.period,
-          u.name as teacher_name
+          COALESCE(u.name, 'مستخدم محذوف') as teacher_name
         FROM attendance_records ar
         JOIN students s ON ar.student_id = s.id
-        JOIN users u ON ar.teacher_id = u.id
+        LEFT JOIN users u ON ar.teacher_id = u.id
         WHERE ar.date = ${targetDate} AND ar.status IN ('غائب', 'متأخر')
         ORDER BY ar.period DESC, s.name ASC
       `;

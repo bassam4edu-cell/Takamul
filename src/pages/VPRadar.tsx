@@ -15,8 +15,12 @@ const VPRadar: React.FC = () => {
   const [students, setStudents] = useState<any[]>([]);
   const [attendance, setAttendance] = useState<Record<number, string>>({});
   const [originalAttendance, setOriginalAttendance] = useState<Record<number, string>>({});
+  const [excuseStatus, setExcuseStatus] = useState<Record<number, boolean>>({});
+  const [originalExcuseStatus, setOriginalExcuseStatus] = useState<Record<number, boolean>>({});
+  const [excuseReason, setExcuseReason] = useState<Record<number, string>>({});
+  const [originalExcuseReason, setOriginalExcuseReason] = useState<Record<number, string>>({});
   const [pendingClasses, setPendingClasses] = useState<{grade: string, section: string}[]>([]);
-  const [completedClasses, setCompletedClasses] = useState<{grade: string, section: string}[]>([]);
+  const [completedClasses, setCompletedClasses] = useState<{grade: string, section: string, teacher_name?: string, period?: number, timestamp?: string}[]>([]);
   const [totalClassesCount, setTotalClassesCount] = useState(0);
   
   const [loading, setLoading] = useState(false);
@@ -34,8 +38,11 @@ const VPRadar: React.FC = () => {
 
   // Check if there are unsaved changes
   const hasUnsavedChanges = useMemo(() => {
-    return Object.keys(attendance).some(id => attendance[Number(id)] !== originalAttendance[Number(id)]);
-  }, [attendance, originalAttendance]);
+    const attendanceChanged = Object.keys(attendance).some(id => attendance[Number(id)] !== originalAttendance[Number(id)]);
+    const excuseChanged = Object.keys(excuseStatus).some(id => excuseStatus[Number(id)] !== originalExcuseStatus[Number(id)]);
+    const reasonChanged = Object.keys(excuseReason).some(id => excuseReason[Number(id)] !== originalExcuseReason[Number(id)]);
+    return attendanceChanged || excuseChanged || reasonChanged;
+  }, [attendance, originalAttendance, excuseStatus, originalExcuseStatus, excuseReason, originalExcuseReason]);
 
   // Fetch Grades
   useEffect(() => {
@@ -94,11 +101,21 @@ const VPRadar: React.FC = () => {
         setStudents(data);
         
         const currentAttendance: Record<number, string> = {};
+        const currentExcuseStatus: Record<number, boolean> = {};
+        const currentExcuseReason: Record<number, string> = {};
+        
         data.forEach((s: any) => {
           currentAttendance[s.id] = s.status || 'حاضر';
+          currentExcuseStatus[s.id] = s.is_excused || false;
+          currentExcuseReason[s.id] = s.excuse_reason || '';
         });
+        
         setAttendance(currentAttendance);
         setOriginalAttendance({...currentAttendance});
+        setExcuseStatus(currentExcuseStatus);
+        setOriginalExcuseStatus({...currentExcuseStatus});
+        setExcuseReason(currentExcuseReason);
+        setOriginalExcuseReason({...currentExcuseReason});
       }
 
       if (pendingRes.ok) {
@@ -178,6 +195,8 @@ const VPRadar: React.FC = () => {
       const records = students.map(s => ({
         student_id: s.id,
         status: attendance[s.id],
+        is_excused: excuseStatus[s.id] || false,
+        excuse_reason: excuseReason[s.id] || '',
         grade: s.grade,
         section: s.section
       }));
@@ -196,6 +215,8 @@ const VPRadar: React.FC = () => {
       if (res.ok) {
         setSuccess(true);
         setOriginalAttendance({...attendance});
+        setOriginalExcuseStatus({...excuseStatus});
+        setOriginalExcuseReason({...excuseReason});
         setTimeout(() => setSuccess(false), 3000);
         fetchData(); // Refresh to get updated teacher names and radar
       }
@@ -211,6 +232,12 @@ const VPRadar: React.FC = () => {
     setIsPrintModalOpen(true);
   };
 
+  const handleStudentPrint = (student: any, type: 'warnings_3' | 'warnings_5' | 'excused_form') => {
+    setSelectedReportType(type);
+    setSelectedStudentForReport(student);
+    setIsPrintModalOpen(true);
+  };
+
   const getReportStudents = () => {
     let list = filteredStudents;
     if (selectedReportType === 'warnings_3') {
@@ -223,12 +250,48 @@ const VPRadar: React.FC = () => {
     return list;
   };
 
-  const handleSendSMS = (studentId: number) => {
-    alert(`تم إرسال رسالة نصية (SMS) لولي أمر الطالب بنجاح.`);
+  const sendWhatsAppMessage = async (phoneNumber: string, studentName: string) => {
+    try {
+      const response = await fetch('/api/whatsapp/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ phoneNumber, studentName })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to send WhatsApp message');
+      }
+    } catch (error) {
+      console.error("Failed to send WhatsApp message", error);
+      // We don't throw here to prevent the bulk loop from breaking, 
+      // but in a real app you might want to track failures.
+    }
   };
 
-  const handleBulkSMS = () => {
-    alert(`تم إرسال رسائل نصية (SMS) لجميع أولياء أمور الطلاب الغائبين بنجاح.`);
+  const handleSendWhatsApp = async (student: any) => {
+    // Assuming student has a phone number, using a placeholder if not
+    const phoneNumber = student.parent_phone || "+966500000000"; 
+    alert(`جاري إرسال رسالة واتساب لولي أمر الطالب ${student.name}...`);
+    await sendWhatsAppMessage(phoneNumber, student.name);
+    alert(`تم إرسال رسالة واتساب لولي أمر الطالب بنجاح.`);
+  };
+
+  const handleBulkWhatsApp = async () => {
+    const absentStudents = filteredStudents.filter(s => attendance[s.id] === 'غائب');
+    if (absentStudents.length === 0) return;
+
+    alert(`جاري إرسال رسائل الواتساب...`);
+    
+    for (const student of absentStudents) {
+      const phoneNumber = student.parent_phone || "+966500000000";
+      await sendWhatsAppMessage(phoneNumber, student.name);
+      // Delay of 2000ms between messages to prevent bans
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+    
+    alert(`تم الإرسال بنجاح.`);
   };
 
   // KPIs
@@ -248,14 +311,29 @@ const VPRadar: React.FC = () => {
     <div className="max-w-7xl mx-auto p-4 pb-24 space-y-6">
       <style>{`
         @media print {
-          @page { size: A4 portrait; margin: 15mm; }
+          @page { size: A4 portrait; margin: 10mm; }
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: white; }
           body * { visibility: hidden; }
           #printable-report, #printable-report * { visibility: visible; }
-          #printable-report { position: absolute; left: 0; top: 0; width: 100%; direction: rtl; font-family: 'Tajawal', 'Cairo', sans-serif; }
+          #printable-report { position: absolute; left: 0; top: 0; width: 100%; direction: rtl; }
+          
+          /* الاعتماد على الخطوط الرسمية المدمجة في الأجهزة */
+          #printable-report, #printable-report table, #printable-report th, #printable-report td, #printable-report span, #printable-report p, #printable-report h1, #printable-report h2 {
+            font-family: 'Traditional Arabic', 'Simplified Arabic', 'Times New Roman', serif !important;
+          }
+          
+          /* مقاس الخط للتفاصيل وأسماء الطلاب */
+          #printable-report { font-size: 11pt !important; }
+          
+          /* مقاس الخط للعناوين ورأس الجدول */
+          #printable-report th, #printable-report h1, #printable-report h2, #printable-report .report-title {
+            font-size: 14pt !important;
+            font-weight: bold !important;
+          }
+
           .print-table { border-collapse: collapse; width: 100%; border: 1px solid #000; }
-          .print-table th, .print-table td { border: 1px solid #000; padding: 4px 8px; font-size: 11pt; text-align: right; color: #000; }
-          .print-table th { background-color: #f3f4f6 !important; font-weight: bold; }
+          .print-table th, .print-table td { border: 1px solid #000; padding: 4px 8px; text-align: right; color: #000; }
+          .print-table th { background-color: #f3f4f6 !important; }
           .print-table tr:nth-child(even) { background-color: #f9fafb !important; }
           .print-table tr:nth-child(odd) { background-color: #ffffff !important; }
           .print\\:hidden { display: none !important; }
@@ -267,24 +345,22 @@ const VPRadar: React.FC = () => {
         {selectedReportType === 'excused_form' && selectedStudentForReport ? (
           <div className="p-4" dir="rtl">
             <div className="flex justify-between items-start mb-8 border-b-2 border-black pb-4">
-              <div className="text-right font-bold text-sm leading-relaxed">
+              <div className="text-right font-bold leading-relaxed">
                 <p>المملكة العربية السعودية</p>
                 <p>وزارة التعليم</p>
                 <p>المنطقة: إدارة التعليم بمحافظة الخرج</p>
                 <p>المدرسة: ثانوية أم القرى</p>
               </div>
-              <div className="text-left font-bold text-sm leading-relaxed" dir="ltr">
+              <div className="text-left font-bold leading-relaxed" dir="ltr">
                 <p>Kingdom of Saudi Arabia</p>
                 <p>Ministry of Education</p>
               </div>
             </div>
 
-            <h1 className="text-2xl font-black text-center mb-8">(نموذج إجراءات الغياب بعذر)</h1>
+            <h1 className="text-center mb-8 report-title">نموذج إجراءات الغياب (بعذر / بدون عذر)</h1>
 
-            <div className="mb-8 font-bold text-lg flex flex-wrap gap-8 bg-gray-50 p-4 border border-black rounded-lg print:bg-gray-50 print:border-black">
-              <p>اسم الطالب: <span className="font-bold">{selectedStudentForReport.name}</span></p>
-              <p>المرحلة: الثانوية</p>
-              <p>الصف: {selectedStudentForReport.grade}</p>
+            <div className="mb-8 font-bold flex flex-wrap gap-8 bg-gray-50 p-4 border border-black rounded-lg print:bg-gray-50 print:border-black">
+              <p>اسم الطالب: <span className="font-bold">{selectedStudentForReport.name}</span> | المرحلة: الثانوية | الصف: {selectedStudentForReport.grade} - {selectedStudentForReport.section}</p>
             </div>
 
             <table className="print-table mb-12">
@@ -299,21 +375,21 @@ const VPRadar: React.FC = () => {
               </thead>
               <tbody>
                 <tr>
-                  <td className="font-bold text-center">3 أيام</td>
+                  <td className="font-bold text-center py-4">3 أيام</td>
                   <td></td>
                   <td></td>
                   <td></td>
                   <td></td>
                 </tr>
                 <tr>
-                  <td className="font-bold text-center">5 أيام</td>
+                  <td className="font-bold text-center py-4">5 أيام</td>
                   <td></td>
                   <td></td>
                   <td></td>
                   <td></td>
                 </tr>
                 <tr>
-                  <td className="font-bold text-center">10 أيام</td>
+                  <td className="font-bold text-center py-4">10 أيام</td>
                   <td></td>
                   <td></td>
                   <td></td>
@@ -322,7 +398,7 @@ const VPRadar: React.FC = () => {
               </tbody>
             </table>
 
-            <div className="flex justify-between items-center mt-16 font-bold text-lg">
+            <div className="flex justify-between items-center mt-16 font-bold">
               <p>مدير المدرسة: .......</p>
               <p>التوقيع: .......</p>
               <p>التاريخ: .......</p>
@@ -331,19 +407,19 @@ const VPRadar: React.FC = () => {
         ) : (
           <div className="p-4" dir="rtl">
             <div className="grid grid-cols-3 gap-4 mb-6 border-b-2 border-black pb-4">
-              <div className="text-right font-bold text-sm leading-relaxed">
+              <div className="text-right font-bold leading-relaxed">
                 <p>المملكة العربية السعودية</p>
                 <p>وزارة التعليم</p>
                 <p>إدارة التعليم بمحافظة الخرج</p>
               </div>
               <div className="text-center flex flex-col items-center justify-center">
-                <h2 className="text-lg font-black underline underline-offset-4">
+                <h2 className="report-title underline underline-offset-4">
                   {selectedReportType === 'daily' ? 'تقرير الغياب اليومي' :
                    selectedReportType === 'warnings_3' ? 'تقرير إنذارات الغياب (3 أيام فأكثر)' :
                    'تقرير إنذارات الغياب (5 أيام فأكثر)'}
                 </h2>
               </div>
-              <div className="text-left font-bold text-sm leading-relaxed">
+              <div className="text-left font-bold leading-relaxed">
                 <p>المدرسة: ثانوية أم القرى بالخرج</p>
                 <p>التاريخ: {date}</p>
                 <p>رقم التقرير: {Math.floor(Math.random() * 10000)}</p>
@@ -353,29 +429,27 @@ const VPRadar: React.FC = () => {
             <table className="print-table mb-12">
               <thead>
                 <tr>
-                  <th className="w-10 text-center">م</th>
-                  <th className="whitespace-nowrap">اسم الطالب الرباعي</th>
-                  <th className="w-32 text-center whitespace-nowrap">رقم الهوية</th>
-                  <th className="w-32 text-center">الصف والفصل</th>
-                  <th className="w-24 text-center">الغياب</th>
-                  <th className="w-full">ملاحظات</th>
+                  <th className="w-[5%] text-center">م</th>
+                  <th className="w-[40%] whitespace-nowrap">اسم الطالب الرباعي</th>
+                  <th className="w-[20%] text-center whitespace-nowrap">الصف والفصل</th>
+                  <th className="w-[10%] text-center">الغياب</th>
+                  <th className="w-[25%]">ملاحظات</th>
                 </tr>
               </thead>
               <tbody>
                 {getReportStudents().map((student, index) => (
                   <tr key={student.id}>
-                    <td className="text-center">{index + 1}</td>
-                    <td className="font-bold whitespace-nowrap">{student.name}</td>
-                    <td className="text-center whitespace-nowrap">{student.national_id || '---'}</td>
-                    <td className="text-center">{student.grade} - {student.section}</td>
-                    <td className="text-center font-bold">{student.total_absences || 0}</td>
-                    <td className="w-full"></td>
+                    <td className="text-center py-1 px-2">{index + 1}</td>
+                    <td className="font-bold whitespace-nowrap py-1 px-2">{student.name}</td>
+                    <td className="text-center whitespace-nowrap py-1 px-2">{student.grade} - {student.section}</td>
+                    <td className="text-center font-bold py-1 px-2">{student.total_absences || 0}</td>
+                    <td className="py-1 px-2"></td>
                   </tr>
                 ))}
               </tbody>
             </table>
 
-            <div className="flex justify-between items-center mt-16 font-bold text-lg">
+            <div className="flex justify-between items-center mt-16 font-bold">
               <p>وكيل شؤون الطلاب: {user?.name || 'الإدارة'} / التوقيع....</p>
               <p>مدير المدرسة: ....... / التوقيع....</p>
             </div>
@@ -399,25 +473,43 @@ const VPRadar: React.FC = () => {
           </button>
         </div>
 
-        {/* Overall Progress Bar */}
-        <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100">
-          <div className="flex justify-between items-center mb-3">
-            <span className="font-bold text-slate-700 text-sm">
-              تم تحضير {completedClasses.length} من أصل {totalClassesCount} فصلاً - {progressPercentage}%
-            </span>
+        {/* Top Metric Cards (Compact) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Total Classes */}
+          <div className="bg-white rounded-2xl py-3 px-4 shadow-sm border border-slate-100 flex items-center justify-between hover:-translate-y-1 hover:shadow-md transition-all duration-200">
+            <span className="text-sm font-black text-slate-400 uppercase tracking-widest">إجمالي الفصول</span>
+            <span className="text-2xl font-black text-slate-800">{totalClassesCount}</span>
           </div>
-          <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-            <motion.div 
-              className="bg-emerald-500 h-1.5 rounded-full"
-              initial={{ width: 0 }}
-              animate={{ width: `${progressPercentage}%` }}
-              transition={{ duration: 0.5, ease: "easeOut" }}
-            />
+          
+          {/* Completed */}
+          <div className="bg-emerald-50 rounded-2xl py-3 px-4 shadow-sm border border-emerald-100 flex items-center justify-between hover:-translate-y-1 hover:shadow-md transition-all duration-200 relative overflow-hidden">
+            <div className="absolute bottom-0 left-0 right-0 h-1 bg-emerald-100">
+              <motion.div 
+                className="h-full bg-emerald-500"
+                initial={{ width: 0 }}
+                animate={{ width: `${progressPercentage}%` }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+              />
+            </div>
+            <span className="text-sm font-black text-emerald-600/70 uppercase tracking-widest flex items-center gap-2">
+              <CheckCircle2 size={16} />
+              تم التحضير
+            </span>
+            <span className="text-2xl font-black text-emerald-600">{completedClasses.length}</span>
+          </div>
+
+          {/* Pending */}
+          <div className="bg-white rounded-2xl py-3 px-4 shadow-sm border-2 border-dashed border-slate-200 flex items-center justify-between hover:-translate-y-1 hover:shadow-md transition-all duration-200">
+            <span className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+              <Hourglass size={16} />
+              بانتظار التحضير
+            </span>
+            <span className="text-2xl font-black text-slate-500">{pendingClasses.length}</span>
           </div>
         </div>
 
-        {/* Hierarchical Grouping (Zen UI) */}
-        <div className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-slate-100 space-y-8">
+        {/* Class Cards Grid (High-Density) */}
+        <div className="space-y-6">
           {Object.entries(
             [...pendingClasses.map(c => ({ ...c, status: 'pending' })), ...completedClasses.map(c => ({ ...c, status: 'completed' }))]
               .reduce((acc, curr) => {
@@ -426,31 +518,68 @@ const VPRadar: React.FC = () => {
                 return acc;
               }, {} as Record<string, any[]>)
           ).map(([gradeName, classes]) => (
-            <div key={gradeName} className="space-y-4">
-              <h3 className="text-xl font-black text-slate-800 border-b border-slate-100 pb-3">
+            <div key={gradeName} className="space-y-3">
+              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 mt-6 mb-3">
+                <span className="w-1.5 h-5 bg-primary rounded-full inline-block"></span>
                 {gradeName}
               </h3>
-              <div className="flex flex-wrap gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
                 {classes
                   .sort((a, b) => a.section.localeCompare(b.section))
-                  .map((c, idx) => (
-                  <div 
-                    key={`${c.grade}-${c.section}-${idx}`} 
-                    className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold transition-all duration-500 border ${
-                      c.status === 'completed' 
-                        ? 'bg-[#dcfce7] text-[#166534] border-[#bbf7d0]' 
-                        : 'bg-[#f3f4f6] text-[#9ca3af] border-[#e5e7eb]'
-                    }`}
-                  >
-                    {c.grade} - {c.section}
-                    {c.status === 'completed' && <CheckCircle2 size={16} className="text-[#166534]" />}
-                  </div>
-                ))}
+                  .map((c, idx) => {
+                    const isCompleted = c.status === 'completed';
+                    return (
+                      <button 
+                        key={`${c.grade}-${c.section}-${idx}`}
+                        onClick={() => {
+                          if (isCompleted) {
+                            if (grade === c.grade && section === c.section && hasSearched) {
+                              // Toggle off: reset filters and hide table
+                              setGrade('all');
+                              setSection('all');
+                              setStatusFilter('all');
+                              setHasSearched(false);
+                            } else {
+                              // Toggle on: set filters and show table
+                              setGrade(c.grade);
+                              setSection(c.section);
+                              setStatusFilter('غائب');
+                              setHasSearched(true);
+                            }
+                          }
+                        }}
+                        disabled={!isCompleted}
+                        className={`group relative flex justify-between items-center p-2 h-12 rounded-xl transition-all duration-200 hover:-translate-y-1 hover:shadow-md ${
+                          isCompleted 
+                            ? (grade === c.grade && section === c.section && hasSearched)
+                              ? 'bg-emerald-500 text-white border border-emerald-600 shadow-md cursor-pointer' // Selected state
+                              : 'bg-emerald-50 border border-emerald-200 cursor-pointer' 
+                            : 'bg-white border-2 border-dashed border-slate-300 cursor-default'
+                        }`}
+                      >
+                        {/* Tooltip */}
+                        {isCompleted && (
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max bg-gray-800 text-white text-xs rounded-lg py-2 px-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-xl text-center">
+                            <span>👨‍🏫 المعلم: {c.teacher_name || 'غير محدد'} | 📚 الحصة: {c.period ? ['الأولى', 'الثانية', 'الثالثة', 'الرابعة', 'الخامسة', 'السادسة', 'السابعة', 'الثامنة'][c.period - 1] || c.period : 'غير محدد'} | 🕒 الوقت: {c.timestamp ? new Date(c.timestamp).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) : 'غير محدد'}</span>
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-800"></div>
+                          </div>
+                        )}
+                        {isCompleted ? (
+                          <CheckCircle2 size={18} className={(grade === c.grade && section === c.section && hasSearched) ? "text-white" : "text-emerald-500"} />
+                        ) : (
+                          <Hourglass size={18} className="text-slate-300" />
+                        )}
+                        <span className={`text-sm font-bold ${isCompleted ? ((grade === c.grade && section === c.section && hasSearched) ? 'text-white' : 'text-emerald-800') : 'text-slate-500'}`}>
+                          {c.section}
+                        </span>
+                      </button>
+                    );
+                  })}
               </div>
             </div>
           ))}
           {totalClassesCount === 0 && (
-            <div className="text-center text-slate-400 font-bold py-8">
+            <div className="text-center text-slate-400 font-bold py-12 bg-white rounded-3xl border-2 border-slate-200 border-dashed">
               لا توجد فصول مسجلة لهذا اليوم
             </div>
           )}
@@ -507,39 +636,44 @@ const VPRadar: React.FC = () => {
         <div className="grid grid-cols-3 gap-4">
           <button
             onClick={() => handleKPIClick('حاضر')}
-            className={`rounded-3xl p-4 md:p-6 flex flex-col items-center justify-center text-center transition-all border-2 ${
+            className={`group relative rounded-3xl p-4 md:p-6 flex flex-col items-center justify-center text-center transition-all duration-300 border-2 active:scale-95 ${
               statusFilter === 'حاضر' || statusFilter === 'all'
-                ? 'bg-emerald-50 border-emerald-200 shadow-sm'
-                : 'bg-slate-50 border-transparent opacity-50 grayscale hover:opacity-100 hover:grayscale-0'
+                ? 'bg-emerald-50 border-emerald-200 shadow-sm hover:shadow-md hover:-translate-y-1'
+                : 'bg-white border-slate-100 opacity-70 hover:opacity-100 hover:border-emerald-200 hover:shadow-sm'
             }`}
           >
-            <CheckCircle2 className={`mb-2 w-8 h-8 ${statusFilter === 'حاضر' || statusFilter === 'all' ? 'text-emerald-500' : 'text-slate-400'}`} />
-            <p className={`text-xs md:text-sm font-bold mb-1 ${statusFilter === 'حاضر' || statusFilter === 'all' ? 'text-emerald-600' : 'text-slate-500'}`}>الحاضرين ✅</p>
-            <p className={`text-2xl md:text-4xl font-black ${statusFilter === 'حاضر' || statusFilter === 'all' ? 'text-emerald-700' : 'text-slate-600'}`}>{totalPresent}</p>
+            <div className={`absolute inset-0 rounded-3xl transition-opacity duration-300 ${statusFilter === 'حاضر' ? 'bg-emerald-500/5 opacity-100' : 'opacity-0 group-hover:opacity-100 bg-emerald-500/5'}`} />
+            <CheckCircle2 className={`mb-2 w-8 h-8 transition-colors duration-300 relative z-10 ${statusFilter === 'حاضر' || statusFilter === 'all' ? 'text-emerald-500' : 'text-slate-400 group-hover:text-emerald-400'}`} />
+            <p className={`text-xs md:text-sm font-bold mb-1 transition-colors duration-300 relative z-10 ${statusFilter === 'حاضر' || statusFilter === 'all' ? 'text-emerald-600' : 'text-slate-500 group-hover:text-emerald-600'}`}>الحاضرين ✅</p>
+            <p className={`text-2xl md:text-4xl font-black transition-colors duration-300 relative z-10 ${statusFilter === 'حاضر' || statusFilter === 'all' ? 'text-emerald-700' : 'text-slate-600 group-hover:text-emerald-700'}`}>{totalPresent}</p>
           </button>
+          
           <button
             onClick={() => handleKPIClick('غائب')}
-            className={`rounded-3xl p-4 md:p-6 flex flex-col items-center justify-center text-center transition-all border-2 ${
+            className={`group relative rounded-3xl p-4 md:p-6 flex flex-col items-center justify-center text-center transition-all duration-300 border-2 active:scale-95 ${
               statusFilter === 'غائب' || statusFilter === 'all'
-                ? 'bg-rose-50 border-rose-200 shadow-sm'
-                : 'bg-slate-50 border-transparent opacity-50 grayscale hover:opacity-100 hover:grayscale-0'
+                ? 'bg-rose-50 border-rose-200 shadow-sm hover:shadow-md hover:-translate-y-1'
+                : 'bg-white border-slate-100 opacity-70 hover:opacity-100 hover:border-rose-200 hover:shadow-sm'
             }`}
           >
-            <XCircle className={`mb-2 w-8 h-8 ${statusFilter === 'غائب' || statusFilter === 'all' ? 'text-rose-500' : 'text-slate-400'}`} />
-            <p className={`text-xs md:text-sm font-bold mb-1 ${statusFilter === 'غائب' || statusFilter === 'all' ? 'text-rose-600' : 'text-slate-500'}`}>الغائبين ❌</p>
-            <p className={`text-2xl md:text-4xl font-black ${statusFilter === 'غائب' || statusFilter === 'all' ? 'text-rose-700' : 'text-slate-600'}`}>{totalAbsent}</p>
+            <div className={`absolute inset-0 rounded-3xl transition-opacity duration-300 ${statusFilter === 'غائب' ? 'bg-rose-500/5 opacity-100' : 'opacity-0 group-hover:opacity-100 bg-rose-500/5'}`} />
+            <XCircle className={`mb-2 w-8 h-8 transition-colors duration-300 relative z-10 ${statusFilter === 'غائب' || statusFilter === 'all' ? 'text-rose-500' : 'text-slate-400 group-hover:text-rose-400'}`} />
+            <p className={`text-xs md:text-sm font-bold mb-1 transition-colors duration-300 relative z-10 ${statusFilter === 'غائب' || statusFilter === 'all' ? 'text-rose-600' : 'text-slate-500 group-hover:text-rose-600'}`}>الغائبين ❌</p>
+            <p className={`text-2xl md:text-4xl font-black transition-colors duration-300 relative z-10 ${statusFilter === 'غائب' || statusFilter === 'all' ? 'text-rose-700' : 'text-slate-600 group-hover:text-rose-700'}`}>{totalAbsent}</p>
           </button>
+          
           <button
             onClick={() => handleKPIClick('متأخر')}
-            className={`rounded-3xl p-4 md:p-6 flex flex-col items-center justify-center text-center transition-all border-2 ${
+            className={`group relative rounded-3xl p-4 md:p-6 flex flex-col items-center justify-center text-center transition-all duration-300 border-2 active:scale-95 ${
               statusFilter === 'متأخر' || statusFilter === 'all'
-                ? 'bg-amber-50 border-amber-200 shadow-sm'
-                : 'bg-slate-50 border-transparent opacity-50 grayscale hover:opacity-100 hover:grayscale-0'
+                ? 'bg-amber-50 border-amber-200 shadow-sm hover:shadow-md hover:-translate-y-1'
+                : 'bg-white border-slate-100 opacity-70 hover:opacity-100 hover:border-amber-200 hover:shadow-sm'
             }`}
           >
-            <Clock className={`mb-2 w-8 h-8 ${statusFilter === 'متأخر' || statusFilter === 'all' ? 'text-amber-500' : 'text-slate-400'}`} />
-            <p className={`text-xs md:text-sm font-bold mb-1 ${statusFilter === 'متأخر' || statusFilter === 'all' ? 'text-amber-600' : 'text-slate-500'}`}>المتأخرين ⏱️</p>
-            <p className={`text-2xl md:text-4xl font-black ${statusFilter === 'متأخر' || statusFilter === 'all' ? 'text-amber-700' : 'text-slate-600'}`}>{totalLate}</p>
+            <div className={`absolute inset-0 rounded-3xl transition-opacity duration-300 ${statusFilter === 'متأخر' ? 'bg-amber-500/5 opacity-100' : 'opacity-0 group-hover:opacity-100 bg-amber-500/5'}`} />
+            <Clock className={`mb-2 w-8 h-8 transition-colors duration-300 relative z-10 ${statusFilter === 'متأخر' || statusFilter === 'all' ? 'text-amber-500' : 'text-slate-400 group-hover:text-amber-400'}`} />
+            <p className={`text-xs md:text-sm font-bold mb-1 transition-colors duration-300 relative z-10 ${statusFilter === 'متأخر' || statusFilter === 'all' ? 'text-amber-600' : 'text-slate-500 group-hover:text-amber-600'}`}>المتأخرين ⏱️</p>
+            <p className={`text-2xl md:text-4xl font-black transition-colors duration-300 relative z-10 ${statusFilter === 'متأخر' || statusFilter === 'all' ? 'text-amber-700' : 'text-slate-600 group-hover:text-amber-700'}`}>{totalLate}</p>
           </button>
         </div>
       </div>
@@ -559,22 +693,71 @@ const VPRadar: React.FC = () => {
         </div>
       ) : filteredStudents.length > 0 ? (
         <>
+          {/* Info Banner for Selected Class */}
+          {grade !== 'all' && section !== 'all' && completedClasses.find(c => c.grade === grade && c.section === section) && (() => {
+            const c = completedClasses.find(c => c.grade === grade && c.section === section);
+            if (!c) return null;
+            return (
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6 text-sm text-slate-600 print:hidden">
+                <div className="flex items-center gap-2">
+                  <span>👤 تم التحضير بواسطة:</span>
+                  <span className="font-bold text-slate-800">{c.teacher_name || 'غير محدد'}</span>
+                </div>
+                <div className="flex items-center gap-6">
+                  <div>
+                    📅 الحصة: <span className="font-bold text-slate-800">{c.period ? ['الأولى', 'الثانية', 'الثالثة', 'الرابعة', 'الخامسة', 'السادسة', 'السابعة', 'الثامنة'][c.period - 1] || c.period : 'غير محدد'}</span>
+                  </div>
+                  <div>
+                    ⏰ وقت الإدخال: <span className="font-bold text-slate-800">{c.timestamp ? new Date(c.timestamp).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) : 'غير محدد'}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Bulk Actions */}
           <AnimatePresence>
-            {statusFilter === 'غائب' && (
+            {filteredStudents.some(s => attendance[s.id] === 'غائب') && (
               <motion.div 
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
-                className="print:hidden overflow-hidden"
+                className="print:hidden overflow-hidden mb-6"
               >
-                <button
-                  onClick={handleBulkSMS}
-                  className="w-full bg-rose-100 hover:bg-rose-200 text-rose-800 border border-rose-200 rounded-2xl py-4 px-6 text-sm font-black flex items-center justify-center gap-3 transition-all shadow-sm mb-6"
-                >
-                  <MessageSquare size={20} />
-                  إرسال SMS لجميع الغائبين المعروضين
-                </button>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <button
+                    onClick={handleBulkWhatsApp}
+                    className="w-full bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-200 rounded-2xl py-4 px-6 text-sm font-black flex items-center justify-center gap-3 transition-all shadow-sm"
+                  >
+                    <MessageSquare size={20} />
+                    إرسال واتساب لجميع الغائبين المعروضين
+                  </button>
+                  {(() => {
+                    const absentStudents = filteredStudents.filter(s => attendance[s.id] === 'غائب');
+                    const areAllExcused = absentStudents.length > 0 && absentStudents.every(s => excuseStatus[s.id]);
+                    return (
+                      <button
+                        onClick={() => {
+                          setExcuseStatus(prev => {
+                            const next = { ...prev };
+                            absentStudents.forEach(student => {
+                              next[student.id] = !areAllExcused;
+                            });
+                            return next;
+                          });
+                        }}
+                        className={`w-full border rounded-2xl py-4 px-6 text-sm font-black flex items-center justify-center gap-3 transition-all shadow-sm ${
+                          areAllExcused
+                            ? 'bg-red-100 hover:bg-red-200 text-red-800 border-red-200'
+                            : 'bg-green-100 hover:bg-green-200 text-green-800 border-green-200'
+                        }`}
+                      >
+                        {areAllExcused ? <XCircle size={20} /> : <CheckCircle2 size={20} />}
+                        {areAllExcused ? 'تحويل جميع الغائبين إلى (بدون عذر)' : 'تحويل جميع الغائبين إلى (بعذر)'}
+                      </button>
+                    );
+                  })()}
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -648,7 +831,7 @@ const VPRadar: React.FC = () => {
                     {/* Smart Badges */}
                     {isAbsent && absCount > 3 && (
                       <button 
-                        onClick={handlePrint}
+                        onClick={() => handleStudentPrint(student, absCount > 5 ? 'warnings_5' : 'warnings_3')}
                         className={`w-full py-2 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all hover:opacity-90 ${
                           absCount > 5 
                             ? 'bg-red-100 text-red-700 border border-red-200' 
@@ -659,23 +842,65 @@ const VPRadar: React.FC = () => {
                         {absCount > 5 ? '🚨 تعهد واستدعاء: 5 أيام' : '⚠️ إنذار أول: 3 أيام'}
                       </button>
                     )}
+
+                    {/* Excuse Status & Reason */}
+                    <AnimatePresence>
+                      {isAbsent && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="w-full flex flex-col gap-2 overflow-hidden"
+                        >
+                          <button
+                            onClick={() => setExcuseStatus(prev => ({ ...prev, [student.id]: !prev[student.id] }))}
+                            className={`w-full py-2 px-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${
+                              excuseStatus[student.id]
+                                ? 'bg-green-100 text-green-700 border border-green-200'
+                                : 'bg-red-100 text-red-700 border border-red-200'
+                            }`}
+                          >
+                            {excuseStatus[student.id] ? '🟢 غياب بعذر' : '🔴 غياب بدون عذر'}
+                          </button>
+                          
+                          <AnimatePresence>
+                            {excuseStatus[student.id] && (
+                              <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                className="w-full overflow-hidden"
+                              >
+                                <input
+                                  type="text"
+                                  placeholder="اكتب سبب العذر (مثال: تقرير طبي، مراجعة مستشفى)..."
+                                  value={excuseReason[student.id] || ''}
+                                  onChange={(e) => setExcuseReason(prev => ({ ...prev, [student.id]: e.target.value }))}
+                                  className="w-full bg-white border border-slate-200 rounded-xl p-3 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-green-500/20 outline-none transition-all"
+                                />
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
 
                   {/* Left: Quick Actions */}
                   <div className="flex sm:flex-col gap-2 w-full sm:w-auto shrink-0">
                     {isAbsent && (
                       <button
-                        onClick={() => handleSendSMS(student.id)}
-                        className="flex-1 sm:flex-none w-full sm:w-auto px-4 h-12 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 flex items-center justify-center gap-2 transition-all shadow-sm font-bold text-sm"
-                        title="إرسال SMS لولي الأمر"
+                        onClick={() => handleSendWhatsApp(student)}
+                        className="flex-1 sm:flex-none w-full sm:w-auto px-4 h-12 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 flex items-center justify-center gap-2 transition-all shadow-sm font-bold text-sm"
+                        title="إرسال واتساب لولي الأمر"
                       >
                         <MessageSquare size={18} />
-                        إرسال SMS
+                        إرسال واتساب 💬
                       </button>
                     )}
                     {isAbsent && absCount > 3 && (
                       <button
-                        onClick={handlePrint}
+                        onClick={() => handleStudentPrint(student, 'excused_form')}
                         className="flex-1 sm:flex-none w-full sm:w-auto px-4 h-12 rounded-xl bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200 flex items-center justify-center gap-2 transition-all shadow-sm font-bold text-sm"
                         title="طباعة إنذار الغياب"
                       >
@@ -797,28 +1022,44 @@ const VPRadar: React.FC = () => {
                 )}
               </div>
               
-              <div className="p-6 border-t border-slate-100 bg-slate-50 flex gap-3">
-                <button 
-                  onClick={() => setIsPrintModalOpen(false)}
-                  className="flex-1 py-3 px-4 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-all"
-                >
-                  إلغاء
-                </button>
-                <button 
-                  onClick={() => {
-                    if (selectedReportType === 'excused_form' && !selectedStudentForReport) {
-                      alert('الرجاء اختيار الطالب أولاً');
-                      return;
-                    }
-                    setTimeout(() => {
+              <div className="p-6 border-t border-slate-100 bg-slate-50 flex flex-col gap-3">
+                <div className="flex gap-3">
+                  <button 
+                    onClick={() => setIsPrintModalOpen(false)}
+                    className="flex-1 py-3 px-4 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-all"
+                  >
+                    إلغاء
+                  </button>
+                  <button 
+                    onClick={() => {
+                      if (selectedReportType === 'excused_form' && !selectedStudentForReport) {
+                        alert('الرجاء اختيار الطالب أولاً');
+                        return;
+                      }
+                      
+                      try {
+                        // Check if running in an iframe (preview mode)
+                        if (window.self !== window.top) {
+                          alert('عذراً، الطباعة غير مدعومة داخل وضع المعاينة. يرجى فتح التطبيق في نافذة جديدة (Open in new tab) من أعلى يمين الشاشة للتمكن من الطباعة.');
+                          return;
+                        }
+                      } catch (e) {
+                        // Cross-origin error means we are definitely in an iframe
+                        alert('عذراً، الطباعة غير مدعومة داخل وضع المعاينة. يرجى فتح التطبيق في نافذة جديدة (Open in new tab) من أعلى يمين الشاشة للتمكن من الطباعة.');
+                        return;
+                      }
+                      
                       window.print();
-                    }, 100);
-                  }}
-                  className="flex-1 py-3 px-4 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-900 transition-all flex items-center justify-center gap-2 shadow-lg"
-                >
-                  <Printer size={18} />
-                  طباعة التقرير
-                </button>
+                    }}
+                    className="flex-1 py-3 px-4 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-900 transition-all flex items-center justify-center gap-2 shadow-lg"
+                  >
+                    <Printer size={18} />
+                    طباعة التقرير
+                  </button>
+                </div>
+                <p className="text-xs text-slate-500 text-center mt-2">
+                  ملاحظة: إذا لم تظهر نافذة الطباعة، يرجى فتح التطبيق في علامة تبويب جديدة.
+                </p>
               </div>
             </motion.div>
           </div>

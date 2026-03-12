@@ -24,6 +24,7 @@ const AdminReferrals: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [deletingReferralId, setDeletingReferralId] = useState<number | null>(null);
 
   useEffect(() => {
     fetchReferrals();
@@ -44,20 +45,19 @@ const AdminReferrals: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
-    if (window.confirm('هل أنت متأكد من رغبتك في حذف هذا التحويل نهائياً؟ لا يمكن التراجع عن هذا الإجراء.')) {
-      try {
-        const res = await fetch(`/api/admin/referrals/${id}/delete`, {
-          method: 'POST'
-        });
-        if (res.ok) {
-          setReferrals(referrals.filter(r => r.id !== id));
-        } else {
-          alert('فشل حذف التحويل');
-        }
-      } catch (err) {
-        console.error(err);
-        alert('حدث خطأ أثناء الحذف');
+    setDeletingReferralId(null);
+    try {
+      const res = await fetch(`/api/admin/referrals/${id}/delete`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        setReferrals(referrals.filter(r => r.id !== id));
+      } else {
+        alert('فشل حذف التحويل');
       }
+    } catch (err) {
+      console.error(err);
+      alert('حدث خطأ أثناء الحذف');
     }
   };
 
@@ -166,7 +166,7 @@ const AdminReferrals: React.FC = () => {
                           <Edit2 size={18} />
                         </button>
                         <button
-                          onClick={() => handleDelete(referral.id)}
+                          onClick={() => setDeletingReferralId(referral.id)}
                           className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition-colors"
                           title="حذف"
                         >
@@ -181,6 +181,46 @@ const AdminReferrals: React.FC = () => {
           </div>
         )}
       </div>
+
+      {deletingReferralId && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-6">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            onClick={() => setDeletingReferralId(null)}
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+          />
+          <motion.div 
+            initial={{ scale: 0.9, y: 20, opacity: 0 }}
+            animate={{ scale: 1, y: 0, opacity: 1 }}
+            className="bg-white w-full max-w-sm rounded-[2.5rem] p-10 shadow-2xl relative z-10 text-center space-y-8"
+          >
+            <div className="w-20 h-20 bg-red-50 text-red-600 rounded-3xl flex items-center justify-center mx-auto shadow-sm border border-red-100">
+              <Trash2 size={36} />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-xl font-black text-slate-800">حذف التحويل؟</h3>
+              <p className="text-sm text-slate-500 font-bold leading-relaxed">
+                هل أنت متأكد من رغبتك في حذف هذا التحويل نهائياً؟ لا يمكن التراجع عن هذا الإجراء.
+              </p>
+            </div>
+            <div className="flex gap-4">
+              <button 
+                onClick={() => handleDelete(deletingReferralId)}
+                className="flex-1 bg-red-600 text-white py-4 rounded-2xl font-black hover:bg-red-700 transition-all shadow-xl shadow-red-600/20"
+              >
+                تأكيد الحذف
+              </button>
+              <button 
+                onClick={() => setDeletingReferralId(null)}
+                className="flex-1 bg-slate-100 text-slate-600 py-4 rounded-2xl font-black hover:bg-slate-200 transition-all"
+              >
+                إلغاء الأمر
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 };

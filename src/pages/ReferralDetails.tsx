@@ -78,6 +78,7 @@ const ReferralDetails: React.FC = () => {
   const [showPrintHub, setShowPrintHub] = useState(false);
   const [recommendedTemplates, setRecommendedTemplates] = useState<{id: number, name: string, icon: string}[]>([]);
   const [showBonusModal, setShowBonusModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [bonusPoints, setBonusPoints] = useState(0);
   const [bonusReason, setBonusReason] = useState('');
   const [submittingBonus, setSubmittingBonus] = useState(false);
@@ -717,23 +718,7 @@ const ReferralDetails: React.FC = () => {
 
           {user?.role === 'admin' && (
             <button 
-              onClick={async () => {
-                if (window.confirm('هل أنت متأكد من رغبتك في حذف هذا التحويل نهائياً؟ لا يمكن التراجع عن هذا الإجراء.')) {
-                  try {
-                    const res = await fetch(`/api/admin/referrals/${id}/delete`, {
-                      method: 'POST'
-                    });
-                    if (res.ok) {
-                      navigate('/dashboard');
-                    } else {
-                      alert('فشل حذف التحويل');
-                    }
-                  } catch (err) {
-                    console.error(err);
-                    alert('حدث خطأ أثناء الحذف');
-                  }
-                }
-              }}
+              onClick={() => setShowDeleteModal(true)}
               className="px-4 md:px-5 py-3 rounded-2xl text-[10px] md:text-xs font-extrabold border flex items-center gap-2 transition-all shadow-sm bg-red-50 text-red-700 border-red-100 hover:bg-red-100"
             >
               <Trash2 size={18} />
@@ -1450,6 +1435,19 @@ const ReferralDetails: React.FC = () => {
                                                   </div>
                                                 )}
 
+                                                {(proc.includes('الهلال الأحمر') || proc.includes('مركز صحي')) && (
+                                                  <div className="p-6 bg-red-600 rounded-[1.5rem] text-white space-y-4 shadow-xl shadow-red-600/30">
+                                                    <div className="flex items-center gap-3 font-black text-xs uppercase tracking-widest">
+                                                      <AlertCircle size={20} className="animate-pulse" />
+                                                      <span>إجراء إسعافي</span>
+                                                    </div>
+                                                    <button className="w-full py-4 bg-white text-red-600 hover:bg-red-50 rounded-2xl text-xs font-black flex items-center justify-center gap-3 transition-all shadow-lg">
+                                                      <span>🚑</span>
+                                                      <span>استدعاء الهلال الأحمر (997)</span>
+                                                    </button>
+                                                  </div>
+                                                )}
+
                                                 {proc.includes('انعقاد لجنة التوجيه') && (
                                                   <div className="p-6 bg-amber-500 rounded-[1.5rem] text-white space-y-4 shadow-xl shadow-amber-500/30">
                                                     <div className="flex items-center gap-3 font-black text-xs uppercase tracking-widest">
@@ -1860,6 +1858,62 @@ const ReferralDetails: React.FC = () => {
                   className="px-6 py-3 bg-white text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-all border border-slate-200"
                 >
                   إلغاء
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {showDeleteModal && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowDeleteModal(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ scale: 0.9, y: 20, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.9, y: 20, opacity: 0 }}
+              className="bg-white w-full max-w-sm rounded-[2.5rem] p-10 shadow-2xl relative z-10 text-center space-y-8"
+            >
+              <div className="w-20 h-20 bg-red-50 text-red-600 rounded-3xl flex items-center justify-center mx-auto shadow-sm border border-red-100">
+                <Trash2 size={36} />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-xl font-black text-slate-800">حذف التحويل؟</h3>
+                <p className="text-sm text-slate-500 font-bold leading-relaxed">
+                  هل أنت متأكد من رغبتك في حذف هذا التحويل نهائياً؟ لا يمكن التراجع عن هذا الإجراء.
+                </p>
+              </div>
+              <div className="flex gap-4">
+                <button 
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(`/api/admin/referrals/${id}/delete`, {
+                        method: 'POST'
+                      });
+                      if (res.ok) {
+                        navigate('/dashboard');
+                      } else {
+                        alert('فشل حذف التحويل');
+                      }
+                    } catch (err) {
+                      console.error(err);
+                      alert('حدث خطأ أثناء الحذف');
+                    }
+                  }}
+                  className="flex-1 bg-red-600 text-white py-4 rounded-2xl font-black hover:bg-red-700 transition-all shadow-xl shadow-red-600/20"
+                >
+                  تأكيد الحذف
+                </button>
+                <button 
+                  onClick={() => setShowDeleteModal(false)}
+                  className="flex-1 bg-slate-100 text-slate-600 py-4 rounded-2xl font-black hover:bg-slate-200 transition-all"
+                >
+                  إلغاء الأمر
                 </button>
               </div>
             </motion.div>

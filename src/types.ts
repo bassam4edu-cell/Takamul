@@ -18,6 +18,7 @@ export interface Student {
   behavior_score?: number;
   bonus_score?: number;
   attendance_score?: number;
+  parent_phone?: string;
 }
 
 export interface Referral {

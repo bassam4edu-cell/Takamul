@@ -8,7 +8,6 @@ import Logo from '../components/Logo';
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'teacher' | 'vice_principal' | 'counselor' | 'admin' | 'principal'>('teacher');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
@@ -25,7 +24,7 @@ const Login: React.FC = () => {
       const response = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, role }),
+        body: JSON.stringify({ email, password }),
       });
 
       if (!response.ok) {
@@ -36,8 +35,21 @@ const Login: React.FC = () => {
       const data = await response.json().catch(() => ({ success: false, message: 'استجابة غير صالحة من السيرفر' }));
 
       if (data.success) {
+        // Simulate a slight delay for smooth UX
+        await new Promise(resolve => setTimeout(resolve, 1000));
         login(data.user);
-        const from = (location.state as any)?.from?.pathname || '/dashboard';
+        
+        // Smart Routing based on role
+        let from = (location.state as any)?.from?.pathname;
+        if (!from || from === '/') {
+          if (data.user.role === 'admin' || data.user.role === 'vice_principal' || data.user.role === 'principal' || data.user.role === 'counselor') {
+            from = '/vp-radar';
+          } else if (data.user.role === 'teacher') {
+            from = '/teacher-dashboard';
+          } else {
+            from = '/dashboard';
+          }
+        }
         navigate(from, { replace: true });
       } else {
         setError(data.message || 'بيانات الدخول غير صحيحة');
@@ -102,26 +114,6 @@ const Login: React.FC = () => {
             transition={{ delay: 0.3 }}
           >
             <form onSubmit={handleSubmit} className="space-y-6">
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-3 mr-1">نوع الحساب</label>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 p-1.5 bg-slate-100 rounded-2xl">
-                  {(['teacher', 'vice_principal', 'counselor', 'admin', 'principal'] as const).map((r) => (
-                    <button
-                      key={r}
-                      type="button"
-                      onClick={() => setRole(r)}
-                      className={`py-2 px-1 rounded-xl text-[10px] font-bold transition-all ${
-                        role === r 
-                          ? 'bg-white text-primary shadow-sm' 
-                          : 'text-slate-500 hover:text-slate-700'
-                      }`}
-                    >
-                      {r === 'teacher' ? 'معلم' : r === 'vice_principal' ? 'وكيل' : r === 'counselor' ? 'موجه' : r === 'admin' ? 'أدمن' : 'مدير'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               <div className="space-y-4">
                 <div className="relative group">
                   <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">

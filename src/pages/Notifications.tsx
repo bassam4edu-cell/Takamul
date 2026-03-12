@@ -84,6 +84,20 @@ const Notifications: React.FC = () => {
     }
   };
 
+  const deleteNotification = async (e: React.MouseEvent, id: number) => {
+    e.stopPropagation();
+    try {
+      const res = await fetch(`/api/notifications/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setNotifications(prev => prev.filter(n => n.id !== id));
+      } else {
+        console.error('Failed to delete notification');
+      }
+    } catch (err) {
+      console.error('Failed to delete notification', err);
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-20">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -159,7 +173,16 @@ const Notifications: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="self-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="self-center flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {user?.role === 'admin' && (
+                    <button 
+                      onClick={(e) => deleteNotification(e, notification.id)}
+                      className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                      title="حذف الإشعار"
+                    >
+                      <Trash2 size={20} />
+                    </button>
+                  )}
                   <ChevronLeft className="text-slate-300" size={24} />
                 </div>
               </motion.div>

@@ -31,6 +31,7 @@ const AdminDashboard: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
   const [importingNationalIds, setImportingNationalIds] = useState(false);
   const [importSuccess, setImportSuccess] = useState<number | null>(null);
   const [importNationalIdsResult, setImportNationalIdsResult] = useState<{ updated: number, notFound: number } | null>(null);
@@ -41,7 +42,7 @@ const AdminDashboard: React.FC = () => {
   const [allGrades, setAllGrades] = useState<string[]>([]);
   const [students, setStudents] = useState<any[]>([]);
   const [editingStudentId, setEditingStudentId] = useState<number | null>(null);
-  const [studentEditForm, setStudentEditForm] = useState({ name: '', national_id: '', grade: '', section: '' });
+  const [studentEditForm, setStudentEditForm] = useState({ name: '', national_id: '', grade: '', section: '', parent_phone: '' });
   const [studentSearch, setStudentSearch] = useState('');
   const [showAddUser, setShowAddUser] = useState(false);
   const [newUserForm, setNewUserForm] = useState({ name: '', email: '', password: '', role: 'teacher' });
@@ -49,8 +50,13 @@ const AdminDashboard: React.FC = () => {
   const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showUserModal, setShowUserModal] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
+  const [showStudentModal, setShowStudentModal] = useState(false);
+  const [editingStudentCell, setEditingStudentCell] = useState<{ id: number, field: string } | null>(null);
+  const [inlineEditValue, setInlineEditValue] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [clearExistingBeforeImport, setClearExistingBeforeImport] = useState(false);
+  const [activeTab, setActiveTab] = useState<'users' | 'students' | 'settings'>('users');
 
   const normalizeArabic = (str: string) => {
     if (!str) return '';
@@ -210,6 +216,7 @@ const AdminDashboard: React.FC = () => {
   };
 
   const [deletingUserId, setDeletingUserId] = useState<number | null>(null);
+  const [deletingStudentId, setDeletingStudentId] = useState<number | null>(null);
   const [deletingGrade, setDeletingGrade] = useState<string | null>(null);
 
   const deleteUser = (userId: number) => {
@@ -265,14 +272,52 @@ const AdminDashboard: React.FC = () => {
       if (res.ok) {
         fetchStudents();
         setEditingStudentId(null);
+        setShowStudentModal(false);
       }
     } catch (err) {
       console.error(err);
     }
   };
 
+  const saveInlineEdit = async (id: number, field: string, value: string) => {
+    try {
+      const student = students.find(s => s.id === id);
+      if (!student) return;
+      
+      const updatedData = {
+        name: student.name,
+        national_id: student.national_id,
+        grade: student.grade,
+        section: student.section,
+        parent_phone: student.parent_phone,
+        [field]: value
+      };
+
+      const res = await fetch(`/api/admin/students/${id}/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedData),
+      });
+      
+      if (res.ok) {
+        fetchStudents();
+        setEditingStudentCell(null);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleInlineEditKeyDown = (e: React.KeyboardEvent, id: number, field: string) => {
+    if (e.key === 'Enter') {
+      saveInlineEdit(id, field, inlineEditValue);
+    } else if (e.key === 'Escape') {
+      setEditingStudentCell(null);
+    }
+  };
+
   const deleteStudent = async (id: number) => {
-    if (!confirm('هل أنت متأكد من حذف هذا الطالب؟')) return;
+    setDeletingStudentId(null);
     try {
       const res = await fetch(`/api/admin/students/${id}`, {
         method: 'DELETE',
@@ -295,7 +340,8 @@ const AdminDashboard: React.FC = () => {
       name: student.name,
       national_id: student.national_id,
       grade: student.grade,
-      section: student.section
+      section: student.section,
+      parent_phone: student.parent_phone || ''
     });
   };
 
@@ -344,6 +390,11 @@ const AdminDashboard: React.FC = () => {
       ? currentGrades.filter(g => g !== grade)
       : [...currentGrades, grade];
     
+    // Optimistic update for UI responsiveness
+    if (selectedUser && selectedUser.id === userId) {
+      setSelectedUser({ ...selectedUser, assigned_grades: newGrades });
+    }
+    
     try {
       const res = await fetch(`/api/admin/users/${userId}/grades`, {
         method: 'POST',
@@ -353,11 +404,19 @@ const AdminDashboard: React.FC = () => {
       if (res.ok) {
         fetchUsers();
       } else {
+        // Revert on error
+        if (selectedUser && selectedUser.id === userId) {
+          setSelectedUser({ ...selectedUser, assigned_grades: currentGrades });
+        }
         const data = await res.json().catch(() => ({ error: 'فشل تحديث الصفوف المسندة' }));
         alert(data.error || 'فشل تحديث الصفوف المسندة');
       }
     } catch (err) {
       console.error(err);
+      // Revert on error
+      if (selectedUser && selectedUser.id === userId) {
+        setSelectedUser({ ...selectedUser, assigned_grades: currentGrades });
+      }
       alert('حدث خطأ أثناء تحديث الصفوف المسندة');
     }
   };
@@ -367,40 +426,113 @@ const AdminDashboard: React.FC = () => {
     if (!file) return;
 
     setImporting(true);
+    setImportProgress(10);
     const reader = new FileReader();
     reader.onload = async (evt) => {
       try {
+        setImportProgress(30);
         const data = evt.target?.result;
         const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
         
-        // Use header: 1 to get raw arrays (Column A = index 0, B = 1, etc.)
-        const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+        let headerRowIndex = -1;
+        let targetRows: any[][] = [];
 
-        console.log('Raw Excel Rows:', rows);
+        // Find header row across all sheets
+        for (const sheetName of workbook.SheetNames) {
+          const worksheet = workbook.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+          
+          for (let i = 0; i < Math.min(rows.length, 20); i++) {
+            const row = rows[i];
+            if (!row) continue;
+            const rowStr = row.join(' ').replace(/\s+/g, ' ');
+            if ((rowStr.includes('رقم الطالب') || rowStr.includes('الهوية')) && 
+                (rowStr.includes('اسم الطالب') || rowStr.includes('الاسم'))) {
+              headerRowIndex = i;
+              targetRows = rows;
+              break;
+            }
+          }
+          if (headerRowIndex !== -1) break;
+        }
 
-        // Map Excel columns to student object (A: Name, B: ID, C: Grade, D: Section)
-        // Skip header row (index 0)
-        const students = rows.slice(1).map(row => {
-          const name = row[0];
-          const national_id = row[1];
-          const grade = row[2];
-          const section = row[3];
+        console.log('Raw Excel Rows:', targetRows);
+        setImportProgress(50);
+
+        if (headerRowIndex === -1) {
+          alert('لم يتم العثور على ترويسة الأعمدة (رقم الطالب أو الهوية، واسم الطالب) في أي ورقة عمل. يرجى التأكد من صيغة الملف.');
+          setImporting(false);
+          setImportProgress(0);
+          return;
+        }
+
+        const headerRow = targetRows[headerRowIndex];
+        
+        // Find column indices
+        const getColIndex = (keywords: string[]) => {
+          return headerRow.findIndex(col => {
+            if (!col) return false;
+            const colStr = String(col).trim();
+            return keywords.some(kw => colStr.includes(kw));
+          });
+        };
+
+        const idCol = getColIndex(['رقم الطالب', 'الهوية', 'رقم الهوية']);
+        const nameCol = getColIndex(['اسم الطالب', 'الاسم']);
+        const gradeCol = getColIndex(['الصف']);
+        const sectionCol = getColIndex(['الفصل']);
+        const phoneCol = getColIndex(['جوال الطالب', 'رقم الجوال', 'الجوال', 'هاتف']);
+
+        if (nameCol === -1) {
+          alert('لم يتم العثور على عمود "اسم الطالب".');
+          setImporting(false);
+          setImportProgress(0);
+          return;
+        }
+
+        const sanitizePhone = (phone: any) => {
+          if (!phone) return null;
+          let p = String(phone).replace(/\s+/g, '').trim();
+          if (p.startsWith('05')) {
+            p = '9665' + p.substring(2);
+          }
+          return p;
+        };
+
+        const noorGradeMapper: Record<string, string> = {
+          "1314": "أول ثانوي",
+          "1416": "ثاني ثانوي",
+          "1516": "ثالث ثانوي"
+        };
+
+        const students = targetRows.slice(headerRowIndex + 1).map(row => {
+          const name = row[nameCol];
+          const national_id = idCol !== -1 ? row[idCol] : null;
+          let grade = gradeCol !== -1 ? row[gradeCol] : null;
+          const section = sectionCol !== -1 ? row[sectionCol] : null;
+          const parent_phone = phoneCol !== -1 ? row[phoneCol] : null;
+
+          if (grade) {
+            const gradeStr = String(grade).trim();
+            grade = noorGradeMapper[gradeStr] || gradeStr;
+          }
 
           return {
             name: name ? String(name).trim() : null,
             national_id: national_id ? String(national_id).trim() : null,
             grade: grade ? String(grade).trim() : null,
-            section: section ? String(section).trim() : null
+            section: section ? String(section).trim() : null,
+            parent_phone: sanitizePhone(parent_phone)
           };
-        }).filter(s => s.name && s.grade && s.section);
+        }).filter(s => s.name); // only require name
 
         console.log('Processed students for import:', students);
+        setImportProgress(70);
 
         if (students.length === 0) {
-          alert('لم يتم العثور على بيانات طلاب صالحة في الملف. تأكد من أن الملف يحتوي على البيانات في الأعمدة الأربعة الأولى (الاسم، الهوية، الصف، الفصل)');
+          alert('لم يتم العثور على بيانات طلاب صالحة في الملف.');
           setImporting(false);
+          setImportProgress(0);
           return;
         }
 
@@ -413,17 +545,25 @@ const AdminDashboard: React.FC = () => {
           }),
         });
         
+        setImportProgress(90);
         const result = await res.json().catch(() => ({ success: false, error: 'استجابة غير صالحة من السيرفر' }));
         if (result.success) {
+          setImportProgress(100);
           setImportSuccess(result.count);
           fetchGrades(); // Refresh grades list
-          setTimeout(() => setImportSuccess(null), 5000);
+          fetchStudents(); // Refresh students list
+          setTimeout(() => {
+            setImportSuccess(null);
+            setImportProgress(0);
+          }, 5000);
         } else {
           alert('فشل استيراد البيانات: ' + (result.error || 'خطأ غير معروف'));
+          setImportProgress(0);
         }
       } catch (err) {
         console.error('File upload error:', err);
-        alert('حدث خطأ أثناء قراءة الملف');
+        alert('حدث خطأ أثناء قراءة الملف: ' + (err instanceof Error ? err.message : String(err)));
+        setImportProgress(0);
       } finally {
         setImporting(false);
         // Reset input
@@ -501,18 +641,47 @@ const AdminDashboard: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-        <div className="lg:col-span-2 space-y-12">
-          
-          {/* Users Management Section */}
-          <div className="space-y-8">
+      {/* Tabs Navigation */}
+      <div className="flex flex-wrap items-center gap-2 bg-slate-100/80 p-1.5 rounded-2xl w-max mb-8">
+        <button 
+          onClick={() => setActiveTab('users')} 
+          className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'users' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
+        >
+          <UserCog size={18} />
+          إدارة المستخدمين
+        </button>
+        <button 
+          onClick={() => setActiveTab('students')} 
+          className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'students' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
+        >
+          <Users size={18} />
+          قاعدة بيانات الطلاب
+        </button>
+        <button 
+          onClick={() => setActiveTab('settings')} 
+          className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'settings' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
+        >
+          <Settings size={18} />
+          إعدادات النظام
+        </button>
+      </div>
+
+      <div className="space-y-12">
+        {activeTab === 'users' && (
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-8"
+          >
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-primary/5 text-primary rounded-2xl flex items-center justify-center">
                   <UserCog size={24} />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">إدارة المستخدمين والصلاحيات</h2>
+                  <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2">
+                    إدارة المستخدمين والصلاحيات
+                  </h2>
                   <p className="text-sm text-slate-500 font-bold mt-1">تحكم في حسابات الموظفين وصلاحيات الوصول للنظام.</p>
                 </div>
               </div>
@@ -581,23 +750,23 @@ const AdminDashboard: React.FC = () => {
                             </div>
                           </td>
                           <td className="px-8 py-6">
-                            <div className="flex items-center justify-end gap-2">
+                            <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                               <button 
                                 onClick={() => {
                                   setSelectedUser(u);
                                   setShowUserModal(true);
                                 }}
-                                className="p-3 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-2xl transition-all border border-transparent hover:border-primary/10"
-                                title="عرض التفاصيل والتعديل"
+                                className="p-3 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-2xl transition-all"
+                                title="إدارة الحساب"
                               >
-                                <Settings size={20} />
+                                <Edit2 size={18} />
                               </button>
                               <button 
                                 onClick={() => setDeletingUserId(u.id)}
-                                className="p-3 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all border border-transparent hover:border-red-100"
-                                title="حذف المستخدم"
+                                className="p-3 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all"
+                                title="مسح السجل"
                               >
-                                <Trash2 size={20} />
+                                <Trash2 size={18} />
                               </button>
                             </div>
                           </td>
@@ -608,17 +777,24 @@ const AdminDashboard: React.FC = () => {
                 </table>
               </div>
             </div>
-          </div>
+          </motion.div>
+        )}
 
-          {/* Students Management Section */}
-          <div className="space-y-8">
+        {activeTab === 'students' && (
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-8"
+          >
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-primary/5 text-primary rounded-2xl flex items-center justify-center">
                   <Users size={24} />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">قاعدة بيانات الطلاب</h2>
+                  <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2">
+                    قاعدة بيانات الطلاب
+                  </h2>
                   <p className="text-sm text-slate-500 font-bold mt-1">إدارة بيانات الطلاب، تعديل المعلومات، وتصفية القوائم.</p>
                 </div>
               </div>
@@ -714,6 +890,7 @@ const AdminDashboard: React.FC = () => {
                       <th className="px-8 py-6">الطالب</th>
                       <th className="px-8 py-6">رقم الهوية</th>
                       <th className="px-8 py-6">الصف والفصل</th>
+                      <th className="px-8 py-6">رقم الجوال</th>
                       <th className="px-8 py-6 text-left">إجراءات</th>
                     </tr>
                   </thead>
@@ -739,24 +916,42 @@ const AdminDashboard: React.FC = () => {
 
                       return filtered.map((s) => (
                         <tr key={s.id} className="hover:bg-slate-50/20 transition-all group">
-                          <td className="px-8 py-6">
-                            {editingStudentId === s.id ? (
+                          <td 
+                            className="px-8 py-6 cursor-pointer"
+                            onDoubleClick={() => {
+                              setEditingStudentCell({ id: s.id, field: 'name' });
+                              setInlineEditValue(s.name);
+                            }}
+                          >
+                            {editingStudentCell?.id === s.id && editingStudentCell?.field === 'name' ? (
                               <input 
                                 type="text"
-                                value={studentEditForm.name}
-                                onChange={(e) => setStudentEditForm({...studentEditForm, name: e.target.value})}
+                                autoFocus
+                                value={inlineEditValue}
+                                onChange={(e) => setInlineEditValue(e.target.value)}
+                                onKeyDown={(e) => handleInlineEditKeyDown(e, s.id, 'name')}
+                                onBlur={() => saveInlineEdit(s.id, 'name', inlineEditValue)}
                                 className="bg-white border border-slate-200 rounded-xl py-2 px-4 text-sm outline-none focus:ring-2 focus:ring-primary/20 font-bold w-full"
                               />
                             ) : (
                               <span className="font-extrabold text-slate-800">{s.name}</span>
                             )}
                           </td>
-                          <td className="px-8 py-6">
-                            {editingStudentId === s.id ? (
+                          <td 
+                            className="px-8 py-6 cursor-pointer"
+                            onDoubleClick={() => {
+                              setEditingStudentCell({ id: s.id, field: 'national_id' });
+                              setInlineEditValue(s.national_id);
+                            }}
+                          >
+                            {editingStudentCell?.id === s.id && editingStudentCell?.field === 'national_id' ? (
                               <input 
                                 type="text"
-                                value={studentEditForm.national_id}
-                                onChange={(e) => setStudentEditForm({...studentEditForm, national_id: e.target.value})}
+                                autoFocus
+                                value={inlineEditValue}
+                                onChange={(e) => setInlineEditValue(e.target.value)}
+                                onKeyDown={(e) => handleInlineEditKeyDown(e, s.id, 'national_id')}
+                                onBlur={() => saveInlineEdit(s.id, 'national_id', inlineEditValue)}
                                 className="bg-white border border-slate-200 rounded-xl py-2 px-4 text-sm outline-none focus:ring-2 focus:ring-primary/20 font-bold w-full"
                               />
                             ) : (
@@ -764,61 +959,58 @@ const AdminDashboard: React.FC = () => {
                             )}
                           </td>
                           <td className="px-8 py-6">
-                            {editingStudentId === s.id ? (
-                              <div className="flex gap-2">
-                                <input 
-                                  type="text"
-                                  value={studentEditForm.grade}
-                                  onChange={(e) => setStudentEditForm({...studentEditForm, grade: e.target.value})}
-                                  className="w-24 bg-white border border-slate-200 rounded-xl py-2 px-4 text-sm outline-none focus:ring-2 focus:ring-primary/20 font-bold"
-                                />
-                                <input 
-                                  type="text"
-                                  value={studentEditForm.section}
-                                  onChange={(e) => setStudentEditForm({...studentEditForm, section: e.target.value})}
-                                  className="w-16 bg-white border border-slate-200 rounded-xl py-2 px-4 text-sm outline-none focus:ring-2 focus:ring-primary/20 font-bold"
-                                />
-                              </div>
+                            <div className="flex items-center gap-2">
+                              <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black uppercase tracking-widest">{s.grade}</span>
+                              <span className="px-3 py-1 bg-primary/5 text-primary rounded-lg text-[10px] font-black uppercase tracking-widest">{s.section}</span>
+                            </div>
+                          </td>
+                          <td 
+                            className="px-8 py-6 cursor-pointer"
+                            onDoubleClick={() => {
+                              setEditingStudentCell({ id: s.id, field: 'parent_phone' });
+                              setInlineEditValue(s.parent_phone || '');
+                            }}
+                          >
+                            {editingStudentCell?.id === s.id && editingStudentCell?.field === 'parent_phone' ? (
+                              <input 
+                                type="text"
+                                autoFocus
+                                value={inlineEditValue}
+                                onChange={(e) => setInlineEditValue(e.target.value)}
+                                onKeyDown={(e) => handleInlineEditKeyDown(e, s.id, 'parent_phone')}
+                                onBlur={() => saveInlineEdit(s.id, 'parent_phone', inlineEditValue)}
+                                className="bg-white border border-slate-200 rounded-xl py-2 px-4 text-sm outline-none focus:ring-2 focus:ring-primary/20 font-bold w-full"
+                              />
                             ) : (
-                              <div className="flex items-center gap-2">
-                                <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black uppercase tracking-widest">{s.grade}</span>
-                                <span className="px-3 py-1 bg-primary/5 text-primary rounded-lg text-[10px] font-black uppercase tracking-widest">{s.section}</span>
-                              </div>
+                              <span className="text-slate-500 font-mono font-bold">{s.parent_phone || '—'}</span>
                             )}
                           </td>
                           <td className="px-8 py-6">
-                            <div className="flex items-center justify-end gap-2">
-                              {editingStudentId === s.id ? (
-                                <div className="flex items-center gap-2">
-                                  <button 
-                                    onClick={() => saveStudentUpdate(s.id)}
-                                    className="p-3 bg-emerald-500 text-white rounded-2xl hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-500/20"
-                                  >
-                                    <Save size={18} />
-                                  </button>
-                                  <button 
-                                    onClick={() => setEditingStudentId(null)}
-                                    className="p-3 bg-slate-100 text-slate-600 rounded-2xl hover:bg-slate-200 transition-all"
-                                  >
-                                    <X size={18} />
-                                  </button>
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <button 
-                                    onClick={() => startEditingStudent(s)}
-                                    className="p-3 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-2xl transition-all"
-                                  >
-                                    <Edit2 size={18} />
-                                  </button>
-                                  <button 
-                                    onClick={() => deleteStudent(s.id)}
-                                    className="p-3 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all"
-                                  >
-                                    <Trash2 size={18} />
-                                  </button>
-                                </div>
-                              )}
+                            <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button 
+                                onClick={() => {
+                                  setSelectedStudent(s);
+                                  setStudentEditForm({
+                                    name: s.name,
+                                    national_id: s.national_id,
+                                    grade: s.grade,
+                                    section: s.section,
+                                    parent_phone: s.parent_phone || ''
+                                  });
+                                  setShowStudentModal(true);
+                                }}
+                                className="p-3 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-2xl transition-all"
+                                title="إدارة الحساب"
+                              >
+                                <Edit2 size={18} />
+                              </button>
+                              <button 
+                                onClick={() => setDeletingStudentId(s.id)}
+                                className="p-3 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all"
+                                title="مسح السجل"
+                              >
+                                <Trash2 size={18} />
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -828,11 +1020,17 @@ const AdminDashboard: React.FC = () => {
                 </table>
               </div>
             </div>
-          </div>
-        </div>
+          </motion.div>
+        )}
 
-        <div className="space-y-8">
-          {/* Smart Import Card */}
+        {activeTab === 'settings' && (
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="grid grid-cols-1 lg:grid-cols-2 gap-10"
+          >
+            <div className="space-y-8">
+              {/* Smart Import Card */}
           <div className="sts-card p-10 space-y-8 border-none shadow-2xl shadow-slate-200/50">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-primary/5 text-primary rounded-2xl flex items-center justify-center">
@@ -896,6 +1094,17 @@ const AdminDashboard: React.FC = () => {
                   <p className="font-black text-slate-800 text-xl">{importing ? 'جاري معالجة البيانات...' : 'اسحب الملف هنا أو اضغط للرفع'}</p>
                   <p className="text-xs text-slate-400 font-bold uppercase tracking-[0.2em]">XLSX, XLS, CSV (حتى 10MB)</p>
                 </div>
+                {importing && (
+                  <div className="w-full max-w-md mt-4">
+                    <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-primary transition-all duration-300 ease-out"
+                        style={{ width: `${importProgress}%` }}
+                      ></div>
+                    </div>
+                    <p className="text-center text-xs font-bold text-slate-500 mt-2">{importProgress}%</p>
+                  </div>
+                )}
               </label>
             </div>
 
@@ -908,7 +1117,7 @@ const AdminDashboard: React.FC = () => {
                   <h4 className="font-extrabold text-slate-800 text-sm">استراتيجية التحديث الذكي</h4>
                 </div>
                 <p className="text-xs text-slate-500 font-bold leading-relaxed">
-                  النظام يستخدم رقم الهوية كمفتاح فريد. إذا كان الطالب موجوداً مسبقاً، سيتم تحديث بياناته (الصف، الفصل)، وإذا كان جديداً سيتم إضافته.
+                  النظام يستخدم رقم الهوية كمفتاح فريد. إذا كان الطالب موجوداً مسبقاً، سيتم تحديث بياناته (الصف، الفصل، الجوال)، وإذا كان جديداً سيتم إضافته.
                 </p>
               </div>
               <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
@@ -919,7 +1128,7 @@ const AdminDashboard: React.FC = () => {
                   <h4 className="font-extrabold text-slate-800 text-sm">الأعمدة المطلوبة</h4>
                 </div>
                 <p className="text-xs text-slate-500 font-bold leading-relaxed">
-                  يجب أن يحتوي الملف على الأعمدة التالية بدقة: <span className="text-primary font-black">الاسم، رقم الهوية، الصف، الفصل</span>.
+                  يجب أن يحتوي الملف على الأعمدة التالية بدقة: <span className="text-primary font-black">اسم الطالب، رقم الطالب، الصف، الفصل، جوال الطالب</span>.
                 </p>
               </div>
             </div>
@@ -936,7 +1145,7 @@ const AdminDashboard: React.FC = () => {
                   </div>
                   <div>
                     <p className="font-black text-lg">اكتمل الاستيراد بنجاح!</p>
-                    <p className="text-emerald-100 text-xs font-bold">تمت معالجة {importSuccess} سجل بنجاح.</p>
+                    <p className="text-emerald-100 text-xs font-bold">تم استيراد بيانات {importSuccess} طالب من نظام نور بنجاح.</p>
                   </div>
                 </div>
                 <button onClick={() => setImportSuccess(null)} className="p-2 hover:bg-white/10 rounded-xl transition-colors">
@@ -945,9 +1154,10 @@ const AdminDashboard: React.FC = () => {
               </motion.div>
             )}
           </div>
+          </div>
 
           {/* Quick Actions & Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="space-y-8">
             <div className="sts-card p-10 space-y-6 border-none shadow-2xl shadow-slate-200/50">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center">
@@ -1020,58 +1230,65 @@ const AdminDashboard: React.FC = () => {
               </div>
             </div>
           </div>
-        </div>
+          </motion.div>
+        )}
       </div>
 
       {/* Modals */}
       {showAddUser && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+        <div className="fixed inset-0 z-[100] flex justify-end">
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             onClick={() => setShowAddUser(false)}
-            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
           />
           <motion.div 
-            initial={{ scale: 0.9, y: 20, opacity: 0 }}
-            animate={{ scale: 1, y: 0, opacity: 1 }}
-            className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl relative z-10 overflow-hidden"
+            initial={{ x: '-100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '-100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="bg-white w-full max-w-md h-full shadow-2xl relative z-10 flex flex-col overflow-hidden border-l border-slate-100"
           >
-            <div className="p-10 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
+            <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-primary/10 text-primary rounded-2xl flex items-center justify-center">
                   <UserPlus size={24} />
                 </div>
-                <h3 className="text-xl font-black text-slate-800">إضافة مستخدم جديد</h3>
+                <div>
+                  <h3 className="text-xl font-black text-slate-800">إضافة مستخدم جديد</h3>
+                  <p className="text-slate-400 text-xs font-bold mt-1">إنشاء حساب جديد في النظام</p>
+                </div>
               </div>
-              <button onClick={() => setShowAddUser(false)} className="p-3 hover:bg-white rounded-2xl transition-colors shadow-sm">
+              <button onClick={() => setShowAddUser(false)} className="p-3 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors">
                 <X size={20} />
               </button>
             </div>
-            <form onSubmit={handleAddUser} className="p-10 space-y-6">
-              <div className="space-y-2">
-                <label className="text-xs font-black text-slate-500 uppercase tracking-widest mr-2">الاسم الكامل</label>
-                <input 
-                  type="text" 
-                  required
-                  value={newUserForm.name}
-                  onChange={(e) => setNewUserForm({...newUserForm, name: e.target.value})}
-                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 text-sm outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold"
-                  placeholder="أدخل اسم الموظف..."
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-black text-slate-500 uppercase tracking-widest mr-2">البريد الإلكتروني</label>
-                <input 
-                  type="email" 
-                  required
-                  value={newUserForm.email}
-                  onChange={(e) => setNewUserForm({...newUserForm, email: e.target.value})}
-                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 text-sm outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold"
-                  placeholder="email@example.com"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-6">
+            <div className="flex-1 overflow-y-auto p-8">
+              <form onSubmit={handleAddUser} className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-xs font-black text-slate-500 uppercase tracking-widest mr-2">الاسم الكامل</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={newUserForm.name}
+                    onChange={(e) => setNewUserForm({...newUserForm, name: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 text-sm outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold"
+                    placeholder="أدخل اسم الموظف..."
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-black text-slate-500 uppercase tracking-widest mr-2">البريد الإلكتروني</label>
+                  <input 
+                    type="email" 
+                    required
+                    value={newUserForm.email}
+                    onChange={(e) => setNewUserForm({...newUserForm, email: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 text-sm outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold"
+                    placeholder="email@example.com"
+                  />
+                </div>
                 <div className="space-y-2">
                   <label className="text-xs font-black text-slate-500 uppercase tracking-widest mr-2">كلمة المرور</label>
                   <input 
@@ -1097,144 +1314,275 @@ const AdminDashboard: React.FC = () => {
                     <option value="admin">مدير نظام</option>
                   </select>
                 </div>
-              </div>
-              <button type="submit" className="sts-button-accent w-full py-5 rounded-2xl shadow-xl shadow-accent/20 mt-4">
-                إنشاء الحساب الآن
-              </button>
-            </form>
+                <div className="pt-4">
+                  <button type="submit" className="sts-button-accent w-full py-5 rounded-2xl shadow-xl shadow-accent/20">
+                    إنشاء الحساب الآن
+                  </button>
+                </div>
+              </form>
+            </div>
           </motion.div>
         </div>
       )}
 
       {showUserModal && selectedUser && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+        <div className="fixed inset-0 z-[100] flex justify-end">
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             onClick={() => setShowUserModal(false)}
-            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
           />
           <motion.div 
-            initial={{ scale: 0.9, y: 20, opacity: 0 }}
-            animate={{ scale: 1, y: 0, opacity: 1 }}
-            className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl relative z-10 overflow-hidden"
+            initial={{ x: '-100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '-100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="bg-white w-full max-w-md h-full shadow-2xl relative z-10 flex flex-col overflow-hidden border-l border-slate-100"
           >
-            <div className="p-10 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
-              <div className="flex items-center gap-6">
-                <div className="w-16 h-16 bg-white text-primary rounded-[1.5rem] flex items-center justify-center text-2xl font-black shadow-sm border border-slate-100">
+            <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-white text-primary rounded-2xl flex items-center justify-center text-xl font-black shadow-sm border border-slate-100">
                   {selectedUser.name.charAt(0)}
                 </div>
                 <div>
-                  <h3 className="text-2xl font-black text-slate-800">{selectedUser.name}</h3>
-                  <p className="text-slate-400 font-bold">{selectedUser.email}</p>
+                  <h3 className="text-xl font-black text-slate-800">{selectedUser.name}</h3>
+                  <p className="text-slate-400 text-xs font-bold mt-1">{selectedUser.email}</p>
                 </div>
               </div>
-              <button onClick={() => setShowUserModal(false)} className="p-4 hover:bg-white rounded-2xl transition-colors shadow-sm">
-                <X size={24} />
+              <button onClick={() => setShowUserModal(false)} className="p-3 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors">
+                <X size={20} />
               </button>
             </div>
             
-            <div className="p-10 space-y-10">
-              <div className="grid grid-cols-2 gap-10">
-                <div className="space-y-4">
-                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                    <Shield size={14} />
-                    الدور والصلاحيات
-                  </h4>
-                  <select 
-                    value={selectedUser.role}
-                    onChange={(e) => handleRoleChange(selectedUser.id, e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 text-sm outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold"
+            <div className="flex-1 overflow-y-auto p-8 space-y-8">
+              <div className="space-y-4">
+                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                  <Shield size={14} />
+                  الدور والصلاحيات
+                </h4>
+                <select 
+                  value={selectedUser.role}
+                  onChange={(e) => handleRoleChange(selectedUser.id, e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 text-sm outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold"
+                >
+                  <option value="teacher">معلم</option>
+                  <option value="vice_principal">وكيل</option>
+                  <option value="counselor">موجه</option>
+                  <option value="principal">مدير مدرسة</option>
+                  <option value="admin">مدير نظام</option>
+                </select>
+              </div>
+
+              <div className="space-y-4">
+                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                  <Lock size={14} />
+                  تغيير كلمة المرور
+                </h4>
+                <div className="flex gap-3">
+                  <input 
+                    type="password"
+                    placeholder="كلمة مرور جديدة..."
+                    className="flex-1 bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 text-sm outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold"
+                    value={editingPasswordUserId === selectedUser.id ? newPassword : ''}
+                    onChange={(e) => {
+                      setEditingPasswordUserId(selectedUser.id);
+                      setNewPassword(e.target.value);
+                    }}
+                  />
+                  <button 
+                    onClick={() => savePasswordUpdate(selectedUser.id)}
+                    className="px-6 bg-slate-900 text-white rounded-2xl font-bold hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/20"
                   >
-                    <option value="teacher">معلم</option>
-                    <option value="vice_principal">وكيل</option>
-                    <option value="counselor">موجه</option>
-                    <option value="principal">مدير مدرسة</option>
-                    <option value="admin">مدير نظام</option>
-                  </select>
-                </div>
-                <div className="space-y-4">
-                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                    <Lock size={14} />
-                    تغيير كلمة المرور
-                  </h4>
-                  <div className="flex gap-3">
-                    <input 
-                      type="password"
-                      placeholder="كلمة مرور جديدة..."
-                      className="flex-1 bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 text-sm outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold"
-                      value={editingPasswordUserId === selectedUser.id ? newPassword : ''}
-                      onChange={(e) => {
-                        setEditingPasswordUserId(selectedUser.id);
-                        setNewPassword(e.target.value);
-                      }}
-                    />
-                    <button 
-                      onClick={() => savePasswordUpdate(selectedUser.id)}
-                      className="px-6 bg-slate-900 text-white rounded-2xl font-bold hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/20"
-                    >
-                      تحديث
-                    </button>
-                  </div>
+                    تحديث
+                  </button>
                 </div>
               </div>
 
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                     <Settings size={14} />
-                    الصفوف المسندة للمستخدم
+                    الصفوف المسندة
                   </h4>
                   <span className="text-[10px] bg-primary/5 text-primary px-3 py-1 rounded-full font-black">
                     {selectedUser.assigned_grades?.length || 0} صفوف
                   </span>
                 </div>
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-                  {allGrades.map(grade => (
-                    <button
-                      key={grade}
-                      onClick={() => toggleGrade(selectedUser.id, grade, selectedUser.assigned_grades || [])}
-                      className={`py-3 px-4 rounded-xl text-xs font-black transition-all border ${
-                        selectedUser.assigned_grades?.includes(grade)
-                          ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20 scale-[1.02]'
-                          : 'bg-slate-50 text-slate-500 border-slate-100 hover:border-primary/30'
-                      }`}
-                    >
-                      {grade}
-                    </button>
-                  ))}
+                <div className="grid grid-cols-1 gap-2">
+                  {allGrades.map(grade => {
+                    const isSelected = selectedUser.assigned_grades?.includes(grade);
+                    return (
+                      <button
+                        key={grade}
+                        onClick={() => toggleGrade(selectedUser.id, grade, selectedUser.assigned_grades || [])}
+                        className={`flex items-center justify-between p-4 rounded-2xl transition-all border ${
+                          isSelected
+                            ? 'bg-primary/5 border-primary/20 shadow-sm'
+                            : 'bg-white border-slate-100 hover:border-primary/20 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span className={`font-bold text-sm ${isSelected ? 'text-primary' : 'text-slate-700'}`}>
+                          {grade}
+                        </span>
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                          isSelected ? 'bg-primary text-white' : 'bg-slate-100 text-slate-300'
+                        }`}>
+                          <Check size={14} className={isSelected ? 'opacity-100' : 'opacity-0'} />
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
+            </div>
+            <div className="p-8 border-t border-slate-100 bg-slate-50/50">
+              <button 
+                onClick={() => setShowUserModal(false)}
+                className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/20"
+              >
+                إغلاق
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {showStudentModal && selectedStudent && (
+        <div className="fixed inset-0 z-[100] flex justify-end">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowStudentModal(false)}
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+          />
+          <motion.div 
+            initial={{ x: '-100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '-100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="bg-white w-full max-w-md h-full shadow-2xl relative z-10 flex flex-col overflow-hidden border-l border-slate-100"
+          >
+            <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-white text-primary rounded-2xl flex items-center justify-center text-xl font-black shadow-sm border border-slate-100">
+                  {studentEditForm.name.charAt(0) || 'ط'}
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-800">تعديل بيانات الطالب</h3>
+                  <p className="text-slate-400 text-xs font-bold mt-1">{studentEditForm.national_id}</p>
+                </div>
+              </div>
+              <button onClick={() => setShowStudentModal(false)} className="p-3 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-8 space-y-6">
+              <div className="space-y-2">
+                <label className="text-xs font-black text-slate-400 uppercase tracking-widest">اسم الطالب</label>
+                <input 
+                  type="text"
+                  value={studentEditForm.name}
+                  onChange={(e) => setStudentEditForm({...studentEditForm, name: e.target.value})}
+                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 text-sm outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-xs font-black text-slate-400 uppercase tracking-widest">رقم الهوية</label>
+                <input 
+                  type="text"
+                  value={studentEditForm.national_id}
+                  onChange={(e) => setStudentEditForm({...studentEditForm, national_id: e.target.value})}
+                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 text-sm outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold font-mono"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest">الصف</label>
+                  <input 
+                    type="text"
+                    value={studentEditForm.grade}
+                    onChange={(e) => setStudentEditForm({...studentEditForm, grade: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 text-sm outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest">الفصل</label>
+                  <input 
+                    type="text"
+                    value={studentEditForm.section}
+                    onChange={(e) => setStudentEditForm({...studentEditForm, section: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 text-sm outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-black text-slate-400 uppercase tracking-widest">رقم الجوال</label>
+                <input 
+                  type="text"
+                  value={studentEditForm.parent_phone}
+                  onChange={(e) => setStudentEditForm({...studentEditForm, parent_phone: e.target.value})}
+                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 text-sm outline-none focus:ring-2 focus:ring-primary/20 transition-all font-bold font-mono"
+                  placeholder="05XXXXXXXX"
+                />
+              </div>
+            </div>
+            <div className="p-8 border-t border-slate-100 bg-slate-50/50 flex gap-3">
+              <button 
+                onClick={() => saveStudentUpdate(selectedStudent.id)}
+                className="flex-1 py-4 bg-primary text-white rounded-2xl font-black hover:bg-primary/90 transition-all shadow-lg shadow-primary/20"
+              >
+                حفظ التعديلات
+              </button>
+              <button 
+                onClick={() => setShowStudentModal(false)}
+                className="px-6 py-4 bg-white text-slate-600 border border-slate-200 rounded-2xl font-black hover:bg-slate-50 transition-all"
+              >
+                إلغاء
+              </button>
             </div>
           </motion.div>
         </div>
       )}
 
       {showAddStudent && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+        <div className="fixed inset-0 z-[100] flex justify-end">
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             onClick={() => setShowAddStudent(false)}
-            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
           />
           <motion.div 
-            initial={{ scale: 0.9, y: 20, opacity: 0 }}
-            animate={{ scale: 1, y: 0, opacity: 1 }}
-            className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl relative z-10 overflow-hidden"
+            initial={{ x: '-100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '-100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="bg-white w-full max-w-md h-full shadow-2xl relative z-10 flex flex-col overflow-hidden border-l border-slate-100"
           >
-            <div className="p-10 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
+            <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center">
                   <UserPlus size={24} />
                 </div>
-                <h3 className="text-xl font-black text-slate-800">إضافة طالب جديد</h3>
+                <div>
+                  <h3 className="text-xl font-black text-slate-800">إضافة طالب جديد</h3>
+                  <p className="text-slate-400 text-xs font-bold mt-1">إدخال بيانات طالب جديد للنظام</p>
+                </div>
               </div>
-              <button onClick={() => setShowAddStudent(false)} className="p-3 hover:bg-white rounded-2xl transition-colors shadow-sm">
+              <button onClick={() => setShowAddStudent(false)} className="p-3 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors">
                 <X size={20} />
               </button>
             </div>
-            <form onSubmit={handleAddStudent} className="p-10 space-y-6">
+            <div className="flex-1 overflow-y-auto p-8">
+              <form onSubmit={handleAddStudent} className="space-y-6">
               <div className="space-y-2">
                 <label className="text-xs font-black text-slate-500 uppercase tracking-widest mr-2">اسم الطالب</label>
                 <input 
@@ -1281,10 +1629,13 @@ const AdminDashboard: React.FC = () => {
                   />
                 </div>
               </div>
-              <button type="submit" className="w-full bg-emerald-500 text-white py-5 rounded-2xl font-black shadow-xl shadow-emerald-500/20 mt-4 hover:bg-emerald-600 transition-all">
-                إضافة الطالب لقاعدة البيانات
-              </button>
+              <div className="pt-4">
+                <button type="submit" className="w-full bg-emerald-500 text-white py-5 rounded-2xl font-black shadow-xl shadow-emerald-500/20 hover:bg-emerald-600 transition-all">
+                  إضافة الطالب لقاعدة البيانات
+                </button>
+              </div>
             </form>
+            </div>
           </motion.div>
         </div>
       )}
@@ -1324,6 +1675,46 @@ const AdminDashboard: React.FC = () => {
                 className="flex-1 bg-slate-100 text-slate-600 py-4 rounded-2xl font-black hover:bg-slate-200 transition-all"
               >
                 إلغاء
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {deletingStudentId && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-6">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            onClick={() => setDeletingStudentId(null)}
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+          />
+          <motion.div 
+            initial={{ scale: 0.9, y: 20, opacity: 0 }}
+            animate={{ scale: 1, y: 0, opacity: 1 }}
+            className="bg-white w-full max-w-sm rounded-[2.5rem] p-10 shadow-2xl relative z-10 text-center space-y-8"
+          >
+            <div className="w-20 h-20 bg-red-50 text-red-600 rounded-3xl flex items-center justify-center mx-auto shadow-sm border border-red-100">
+              <Trash2 size={36} />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-xl font-black text-slate-800">مسح السجل؟</h3>
+              <p className="text-sm text-slate-500 font-bold leading-relaxed">
+                هل أنت متأكد من رغبتك في حذف هذا الطالب؟ لا يمكن التراجع عن هذا الإجراء.
+              </p>
+            </div>
+            <div className="flex gap-4">
+              <button 
+                onClick={() => deleteStudent(deletingStudentId)}
+                className="flex-1 bg-red-600 text-white py-4 rounded-2xl font-black hover:bg-red-700 transition-all shadow-xl shadow-red-600/20"
+              >
+                تأكيد الحذف
+              </button>
+              <button 
+                onClick={() => setDeletingStudentId(null)}
+                className="flex-1 bg-slate-100 text-slate-600 py-4 rounded-2xl font-black hover:bg-slate-200 transition-all"
+              >
+                إلغاء الأمر
               </button>
             </div>
           </motion.div>

@@ -86,12 +86,12 @@ const TeacherRollCall: React.FC = () => {
   }, [grade, section, period, date]);
 
   const handleStatusChange = (studentId: number, status: string) => {
-    if (isSubmitted) return;
+    if (isSubmitted && user?.role !== 'admin') return;
     setAttendance(prev => ({ ...prev, [studentId]: status }));
   };
 
   const handleBulkAction = (status: string) => {
-    if (isSubmitted) return;
+    if (isSubmitted && user?.role !== 'admin') return;
     const newAttendance: Record<number, string> = {};
     students.forEach(s => {
       newAttendance[s.id] = status;
@@ -100,7 +100,7 @@ const TeacherRollCall: React.FC = () => {
   };
 
   const handleSubmit = async () => {
-    if (isSubmitted) return;
+    if (isSubmitted && user?.role !== 'admin') return;
     setSubmitting(true);
     try {
       const records = students.map(s => ({
@@ -242,37 +242,37 @@ const TeacherRollCall: React.FC = () => {
                 <div className="font-black text-slate-800">{student.name}</div>
                 <div className="flex gap-2">
                   <button
-                    disabled={isSubmitted}
+                    disabled={isSubmitted && user?.role !== 'admin'}
                     onClick={() => handleStatusChange(student.id, 'حاضر')}
                     className={`flex-1 min-h-[44px] rounded-xl text-sm font-bold flex items-center justify-center gap-1 transition-all ${
                       attendance[student.id] === 'حاضر'
                         ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
                         : 'bg-slate-50 text-slate-400 border border-slate-100 hover:bg-slate-100'
-                    } ${isSubmitted ? 'cursor-not-allowed' : ''}`}
+                    } ${isSubmitted && user?.role !== 'admin' ? 'cursor-not-allowed' : ''}`}
                   >
                     <CheckCircle2 size={16} />
                     حاضر
                   </button>
                   <button
-                    disabled={isSubmitted}
+                    disabled={isSubmitted && user?.role !== 'admin'}
                     onClick={() => handleStatusChange(student.id, 'غائب')}
                     className={`flex-1 min-h-[44px] rounded-xl text-sm font-bold flex items-center justify-center gap-1 transition-all ${
                       attendance[student.id] === 'غائب'
                         ? 'bg-rose-100 text-rose-700 border border-rose-200'
                         : 'bg-slate-50 text-slate-400 border border-slate-100 hover:bg-slate-100'
-                    } ${isSubmitted ? 'cursor-not-allowed' : ''}`}
+                    } ${isSubmitted && user?.role !== 'admin' ? 'cursor-not-allowed' : ''}`}
                   >
                     <XCircle size={16} />
                     غائب
                   </button>
                   <button
-                    disabled={isSubmitted}
+                    disabled={isSubmitted && user?.role !== 'admin'}
                     onClick={() => handleStatusChange(student.id, 'متأخر')}
                     className={`flex-1 min-h-[44px] rounded-xl text-sm font-bold flex items-center justify-center gap-1 transition-all ${
                       attendance[student.id] === 'متأخر'
                         ? 'bg-amber-100 text-amber-700 border border-amber-200'
                         : 'bg-slate-50 text-slate-400 border border-slate-100 hover:bg-slate-100'
-                    } ${isSubmitted ? 'cursor-not-allowed' : ''}`}
+                    } ${isSubmitted && user?.role !== 'admin' ? 'cursor-not-allowed' : ''}`}
                   >
                     <Clock size={16} />
                     متأخر
@@ -283,7 +283,7 @@ const TeacherRollCall: React.FC = () => {
           </div>
           
           {/* Action Button at the end of the list */}
-          {!isSubmitted && (
+          {(!isSubmitted || user?.role === 'admin') && (
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
