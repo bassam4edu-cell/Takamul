@@ -1,11 +1,24 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../App';
-import { CheckCircle2, XCircle, Clock, Save, UserCheck, AlertCircle, Printer, Filter, Calendar, MessageSquare, AlertTriangle, Search, Hourglass } from 'lucide-react';
+import { useMessageLog } from '../context/MessageLogContext';
+import { CheckCircle2, XCircle, Clock, Save, UserCheck, AlertCircle, Printer, Filter, Calendar, MessageSquare, AlertTriangle, Search, Hourglass, Trash2, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+
+interface AttendanceRecord {
+  studentId: number;
+  date: string;
+  period: number;
+  status: string;
+  isExcused: boolean;
+  excuseReason: string;
+  teacherName?: string;
+}
 
 const VPRadar: React.FC = () => {
   const { user } = useAuth();
+  const { addLogEntry } = useMessageLog();
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedPeriod, setSelectedPeriod] = useState<number>(1);
   const [grade, setGrade] = useState('all');
   const [section, setSection] = useState('all');
   
@@ -13,12 +26,9 @@ const VPRadar: React.FC = () => {
   const [sections, setSections] = useState<string[]>([]);
   
   const [students, setStudents] = useState<any[]>([]);
-  const [attendance, setAttendance] = useState<Record<number, string>>({});
-  const [originalAttendance, setOriginalAttendance] = useState<Record<number, string>>({});
-  const [excuseStatus, setExcuseStatus] = useState<Record<number, boolean>>({});
-  const [originalExcuseStatus, setOriginalExcuseStatus] = useState<Record<number, boolean>>({});
-  const [excuseReason, setExcuseReason] = useState<Record<number, string>>({});
-  const [originalExcuseReason, setOriginalExcuseReason] = useState<Record<number, string>>({});
+  const [attendanceData, setAttendanceData] = useState<AttendanceRecord[]>([]);
+  const [originalAttendanceData, setOriginalAttendanceData] = useState<AttendanceRecord[]>([]);
+  
   const [pendingClasses, setPendingClasses] = useState<{grade: string, section: string}[]>([]);
   const [completedClasses, setCompletedClasses] = useState<{grade: string, section: string, teacher_name?: string, period?: number, timestamp?: string}[]>([]);
   const [totalClassesCount, setTotalClassesCount] = useState(0);
@@ -27,6 +37,7 @@ const VPRadar: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [isSendingBulk, setIsSendingBulk] = useState(false);
+  const [principalName, setPrincipalName] = useState('مدير المدرسة');
 
   // Smart Dashboard States
   const [hasSearched, setHasSearched] = useState(false);
@@ -37,13 +48,50 @@ const VPRadar: React.FC = () => {
   const [selectedReportType, setSelectedReportType] = useState<'daily' | 'warnings_3' | 'warnings_5' | 'excused_form'>('daily');
   const [selectedStudentForReport, setSelectedStudentForReport] = useState<any>(null);
 
+  // Modal States
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [alertMessage, setAlertMessage] = useState<string | null>(null);
+  const [bulkPresentConfig, setBulkPresentConfig] = useState<{grade: string, section: string} | null>(null);
+
+  // Helper to get current period data
+  const currentPeriodData = useMemo(() => {
+    return attendanceData.filter(a => a.date === date && a.period === selectedPeriod);
+  }, [attendanceData, date, selectedPeriod]);
+
+  const originalCurrentPeriodData = useMemo(() => {
+    return originalAttendanceData.filter(a => a.date === date && a.period === selectedPeriod);
+  }, [originalAttendanceData, date, selectedPeriod]);
+
+  const getStudentStatus = (studentId: number) => {
+    const record = currentPeriodData.find(a => a.studentId === studentId);
+    return record ? record.status : 'حاضر';
+  };
+
+  const getStudentExcuseStatus = (studentId: number) => {
+    const record = currentPeriodData.find(a => a.studentId === studentId);
+    return record ? record.isExcused : false;
+  };
+
+  const getStudentExcuseReason = (studentId: number) => {
+    const record = currentPeriodData.find(a => a.studentId === studentId);
+    return record ? record.excuseReason : '';
+  };
+
   // Check if there are unsaved changes
   const hasUnsavedChanges = useMemo(() => {
-    const attendanceChanged = Object.keys(attendance).some(id => attendance[Number(id)] !== originalAttendance[Number(id)]);
-    const excuseChanged = Object.keys(excuseStatus).some(id => excuseStatus[Number(id)] !== originalExcuseStatus[Number(id)]);
-    const reasonChanged = Object.keys(excuseReason).some(id => excuseReason[Number(id)] !== originalExcuseReason[Number(id)]);
-    return attendanceChanged || excuseChanged || reasonChanged;
-  }, [attendance, originalAttendance, excuseStatus, originalExcuseStatus, excuseReason, originalExcuseReason]);
+    return currentPeriodData.some(current => {
+      const original = originalCurrentPeriodData.find(o => o.studentId === current.studentId);
+      if (!original) {
+        // If no original record, it's an unsaved change ONLY if the new status is not 'حاضر'
+        // or if there's an excuse/reason.
+        return current.status !== 'حاضر' || current.isExcused || current.excuseReason !== '';
+      }
+      return current.status !== original.status || 
+             current.isExcused !== original.isExcused || 
+             current.excuseReason !== original.excuseReason;
+    });
+  }, [currentPeriodData, originalCurrentPeriodData]);
 
   // Fetch Grades
   useEffect(() => {
@@ -92,31 +140,43 @@ const VPRadar: React.FC = () => {
         section
       });
       
-      const [studentsRes, pendingRes] = await Promise.all([
+      const [studentsRes, pendingRes, settingsRes] = await Promise.all([
         fetch(`/api/attendance/command-center?${params}`),
-        fetch(`/api/attendance/pending-classes?date=${date}`)
+        fetch(`/api/attendance/pending-classes?date=${date}&period=${selectedPeriod}`),
+        fetch('/api/settings')
       ]);
+
+      if (settingsRes.ok) {
+        const settingsJson = await settingsRes.json();
+        if (settingsJson.principal_name) {
+          setPrincipalName(settingsJson.principal_name);
+        }
+      }
 
       if (studentsRes.ok) {
         const data = await studentsRes.json();
         setStudents(data);
         
-        const currentAttendance: Record<number, string> = {};
-        const currentExcuseStatus: Record<number, boolean> = {};
-        const currentExcuseReason: Record<number, string> = {};
+        const newAttendanceData: AttendanceRecord[] = [];
         
         data.forEach((s: any) => {
-          currentAttendance[s.id] = s.status || 'حاضر';
-          currentExcuseStatus[s.id] = s.is_excused || false;
-          currentExcuseReason[s.id] = s.excuse_reason || '';
+          if (s.attendance_records && Array.isArray(s.attendance_records)) {
+            s.attendance_records.forEach((ar: any) => {
+              newAttendanceData.push({
+                studentId: s.id,
+                date: date,
+                period: ar.period,
+                status: ar.status,
+                isExcused: ar.is_excused,
+                excuseReason: ar.excuse_reason || '',
+                teacherName: ar.teacher_name
+              });
+            });
+          }
         });
         
-        setAttendance(currentAttendance);
-        setOriginalAttendance({...currentAttendance});
-        setExcuseStatus(currentExcuseStatus);
-        setOriginalExcuseStatus({...currentExcuseStatus});
-        setExcuseReason(currentExcuseReason);
-        setOriginalExcuseReason({...currentExcuseReason});
+        setAttendanceData(newAttendanceData);
+        setOriginalAttendanceData(JSON.parse(JSON.stringify(newAttendanceData)));
       }
 
       if (pendingRes.ok) {
@@ -149,12 +209,12 @@ const VPRadar: React.FC = () => {
     fetchData();
     // We don't auto-set hasSearched to true here. 
     // The user must explicitly click Search or a KPI to view the list.
-  }, [date, grade, section]);
+  }, [date, grade, section, selectedPeriod]);
 
   // Poll for pending classes every 30 seconds
   useEffect(() => {
     const interval = setInterval(() => {
-      fetch(`/api/attendance/pending-classes?date=${date}`)
+      fetch(`/api/attendance/pending-classes?date=${date}&period=${selectedPeriod}`)
         .then(res => res.json())
         .then(pendingData => {
           let pending = pendingData.pending || [];
@@ -174,7 +234,7 @@ const VPRadar: React.FC = () => {
         .catch(err => console.error('Failed to poll pending classes:', err));
     }, 30000);
     return () => clearInterval(interval);
-  }, [date, grade, section]);
+  }, [date, grade, section, selectedPeriod]);
 
   const handleSearchClick = () => {
     setStatusFilter('all');
@@ -186,18 +246,119 @@ const VPRadar: React.FC = () => {
     setHasSearched(true);
   };
 
-  const handleStatusChange = (studentId: number, status: string) => {
-    setAttendance(prev => ({ ...prev, [studentId]: status }));
+  const handleExcuseChange = (studentId: number, isExcused: boolean) => {
+    setAttendanceData(prev => {
+      const existingIndex = prev.findIndex(a => a.studentId === studentId && a.date === date && a.period === selectedPeriod);
+      if (existingIndex >= 0) {
+        const newData = [...prev];
+        newData[existingIndex] = { ...newData[existingIndex], isExcused };
+        return newData;
+      } else {
+        return [...prev, { studentId, date, period: selectedPeriod, status: 'غائب', isExcused, excuseReason: '' }];
+      }
+    });
+  };
+
+  const handleExcuseReasonChange = (studentId: number, excuseReason: string) => {
+    setAttendanceData(prev => {
+      const existingIndex = prev.findIndex(a => a.studentId === studentId && a.date === date && a.period === selectedPeriod);
+      if (existingIndex >= 0) {
+        const newData = [...prev];
+        newData[existingIndex] = { ...newData[existingIndex], excuseReason };
+        return newData;
+      } else {
+        return [...prev, { studentId, date, period: selectedPeriod, status: 'غائب', isExcused: true, excuseReason }];
+      }
+    });
+  };
+
+  const handleStatusChange = async (studentId: number, status: string) => {
+    setAttendanceData(prev => {
+      const existingIndex = prev.findIndex(a => a.studentId === studentId && a.date === date && a.period === selectedPeriod);
+      if (existingIndex >= 0) {
+        const newData = [...prev];
+        newData[existingIndex] = { ...newData[existingIndex], status };
+        return newData;
+      } else {
+        return [...prev, { studentId, date, period: selectedPeriod, status, isExcused: false, excuseReason: '' }];
+      }
+    });
+    
+    // Quick Individual Edit: Save instantly
+    const student = students.find(s => s.id === studentId);
+    if (!student) return;
+
+    try {
+      const records = [{
+        student_id: student.id,
+        status: status,
+        is_excused: getStudentExcuseStatus(student.id),
+        excuse_reason: getStudentExcuseReason(student.id),
+        grade: student.grade,
+        section: student.section
+      }];
+
+      const res = await fetch('/api/attendance/submit-bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          records,
+          teacher_id: user?.id,
+          date,
+          period: selectedPeriod
+        })
+      });
+
+      if (res.ok) {
+        setOriginalAttendanceData(prev => {
+          const existingIndex = prev.findIndex(a => a.studentId === studentId && a.date === date && a.period === selectedPeriod);
+          if (existingIndex >= 0) {
+            const newData = [...prev];
+            newData[existingIndex] = { ...newData[existingIndex], status };
+            return newData;
+          } else {
+            return [...prev, { studentId, date, period: selectedPeriod, status, isExcused: false, excuseReason: '' }];
+          }
+        });
+        fetchData(); // Refresh radar data
+      }
+    } catch (err) {
+      console.error("Failed to save individual status", err);
+    }
   };
 
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      const records = students.map(s => ({
+      let studentsToSubmit = students;
+      
+      // If viewing all grades or all sections, only submit records that have been modified
+      if (grade === 'all' || section === 'all') {
+        studentsToSubmit = students.filter(s => {
+          const current = currentPeriodData.find(a => a.studentId === s.id);
+          const original = originalCurrentPeriodData.find(o => o.studentId === s.id);
+          if (!current) return false;
+          if (!original) {
+            return current.status !== 'حاضر' || current.isExcused || current.excuseReason !== '';
+          }
+          return current.status !== original.status || 
+                 current.isExcused !== original.isExcused || 
+                 current.excuseReason !== original.excuseReason;
+        });
+      }
+
+      if (studentsToSubmit.length === 0) {
+        setSubmitting(false);
+        setSuccess(true);
+        setTimeout(() => setSuccess(false), 3000);
+        return;
+      }
+
+      const records = studentsToSubmit.map(s => ({
         student_id: s.id,
-        status: attendance[s.id],
-        is_excused: excuseStatus[s.id] || false,
-        excuse_reason: excuseReason[s.id] || '',
+        status: getStudentStatus(s.id),
+        is_excused: getStudentExcuseStatus(s.id),
+        excuse_reason: getStudentExcuseReason(s.id),
         grade: s.grade,
         section: s.section
       }));
@@ -209,15 +370,13 @@ const VPRadar: React.FC = () => {
           records,
           teacher_id: user?.id,
           date,
-          period: 1 // Default period for daily attendance
+          period: selectedPeriod
         })
       });
 
       if (res.ok) {
         setSuccess(true);
-        setOriginalAttendance({...attendance});
-        setOriginalExcuseStatus({...excuseStatus});
-        setOriginalExcuseReason({...excuseReason});
+        setOriginalAttendanceData(JSON.parse(JSON.stringify(attendanceData)));
         setTimeout(() => setSuccess(false), 3000);
         fetchData(); // Refresh to get updated teacher names and radar
       }
@@ -225,6 +384,93 @@ const VPRadar: React.FC = () => {
       console.error(err);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleResetAttendance = async () => {
+    setResetting(true);
+    try {
+      const res = await fetch('/api/attendance/reset-daily', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date, period: selectedPeriod })
+      });
+      if (res.ok) {
+        setAlertMessage(`تم تصفير تحضير الحصة ${selectedPeriod} بنجاح.`);
+        fetchData();
+        setIsResetModalOpen(false);
+      } else {
+        setAlertMessage('حدث خطأ أثناء التصفير.');
+      }
+    } catch (err) {
+      console.error(err);
+      setAlertMessage('حدث خطأ أثناء التصفير.');
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  const handleBulkPresent = async () => {
+    if (!bulkPresentConfig) return;
+    const { grade, section } = bulkPresentConfig;
+    
+    const classStudents = students.filter(s => s.grade === grade && s.section === section);
+    
+    setAttendanceData(prev => {
+      const next = [...prev];
+      classStudents.forEach(s => {
+        const existingIndex = next.findIndex(a => a.studentId === s.id && a.date === date && a.period === selectedPeriod);
+        if (existingIndex >= 0) {
+          next[existingIndex] = { ...next[existingIndex], status: 'حاضر' };
+        } else {
+          next.push({ studentId: s.id, date, period: selectedPeriod, status: 'حاضر', isExcused: false, excuseReason: '' });
+        }
+      });
+      return next;
+    });
+
+    try {
+      const records = classStudents.map(s => ({
+        student_id: s.id,
+        status: 'حاضر',
+        is_excused: getStudentExcuseStatus(s.id),
+        excuse_reason: getStudentExcuseReason(s.id),
+        grade: s.grade,
+        section: s.section
+      }));
+
+      const res = await fetch('/api/attendance/submit-bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          records,
+          teacher_id: user?.id,
+          date,
+          period: selectedPeriod
+        })
+      });
+
+      if (res.ok) {
+        setOriginalAttendanceData(prev => {
+          const next = [...prev];
+          classStudents.forEach(s => {
+            const existingIndex = next.findIndex(a => a.studentId === s.id && a.date === date && a.period === selectedPeriod);
+            if (existingIndex >= 0) {
+              next[existingIndex] = { ...next[existingIndex], status: 'حاضر' };
+            } else {
+              next.push({ studentId: s.id, date, period: selectedPeriod, status: 'حاضر', isExcused: false, excuseReason: '' });
+            }
+          });
+          return next;
+        });
+        fetchData();
+        setAlertMessage(`تم تحضير جميع طلاب الفصل للحصة ${selectedPeriod} بنجاح`);
+      }
+    } catch (err) {
+      console.error("Failed to bulk present", err);
+      setAlertMessage('حدث خطأ أثناء التحضير الجماعي');
+    } finally {
+      setBulkPresentConfig(null);
     }
   };
 
@@ -246,7 +492,7 @@ const VPRadar: React.FC = () => {
     } else if (selectedReportType === 'warnings_5') {
       list = students.filter(s => (s.total_absences || 0) >= 5);
     } else if (selectedReportType === 'daily') {
-      list = filteredStudents.filter(s => attendance[s.id] === 'غائب');
+      list = filteredStudents.filter(s => getStudentStatus(s.id) === 'غائب');
     }
     return list;
   };
@@ -269,7 +515,7 @@ const VPRadar: React.FC = () => {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ phoneNumber, studentName, instanceId, token })
+        body: JSON.stringify({ phoneNumber, studentName, instanceId, token, period: selectedPeriod })
       });
       
       const data = await response.json();
@@ -278,8 +524,26 @@ const VPRadar: React.FC = () => {
         if (data.code === 'MISSING_WHATSAPP_CREDENTIALS') {
           return { success: false, code: data.code, message: data.message };
         }
+        
+        addLogEntry({
+          recipient: studentName,
+          recipientPhone: phoneNumber,
+          messageType: '🛑 إشعار غياب',
+          messageText: `إشعار غياب للطالب ${studentName}`,
+          status: 'failed'
+        });
+        
         throw new Error('Failed to send WhatsApp message');
       }
+
+      addLogEntry({
+        recipient: studentName,
+        recipientPhone: phoneNumber,
+        messageType: '🛑 إشعار غياب',
+        messageText: `إشعار غياب للطالب ${studentName}`,
+        status: 'success'
+      });
+
       return { success: true };
     } catch (error) {
       console.error("Failed to send WhatsApp message", error);
@@ -289,7 +553,7 @@ const VPRadar: React.FC = () => {
 
   const handleSendWhatsApp = async (student: any) => {
     if (!student.parent_phone || student.parent_phone.trim() === '') {
-      alert('رقم الجوال غير مسجل لهذا الطالب');
+      setAlertMessage('رقم الجوال غير مسجل لهذا الطالب');
       return;
     }
     
@@ -298,23 +562,23 @@ const VPRadar: React.FC = () => {
     
     if (!result.success) {
       if (result.code === 'MISSING_WHATSAPP_CREDENTIALS') {
-        alert(`⚠️ تعذر الإرسال: ${result.message}`);
+        setAlertMessage(`⚠️ تعذر الإرسال: ${result.message}`);
       } else {
-        alert('حدث خطأ أثناء الإرسال.');
+        setAlertMessage('حدث خطأ أثناء الإرسال.');
       }
       return;
     }
     
-    alert(`تم إرسال رسالة واتساب لولي أمر الطالب بنجاح.`);
+    setAlertMessage(`تم إرسال رسالة واتساب لولي أمر الطالب بنجاح.`);
   };
 
   const handleBulkWhatsApp = async () => {
-    const absentStudents = filteredStudents.filter(s => attendance[s.id] === 'غائب');
+    const absentStudents = filteredStudents.filter(s => getStudentStatus(s.id) === 'غائب');
     const validStudents = absentStudents.filter(s => s.parent_phone && s.parent_phone.trim() !== '');
     const skippedCount = absentStudents.length - validStudents.length;
 
     if (validStudents.length === 0) {
-      alert(`لا يوجد طلاب غائبين بأرقام جوال مسجلة.`);
+      setAlertMessage(`لا يوجد طلاب غائبين بأرقام جوال مسجلة.`);
       return;
     }
 
@@ -327,7 +591,7 @@ const VPRadar: React.FC = () => {
       
       if (!result.success) {
         if (result.code === 'MISSING_WHATSAPP_CREDENTIALS') {
-          alert(`⚠️ تعذر الإرسال: ${result.message}`);
+          setAlertMessage(`⚠️ تعذر الإرسال: ${result.message}`);
           hasCredentialError = true;
           break; // Stop the loop
         }
@@ -343,22 +607,22 @@ const VPRadar: React.FC = () => {
     setIsSendingBulk(false);
     
     if (!hasCredentialError) {
-      alert(`تم إرسال ${sentCount} رسالة بنجاح، وتخطي ${skippedCount} طالب لعدم وجود رقم.`);
+      setAlertMessage(`تم إرسال ${sentCount} رسالة بنجاح، وتخطي ${skippedCount} طالب لعدم وجود رقم.`);
     }
   };
 
   // KPIs
-  const totalPresent = students.filter(s => attendance[s.id] === 'حاضر').length;
-  const totalAbsent = students.filter(s => attendance[s.id] === 'غائب').length;
-  const totalLate = students.filter(s => attendance[s.id] === 'متأخر').length;
+  const totalPresent = students.filter(s => getStudentStatus(s.id) === 'حاضر').length;
+  const totalAbsent = students.filter(s => getStudentStatus(s.id) === 'غائب').length;
+  const totalLate = students.filter(s => getStudentStatus(s.id) === 'متأخر').length;
 
   const progressPercentage = totalClassesCount > 0 ? Math.round((completedClasses.length / totalClassesCount) * 100) : 0;
 
   // Filtered Students
   const filteredStudents = useMemo(() => {
     if (statusFilter === 'all') return students;
-    return students.filter(s => attendance[s.id] === statusFilter);
-  }, [students, attendance, statusFilter]);
+    return students.filter(s => getStudentStatus(s.id) === statusFilter);
+  }, [students, currentPeriodData, statusFilter]);
 
   return (
     <div className="max-w-7xl mx-auto p-4 pb-24 space-y-6">
@@ -503,8 +767,14 @@ const VPRadar: React.FC = () => {
             </table>
 
             <div className="flex justify-between items-center mt-16 font-bold">
-              <p>وكيل شؤون الطلاب: {user?.name || 'الإدارة'} / التوقيع....</p>
-              <p>مدير المدرسة: ....... / التوقيع....</p>
+              <div className="text-right">
+                <p>وكيل شؤون الطلاب</p>
+                <p className="mt-2">الاسم: {user?.name || 'غير محدد'}</p>
+              </div>
+              <div className="text-left">
+                <p>مدير المدرسة</p>
+                <p className="mt-2">الاسم: {principalName}</p>
+              </div>
             </div>
           </div>
         )}
@@ -517,13 +787,21 @@ const VPRadar: React.FC = () => {
             <UserCheck className="text-primary w-8 h-8" />
             رادار التحضير والغياب
           </h2>
-          <button 
-            onClick={handlePrint}
-            className="w-full md:w-auto py-3 px-6 bg-slate-800 hover:bg-slate-900 text-white rounded-2xl text-sm font-black flex items-center justify-center gap-2 transition-all shadow-lg min-h-[44px]"
-          >
-            <Printer size={18} />
-            طباعة التقرير المخصص
-          </button>
+          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+            <button 
+              onClick={() => setIsResetModalOpen(true)}
+              className="w-full md:w-auto py-3 px-6 bg-red-100 hover:bg-red-200 text-red-700 rounded-2xl text-sm font-black flex items-center justify-center gap-2 transition-all shadow-sm min-h-[44px]"
+            >
+              🔄 تصفير تحضير هذه الحصة
+            </button>
+            <button 
+              onClick={handlePrint}
+              className="w-full md:w-auto py-3 px-6 bg-slate-800 hover:bg-slate-900 text-white rounded-2xl text-sm font-black flex items-center justify-center gap-2 transition-all shadow-lg min-h-[44px]"
+            >
+              <Printer size={18} />
+              طباعة التقرير المخصص
+            </button>
+          </div>
         </div>
 
         {/* Top Metric Cards (Compact) */}
@@ -644,7 +922,7 @@ const VPRadar: React.FC = () => {
             <Filter size={18} className="text-primary" />
             <h3>الفلاتر:</h3>
           </div>
-          <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4 w-full">
+          <div className="flex-1 grid grid-cols-1 md:grid-cols-5 gap-4 w-full">
             <div className="relative">
               <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
               <input
@@ -654,6 +932,19 @@ const VPRadar: React.FC = () => {
                 className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 pr-12 pl-4 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none min-h-[44px]"
               />
             </div>
+            <select
+              value={selectedPeriod}
+              onChange={(e) => setSelectedPeriod(Number(e.target.value))}
+              className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none min-h-[44px]"
+            >
+              <option value="1">الحصة الأولى</option>
+              <option value="2">الحصة الثانية</option>
+              <option value="3">الحصة الثالثة</option>
+              <option value="4">الحصة الرابعة</option>
+              <option value="5">الحصة الخامسة</option>
+              <option value="6">الحصة السادسة</option>
+              <option value="7">الحصة السابعة</option>
+            </select>
             <select
               value={grade}
               onChange={(e) => setGrade(e.target.value)}
@@ -770,57 +1061,72 @@ const VPRadar: React.FC = () => {
 
           {/* Bulk Actions */}
           <AnimatePresence>
-            {filteredStudents.some(s => attendance[s.id] === 'غائب') && (
-              <motion.div 
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="print:hidden overflow-hidden mb-6"
-              >
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="print:hidden mb-6 space-y-4">
+              {grade !== 'all' && section !== 'all' && (
+                <motion.div 
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden"
+                >
                   <button
-                    onClick={handleBulkWhatsApp}
-                    disabled={isSendingBulk}
-                    className={`w-full bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-200 rounded-2xl py-4 px-6 text-sm font-black flex items-center justify-center gap-3 transition-all shadow-sm ${isSendingBulk ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    onClick={() => setBulkPresentConfig({ grade, section })}
+                    className="w-full bg-emerald-500 hover:bg-emerald-600 text-white border border-emerald-600 rounded-2xl py-4 px-6 text-sm font-black flex items-center justify-center gap-3 transition-all shadow-sm"
                   >
-                    <MessageSquare size={20} />
-                    {isSendingBulk ? 'جاري الإرسال...' : 'إرسال واتساب لجميع الغائبين المعروضين'}
+                    <UserCheck size={20} />
+                    ✅ تحضير جميع طلاب الفصل (حضور)
                   </button>
-                  {(() => {
-                    const absentStudents = filteredStudents.filter(s => attendance[s.id] === 'غائب');
-                    const areAllExcused = absentStudents.length > 0 && absentStudents.every(s => excuseStatus[s.id]);
-                    return (
-                      <button
-                        onClick={() => {
-                          setExcuseStatus(prev => {
-                            const next = { ...prev };
+                </motion.div>
+              )}
+
+              {filteredStudents.some(s => getStudentStatus(s.id) === 'غائب') && (
+                <motion.div 
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <button
+                      onClick={handleBulkWhatsApp}
+                      disabled={isSendingBulk}
+                      className={`w-full bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-200 rounded-2xl py-4 px-6 text-sm font-black flex items-center justify-center gap-3 transition-all shadow-sm ${isSendingBulk ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      <MessageSquare size={20} />
+                      {isSendingBulk ? 'جاري الإرسال...' : 'إرسال واتساب لجميع الغائبين المعروضين'}
+                    </button>
+                    {(() => {
+                      const absentStudents = filteredStudents.filter(s => getStudentStatus(s.id) === 'غائب');
+                      const areAllExcused = absentStudents.length > 0 && absentStudents.every(s => getStudentExcuseStatus(s.id));
+                      return (
+                        <button
+                          onClick={() => {
                             absentStudents.forEach(student => {
-                              next[student.id] = !areAllExcused;
+                              handleExcuseChange(student.id, !areAllExcused);
                             });
-                            return next;
-                          });
-                        }}
-                        className={`w-full border rounded-2xl py-4 px-6 text-sm font-black flex items-center justify-center gap-3 transition-all shadow-sm ${
-                          areAllExcused
-                            ? 'bg-red-100 hover:bg-red-200 text-red-800 border-red-200'
-                            : 'bg-green-100 hover:bg-green-200 text-green-800 border-green-200'
-                        }`}
-                      >
-                        {areAllExcused ? <XCircle size={20} /> : <CheckCircle2 size={20} />}
-                        {areAllExcused ? 'تحويل جميع الغائبين إلى (بدون عذر)' : 'تحويل جميع الغائبين إلى (بعذر)'}
-                      </button>
-                    );
-                  })()}
-                </div>
-              </motion.div>
-            )}
+                          }}
+                          className={`w-full border rounded-2xl py-4 px-6 text-sm font-black flex items-center justify-center gap-3 transition-all shadow-sm ${
+                            areAllExcused
+                              ? 'bg-red-100 hover:bg-red-200 text-red-800 border-red-200'
+                              : 'bg-green-100 hover:bg-green-200 text-green-800 border-green-200'
+                          }`}
+                        >
+                          {areAllExcused ? <XCircle size={20} /> : <CheckCircle2 size={20} />}
+                          {areAllExcused ? 'تحويل جميع الغائبين إلى (بدون عذر)' : 'تحويل جميع الغائبين إلى (بعذر)'}
+                        </button>
+                      );
+                    })()}
+                  </div>
+                </motion.div>
+              )}
+            </div>
           </AnimatePresence>
 
           {/* Enhanced Student Cards View (Hidden on Print) */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 print:hidden">
             {filteredStudents.map((student) => {
               const absCount = student.total_absences || 0;
-              const isAbsent = attendance[student.id] === 'غائب';
+              const isAbsent = getStudentStatus(student.id) === 'غائب';
               
               return (
                 <motion.div 
@@ -831,8 +1137,8 @@ const VPRadar: React.FC = () => {
                   exit={{ opacity: 0, scale: 0.95 }}
                   transition={{ duration: 0.2 }}
                   className={`bg-white p-5 rounded-3xl border transition-all shadow-sm flex flex-col sm:flex-row gap-4 items-center ${
-                    attendance[student.id] === 'حاضر' ? 'border-emerald-200 bg-emerald-50/10' :
-                    attendance[student.id] === 'غائب' ? 'border-rose-200 bg-rose-50/10' :
+                    getStudentStatus(student.id) === 'حاضر' ? 'border-emerald-200 bg-emerald-50/10' :
+                    getStudentStatus(student.id) === 'غائب' ? 'border-rose-200 bg-rose-50/10' :
                     'border-amber-200 bg-amber-50/10'
                   }`}
                 >
@@ -850,7 +1156,7 @@ const VPRadar: React.FC = () => {
                       <button
                         onClick={() => handleStatusChange(student.id, 'حاضر')}
                         className={`flex-1 min-h-[44px] rounded-xl text-sm font-bold flex items-center justify-center gap-1 transition-all ${
-                          attendance[student.id] === 'حاضر'
+                          getStudentStatus(student.id) === 'حاضر'
                             ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
                             : 'bg-slate-50 text-slate-400 border border-slate-100 hover:bg-slate-100'
                         }`}
@@ -861,7 +1167,7 @@ const VPRadar: React.FC = () => {
                       <button
                         onClick={() => handleStatusChange(student.id, 'غائب')}
                         className={`flex-1 min-h-[44px] rounded-xl text-sm font-bold flex items-center justify-center gap-1 transition-all ${
-                          attendance[student.id] === 'غائب'
+                          getStudentStatus(student.id) === 'غائب'
                             ? 'bg-rose-100 text-rose-700 border border-rose-200'
                             : 'bg-slate-50 text-slate-400 border border-slate-100 hover:bg-slate-100'
                         }`}
@@ -872,7 +1178,7 @@ const VPRadar: React.FC = () => {
                       <button
                         onClick={() => handleStatusChange(student.id, 'متأخر')}
                         className={`flex-1 min-h-[44px] rounded-xl text-sm font-bold flex items-center justify-center gap-1 transition-all ${
-                          attendance[student.id] === 'متأخر'
+                          getStudentStatus(student.id) === 'متأخر'
                             ? 'bg-amber-100 text-amber-700 border border-amber-200'
                             : 'bg-slate-50 text-slate-400 border border-slate-100 hover:bg-slate-100'
                         }`}
@@ -907,18 +1213,18 @@ const VPRadar: React.FC = () => {
                           className="w-full flex flex-col gap-2 overflow-hidden"
                         >
                           <button
-                            onClick={() => setExcuseStatus(prev => ({ ...prev, [student.id]: !prev[student.id] }))}
+                            onClick={() => handleExcuseChange(student.id, !getStudentExcuseStatus(student.id))}
                             className={`w-full py-2 px-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${
-                              excuseStatus[student.id]
+                              getStudentExcuseStatus(student.id)
                                 ? 'bg-green-100 text-green-700 border border-green-200'
                                 : 'bg-red-100 text-red-700 border border-red-200'
                             }`}
                           >
-                            {excuseStatus[student.id] ? '🟢 غياب بعذر' : '🔴 غياب بدون عذر'}
+                            {getStudentExcuseStatus(student.id) ? '🟢 غياب بعذر' : '🔴 غياب بدون عذر'}
                           </button>
                           
                           <AnimatePresence>
-                            {excuseStatus[student.id] && (
+                            {getStudentExcuseStatus(student.id) && (
                               <motion.div
                                 initial={{ opacity: 0, height: 0 }}
                                 animate={{ opacity: 1, height: 'auto' }}
@@ -928,8 +1234,8 @@ const VPRadar: React.FC = () => {
                                 <input
                                   type="text"
                                   placeholder="اكتب سبب العذر (مثال: تقرير طبي، مراجعة مستشفى)..."
-                                  value={excuseReason[student.id] || ''}
-                                  onChange={(e) => setExcuseReason(prev => ({ ...prev, [student.id]: e.target.value }))}
+                                  value={getStudentExcuseReason(student.id)}
+                                  onChange={(e) => handleExcuseReasonChange(student.id, e.target.value)}
                                   className="w-full bg-white border border-slate-200 rounded-xl p-3 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-green-500/20 outline-none transition-all"
                                 />
                               </motion.div>
@@ -946,7 +1252,11 @@ const VPRadar: React.FC = () => {
                       <button
                         onClick={() => handleSendWhatsApp(student)}
                         disabled={!student.parent_phone || student.parent_phone.trim() === ''}
-                        className={`flex-1 sm:flex-none w-full sm:w-auto px-4 h-12 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 flex items-center justify-center gap-2 transition-all shadow-sm font-bold text-sm ${(!student.parent_phone || student.parent_phone.trim() === '') ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        className={`flex-1 sm:flex-none w-full sm:w-auto px-4 h-12 rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm font-bold text-sm ${
+                          (!student.parent_phone || student.parent_phone.trim() === '') 
+                            ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed' 
+                            : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200'
+                        }`}
                         title={(!student.parent_phone || student.parent_phone.trim() === '') ? '⚠️ رقم الجوال غير مسجل' : 'إرسال واتساب لولي الأمر'}
                       >
                         <MessageSquare size={18} />
@@ -999,7 +1309,7 @@ const VPRadar: React.FC = () => {
               ) : success ? (
                 <>
                   <CheckCircle2 size={20} />
-                  <span>تم حفظ التعديلات بنجاح</span>
+                  <span>تم حفظ تعديلات الحصة {selectedPeriod} بنجاح</span>
                 </>
               ) : (
                 <>
@@ -1009,6 +1319,137 @@ const VPRadar: React.FC = () => {
               )}
             </button>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Bulk Present Confirmation Modal */}
+      <AnimatePresence>
+        {bulkPresentConfig && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm print:hidden">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+            >
+              <div className="p-6 border-b border-slate-100 bg-emerald-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
+                    <UserCheck size={24} />
+                  </div>
+                  <h2 className="text-xl font-black text-emerald-900">تأكيد التحضير الجماعي</h2>
+                </div>
+              </div>
+              
+              <div className="p-6">
+                <p className="text-slate-700 font-medium leading-relaxed">
+                  هل أنت متأكد من تحضير جميع طلاب فصل <span className="font-black text-slate-900">{bulkPresentConfig.grade} - {bulkPresentConfig.section}</span> كحضور؟
+                </p>
+              </div>
+
+              <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3">
+                <button
+                  onClick={() => setBulkPresentConfig(null)}
+                  className="flex-1 py-3 px-4 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl font-bold transition-colors"
+                >
+                  إلغاء
+                </button>
+                <button
+                  onClick={handleBulkPresent}
+                  className="flex-1 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
+                >
+                  <UserCheck size={18} />
+                  تأكيد التحضير
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Reset Confirmation Modal */}
+      <AnimatePresence>
+        {isResetModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm print:hidden">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+            >
+              <div className="p-6 border-b border-slate-100 bg-red-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600">
+                    <AlertTriangle size={24} />
+                  </div>
+                  <h2 className="text-xl font-black text-red-900">تحذير خطير</h2>
+                </div>
+              </div>
+              
+              <div className="p-6">
+                <p className="text-slate-700 font-medium leading-relaxed">
+                  هل أنت متأكد من رغبتك في تصفير (حذف) جميع سجلات التحضير للحصة <span className="font-black text-slate-900">{selectedPeriod}</span> لتاريخ <span className="font-black text-slate-900">{date}</span>؟
+                </p>
+                <p className="text-red-600 text-sm font-bold mt-4">
+                  هذا الإجراء لا يمكن التراجع عنه!
+                </p>
+              </div>
+
+              <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3">
+                <button
+                  onClick={() => setIsResetModalOpen(false)}
+                  className="flex-1 py-3 px-4 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl font-bold transition-colors"
+                >
+                  إلغاء
+                </button>
+                <button
+                  onClick={handleResetAttendance}
+                  disabled={resetting}
+                  className="flex-1 py-3 px-4 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
+                >
+                  {resetting ? (
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <Trash2 size={18} />
+                      تأكيد التصفير
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Alert Modal */}
+      <AnimatePresence>
+        {alertMessage && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm print:hidden">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden"
+            >
+              <div className="p-6 text-center">
+                <div className="w-16 h-16 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-500 mx-auto mb-4">
+                  <Info size={32} />
+                </div>
+                <p className="text-slate-800 font-bold text-lg leading-relaxed">
+                  {alertMessage}
+                </p>
+              </div>
+              <div className="p-4 bg-slate-50 border-t border-slate-100">
+                <button
+                  onClick={() => setAlertMessage(null)}
+                  className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-colors"
+                >
+                  حسناً
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
@@ -1088,19 +1529,19 @@ const VPRadar: React.FC = () => {
                   <button 
                     onClick={() => {
                       if (selectedReportType === 'excused_form' && !selectedStudentForReport) {
-                        alert('الرجاء اختيار الطالب أولاً');
+                        setAlertMessage('الرجاء اختيار الطالب أولاً');
                         return;
                       }
                       
                       try {
                         // Check if running in an iframe (preview mode)
                         if (window.self !== window.top) {
-                          alert('عذراً، الطباعة غير مدعومة داخل وضع المعاينة. يرجى فتح التطبيق في نافذة جديدة (Open in new tab) من أعلى يمين الشاشة للتمكن من الطباعة.');
+                          setAlertMessage('عذراً، الطباعة غير مدعومة داخل وضع المعاينة. يرجى فتح التطبيق في نافذة جديدة (Open in new tab) من أعلى يمين الشاشة للتمكن من الطباعة.');
                           return;
                         }
                       } catch (e) {
                         // Cross-origin error means we are definitely in an iframe
-                        alert('عذراً، الطباعة غير مدعومة داخل وضع المعاينة. يرجى فتح التطبيق في نافذة جديدة (Open in new tab) من أعلى يمين الشاشة للتمكن من الطباعة.');
+                        setAlertMessage('عذراً، الطباعة غير مدعومة داخل وضع المعاينة. يرجى فتح التطبيق في نافذة جديدة (Open in new tab) من أعلى يمين الشاشة للتمكن من الطباعة.');
                         return;
                       }
                       

@@ -15,7 +15,7 @@ import Settings from './pages/Settings';
 import Notifications from './pages/Notifications';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminReferrals from './pages/AdminReferrals';
-import MessageSettings from './pages/MessageSettings';
+import MessageCenter from './pages/MessageCenter';
 import PrincipalDashboard from './pages/PrincipalDashboard';
 import BehavioralViolations from './pages/BehavioralViolations';
 import PrintTemplate from './pages/PrintTemplate';
@@ -24,6 +24,7 @@ import StudentRecordSearch from './pages/StudentRecordSearch';
 import TeacherRollCall from './pages/TeacherRollCall';
 import DailyAbsenceReport from './pages/DailyAbsenceReport';
 import Layout from './components/Layout';
+import { MessageLogProvider } from './context/MessageLogContext';
 
 interface AuthContextType {
   user: User | null;
@@ -80,8 +81,9 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: strin
 const App: React.FC = () => {
   return (
     <AuthProvider>
-      <Router>
-        <Routes>
+      <MessageLogProvider>
+        <Router>
+          <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           
@@ -148,9 +150,9 @@ const App: React.FC = () => {
                 <AdminReferrals />
               </ProtectedRoute>
             } />
-            <Route path="message-settings" element={
-              <ProtectedRoute allowedRoles={['admin']}>
-                <MessageSettings />
+            <Route path="message-center" element={
+              <ProtectedRoute allowedRoles={['admin', 'principal', 'management', 'vice_principal']}>
+                <MessageCenter />
               </ProtectedRoute>
             } />
           </Route>
@@ -159,6 +161,7 @@ const App: React.FC = () => {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Router>
+      </MessageLogProvider>
     </AuthProvider>
   );
 };

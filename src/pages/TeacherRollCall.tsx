@@ -17,6 +17,7 @@ const TeacherRollCall: React.FC = () => {
   const [attendance, setAttendance] = useState<Record<number, string>>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submitterName, setSubmitterName] = useState<string | null>(null);
+  const [modifierName, setModifierName] = useState<string | null>(null);
   
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -68,6 +69,7 @@ const TeacherRollCall: React.FC = () => {
           setStudents(data.students);
           setIsSubmitted(data.isSubmitted);
           setSubmitterName(data.submitterName);
+          setModifierName(data.modifierName);
           
           const currentAttendance: Record<number, string> = {};
           data.students.forEach((s: any) => {
@@ -202,10 +204,15 @@ const TeacherRollCall: React.FC = () => {
             <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
               <Lock className="text-amber-500 shrink-0 mt-0.5" size={20} />
               <div>
-                <h3 className="font-bold text-amber-800">تم رصد غياب هذه الحصة مسبقاً</h3>
+                <h3 className="font-bold text-amber-800">تم رصد الغياب لهذا اليوم مسبقاً</h3>
                 <p className="text-sm text-amber-700 mt-1">
                   السجل للقراءة فقط. تم التحضير بواسطة: <span className="font-black">{submitterName}</span>
                 </p>
+                {modifierName && (
+                  <p className="text-sm text-amber-700 mt-1">
+                    تم تعديله من قبل: <span className="font-black">{modifierName}</span>
+                  </p>
+                )}
               </div>
             </div>
           ) : (
@@ -303,7 +310,7 @@ const TeacherRollCall: React.FC = () => {
                 ) : success ? (
                   <>
                     <CheckCircle2 size={20} />
-                    <span>تم إرسال التحضير بنجاح</span>
+                    <span>تم إرسال تحضير الحصة {period} بنجاح</span>
                   </>
                 ) : (
                   <>

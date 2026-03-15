@@ -180,6 +180,8 @@ async function initDb() {
 
     try {
       await sql`ALTER TABLE attendance_records ADD COLUMN IF NOT EXISTS excuse_reason TEXT`;
+      await sql`ALTER TABLE attendance_records ADD COLUMN IF NOT EXISTS modified_by INTEGER REFERENCES users(id)`;
+      await sql`ALTER TABLE attendance_records ADD COLUMN IF NOT EXISTS modified_at TIMESTAMP`;
     } catch (e) {
       // Ignore if column already exists or other error
     }
@@ -405,7 +407,7 @@ async function startServer() {
   });
 
   app.post("/api/whatsapp/send", async (req, res) => {
-    const { phoneNumber, studentName, instanceId, token } = req.body;
+    const { phoneNumber, studentName, instanceId, token, period } = req.body;
     
     try {
       if (!instanceId || !token) {
@@ -413,7 +415,7 @@ async function startServer() {
       }
 
       const currentDate = new Date().toLocaleDateString('ar-SA');
-      const messageBody = `ابنكم ${studentName} غائب اليوم ، ${currentDate} ، ثانوية أم القرى`;
+      const messageBody = `ابنكم ${studentName} غائب في (الحصة ${period || 'غير محدد'}) ليوم ${currentDate} ، ثانوية أم القرى`;
 
       const response = await fetch(`https://api.ultramsg.com/${instanceId}/messages/chat`, {
         method: 'POST',
@@ -1972,10 +1974,18 @@ async function startServer() {
           s.grade,
           s.section,
           s.parent_phone,
-          COALESCE(ar.status, 'حاضر') as status,
-          ar.is_excused,
-          ar.excuse_reason,
-          COALESCE(u.name, 'مستخدم محذوف') as teacher_name,
+          COALESCE(
+            json_agg(
+              json_build_object(
+                'period', ar.period,
+                'status', ar.status,
+                'is_excused', ar.is_excused,
+                'excuse_reason', ar.excuse_reason,
+                'teacher_name', u.name
+              )
+            ) FILTER (WHERE ar.id IS NOT NULL),
+            '[]'
+          ) as attendance_records,
           (
             SELECT COUNT(*) 
             FROM attendance_records ar_hist 
@@ -1991,8 +2001,10 @@ async function startServer() {
           (${grade === 'all' ? sql`1=1` : sql`s.grade = ${grade as string}`})
           AND 
           (${section === 'all' ? sql`1=1` : sql`s.section = ${section as string}`})
+        GROUP BY s.id
         ORDER BY s.grade ASC, s.section ASC, s.name ASC
       `;
+      
       res.json(students);
     } catch (err) {
       console.error(err);
@@ -2002,7 +2014,7 @@ async function startServer() {
 
   // 0.3 Get Pending Classes
   app.get("/api/attendance/pending-classes", async (req, res) => {
-    const { date } = req.query;
+    const { date, period } = req.query;
     try {
       const allClasses = await sql`
         SELECT DISTINCT grade, section
@@ -2011,20 +2023,38 @@ async function startServer() {
         ORDER BY grade ASC, section ASC
       `;
 
-      const completedClasses = await sql`
-        SELECT DISTINCT ON (s.grade, s.section) 
-          s.grade, 
-          s.section,
-          COALESCE(u.name, 'مستخدم محذوف') as teacher_name,
-          ar.period,
-          ar.created_at as timestamp
-        FROM students s
-        JOIN attendance_records ar ON ar.student_id = s.id
-        LEFT JOIN users u ON ar.teacher_id = u.id
-        WHERE ar.date = ${date as string}
-        AND s.grade IS NOT NULL AND s.section IS NOT NULL
-        ORDER BY s.grade ASC, s.section ASC, ar.created_at DESC
-      `;
+      let completedClasses;
+      if (period) {
+        completedClasses = await sql`
+          SELECT DISTINCT ON (s.grade, s.section) 
+            s.grade, 
+            s.section,
+            COALESCE(u.name, 'مستخدم محذوف') as teacher_name,
+            ar.period,
+            ar.created_at as timestamp
+          FROM students s
+          JOIN attendance_records ar ON ar.student_id = s.id
+          LEFT JOIN users u ON ar.teacher_id = u.id
+          WHERE ar.date = ${date as string} AND ar.period = ${Number(period)}
+          AND s.grade IS NOT NULL AND s.section IS NOT NULL
+          ORDER BY s.grade ASC, s.section ASC, ar.created_at DESC
+        `;
+      } else {
+        completedClasses = await sql`
+          SELECT DISTINCT ON (s.grade, s.section) 
+            s.grade, 
+            s.section,
+            COALESCE(u.name, 'مستخدم محذوف') as teacher_name,
+            ar.period,
+            ar.created_at as timestamp
+          FROM students s
+          JOIN attendance_records ar ON ar.student_id = s.id
+          LEFT JOIN users u ON ar.teacher_id = u.id
+          WHERE ar.date = ${date as string}
+          AND s.grade IS NOT NULL AND s.section IS NOT NULL
+          ORDER BY s.grade ASC, s.section ASC, ar.created_at DESC
+        `;
+      }
 
       const pending = allClasses.filter(c => 
         !completedClasses.some(comp => comp.grade === c.grade && comp.section === c.section)
@@ -2065,10 +2095,15 @@ async function startServer() {
     
     try {
       const existingRecords = await sql`
-        SELECT ar.student_id, ar.status, COALESCE(u.name, 'مستخدم محذوف') as teacher_name
+        SELECT 
+          ar.student_id, 
+          ar.status, 
+          COALESCE(u.name, 'مستخدم محذوف') as teacher_name,
+          COALESCE(m.name, '') as modifier_name
         FROM attendance_records ar
         JOIN students s ON ar.student_id = s.id
         LEFT JOIN users u ON ar.teacher_id = u.id
+        LEFT JOIN users m ON ar.modified_by = m.id
         WHERE s.grade = ${grade as string} 
           AND s.section = ${section as string}
           AND ar.date = ${date as string}
@@ -2077,6 +2112,9 @@ async function startServer() {
 
       const isSubmitted = existingRecords.length > 0;
       const submitterName = isSubmitted ? existingRecords[0].teacher_name : null;
+      // Find if any record was modified by someone else
+      const modifiedRecord = existingRecords.find(r => r.modifier_name && r.modifier_name !== '');
+      const modifierName = modifiedRecord ? modifiedRecord.modifier_name : null;
 
       const students = await sql`
         SELECT id, name, national_id, grade, section, parent_phone
@@ -2096,6 +2134,7 @@ async function startServer() {
       res.json({
         isSubmitted,
         submitterName,
+        modifierName,
         students: studentsWithStatus
       });
     } catch (err) {
@@ -2107,32 +2146,49 @@ async function startServer() {
   // 2.1 Submit bulk attendance (Command Center)
   app.post("/api/attendance/submit-bulk", async (req, res) => {
     const { records, teacher_id, date, period } = req.body;
+    let parsedTeacherId = teacher_id ? parseInt(teacher_id, 10) : null;
+    if (Number.isNaN(parsedTeacherId)) parsedTeacherId = null;
     
     try {
-      // We will loop through the records and upsert them.
-      // Since we don't have a unique constraint on (student_id, date, period) in this basic setup,
-      // we'll delete the existing records for these students on this date and period, then insert.
-      
-      const studentIds = records.map((r: any) => r.student_id);
-      
-      if (studentIds.length > 0) {
-        // Delete existing records for these students on this date and period
-        for (const studentId of studentIds) {
-          await sql`
-            DELETE FROM attendance_records 
-            WHERE student_id = ${studentId} 
-            AND date = ${date} 
-            AND period = ${period}
-          `;
-        }
+      for (const record of records) {
+        const classId = JSON.stringify({ grade: record.grade, section: record.section });
         
-        for (const record of records) {
-          // We need class_id. In our system, class_id was stored as JSON string of {grade, section}.
-          const classId = JSON.stringify({ grade: record.grade, section: record.section });
-          
+        // Check if record exists for this student on this date and period
+        const existing = await sql`
+          SELECT id, teacher_id FROM attendance_records 
+          WHERE student_id = ${record.student_id} AND date = ${date} AND period = ${period || 1}
+          LIMIT 1
+        `;
+
+        if (existing.length > 0) {
+          // Update existing record
+          if (period !== undefined && period !== null) {
+            await sql`
+              UPDATE attendance_records 
+              SET status = ${record.status},
+                  is_excused = ${record.is_excused || false},
+                  excuse_reason = ${record.excuse_reason || null},
+                  modified_by = CASE WHEN teacher_id IS DISTINCT FROM ${parsedTeacherId}::int THEN ${parsedTeacherId}::int ELSE NULL END,
+                  modified_at = CASE WHEN teacher_id IS DISTINCT FROM ${parsedTeacherId}::int THEN CURRENT_TIMESTAMP ELSE NULL END,
+                  period = ${period}
+              WHERE id = ${existing[0].id}
+            `;
+          } else {
+            await sql`
+              UPDATE attendance_records 
+              SET status = ${record.status},
+                  is_excused = ${record.is_excused || false},
+                  excuse_reason = ${record.excuse_reason || null},
+                  modified_by = CASE WHEN teacher_id IS DISTINCT FROM ${parsedTeacherId}::int THEN ${parsedTeacherId}::int ELSE NULL END,
+                  modified_at = CASE WHEN teacher_id IS DISTINCT FROM ${parsedTeacherId}::int THEN CURRENT_TIMESTAMP ELSE NULL END
+              WHERE id = ${existing[0].id}
+            `;
+          }
+        } else {
+          // Insert new record
           await sql`
             INSERT INTO attendance_records (student_id, teacher_id, class_id, date, period, status, is_excused, excuse_reason)
-            VALUES (${record.student_id}, ${teacher_id}, ${classId}, ${date}, ${period}, ${record.status}, ${record.is_excused || false}, ${record.excuse_reason || null})
+            VALUES (${record.student_id}, ${parsedTeacherId}, ${classId}, ${date}, ${period || 1}, ${record.status}, ${record.is_excused || false}, ${record.excuse_reason || null})
           `;
         }
       }
@@ -2145,25 +2201,71 @@ async function startServer() {
   });
   app.post("/api/attendance/submit", async (req, res) => {
     const { records, teacher_id, class_id, period, date } = req.body;
+    let parsedTeacherId = teacher_id ? parseInt(teacher_id, 10) : null;
+    if (Number.isNaN(parsedTeacherId)) parsedTeacherId = null;
     
     try {
-      // Delete existing records for this class, period, and date to allow updates
-      await sql`
-        DELETE FROM attendance_records 
-        WHERE class_id = ${class_id} AND period = ${period} AND date = ${date}
-      `;
-
-      // Insert new records
       for (const record of records) {
-        await sql`
-          INSERT INTO attendance_records (student_id, teacher_id, class_id, date, period, status)
-          VALUES (${record.student_id}, ${teacher_id}, ${class_id}, ${date}, ${period}, ${record.status})
+        // Check if record exists for this student on this date and period
+        const existing = await sql`
+          SELECT id, teacher_id FROM attendance_records 
+          WHERE student_id = ${record.student_id} AND date = ${date} AND period = ${period || 1}
+          LIMIT 1
         `;
+
+        if (existing.length > 0) {
+          // Update existing record
+          if (period !== undefined && period !== null) {
+            await sql`
+              UPDATE attendance_records 
+              SET status = ${record.status},
+                  modified_by = CASE WHEN teacher_id IS DISTINCT FROM ${parsedTeacherId}::int THEN ${parsedTeacherId}::int ELSE NULL END,
+                  modified_at = CASE WHEN teacher_id IS DISTINCT FROM ${parsedTeacherId}::int THEN CURRENT_TIMESTAMP ELSE NULL END,
+                  period = ${period}
+              WHERE id = ${existing[0].id}
+            `;
+          } else {
+            await sql`
+              UPDATE attendance_records 
+              SET status = ${record.status},
+                  modified_by = CASE WHEN teacher_id IS DISTINCT FROM ${parsedTeacherId}::int THEN ${parsedTeacherId}::int ELSE NULL END,
+                  modified_at = CASE WHEN teacher_id IS DISTINCT FROM ${parsedTeacherId}::int THEN CURRENT_TIMESTAMP ELSE NULL END
+              WHERE id = ${existing[0].id}
+            `;
+          }
+        } else {
+          // Insert new record
+          await sql`
+            INSERT INTO attendance_records (student_id, teacher_id, class_id, date, period, status)
+            VALUES (${record.student_id}, ${parsedTeacherId}, ${class_id}, ${date}, ${period || 1}, ${record.status})
+          `;
+        }
       }
       res.json({ success: true });
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to submit attendance" });
+    }
+  });
+
+  app.post("/api/attendance/reset-daily", async (req, res) => {
+    const { date, period } = req.body;
+    try {
+      if (period) {
+        await sql`
+          DELETE FROM attendance_records 
+          WHERE date = ${date} AND period = ${Number(period)}
+        `;
+      } else {
+        await sql`
+          DELETE FROM attendance_records 
+          WHERE date = ${date}
+        `;
+      }
+      res.json({ success: true });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to reset daily attendance" });
     }
   });
 
@@ -2264,7 +2366,7 @@ async function startServer() {
 
   // 6. Get Daily Absence Report
   app.get("/api/attendance/daily-report", async (req, res) => {
-    const { date, grade, section } = req.query;
+    const { date, grade, section, period } = req.query;
     const targetDate = date || new Date().toISOString().split('T')[0];
     
     try {
@@ -2285,6 +2387,7 @@ async function startServer() {
             AND ar.status IN ('غائب', 'متأخر')
             AND s.grade = ${grade}
             AND s.section = ${section}
+            AND (${period ? sql`ar.period = ${Number(period)}` : sql`1=1`})
           ORDER BY s.name ASC
         `;
       } else {
@@ -2300,6 +2403,7 @@ async function startServer() {
           FROM attendance_records ar
           JOIN students s ON ar.student_id = s.id
           WHERE ar.date = ${targetDate} AND ar.status IN ('غائب', 'متأخر')
+            AND (${period ? sql`ar.period = ${Number(period)}` : sql`1=1`})
           ORDER BY s.grade ASC, s.section ASC, s.name ASC
         `;
       }

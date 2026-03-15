@@ -72,10 +72,10 @@ const Sidebar: React.FC = () => {
       roles: ['admin']
     },
     { 
-      title: 'إعدادات الرسائل', 
-      path: '/dashboard/message-settings', 
+      title: 'مركز الرسائل', 
+      path: '/dashboard/message-center', 
       icon: MessageSquare,
-      roles: ['admin']
+      roles: ['admin', 'principal', 'management', 'vice_principal']
     },
     { 
       title: 'السجل الشامل للطالب', 

@@ -2,13 +2,16 @@ import React, { useEffect, useState } from 'react';
 import { Printer, ArrowRight, ChevronRight, ChevronLeft, MessageCircle } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../App';
+import { useMessageLog } from '../context/MessageLogContext';
 
 const DailyAbsenceReport: React.FC = () => {
   const { user } = useAuth();
+  const { addLogEntry } = useMessageLog();
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [principalName, setPrincipalName] = useState('مدير المدرسة');
+  const [periodFilter, setPeriodFilter] = useState<string>('');
   const itemsPerPage = 15;
   const [reportNumber] = useState(Math.floor(Math.random() * 1000000));
   
@@ -26,6 +29,9 @@ const DailyAbsenceReport: React.FC = () => {
         let url = `/api/attendance/daily-report?date=${date}`;
         if (grade && section) {
           url += `&grade=${encodeURIComponent(grade)}&section=${encodeURIComponent(section)}`;
+        }
+        if (periodFilter) {
+          url += `&period=${periodFilter}`;
         }
 
         const [res, settingsRes] = await Promise.all([
@@ -51,13 +57,13 @@ const DailyAbsenceReport: React.FC = () => {
       }
     };
     fetchData();
-  }, [location.search]);
+  }, [location.search, periodFilter]);
 
   const handlePrint = () => {
     window.print();
   };
 
-  const sendWhatsAppMessage = async (phoneNumber: string, studentName: string) => {
+  const sendWhatsAppMessage = async (phoneNumber: string, studentName: string, period: number) => {
     try {
       const instanceId = localStorage.getItem('ultramsg_instance_id');
       const token = localStorage.getItem('ultramsg_token');
@@ -75,7 +81,7 @@ const DailyAbsenceReport: React.FC = () => {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ phoneNumber, studentName, instanceId, token })
+        body: JSON.stringify({ phoneNumber, studentName, instanceId, token, period })
       });
       
       const data = await response.json();
@@ -84,8 +90,26 @@ const DailyAbsenceReport: React.FC = () => {
         if (data.code === 'MISSING_WHATSAPP_CREDENTIALS') {
           return { success: false, code: data.code, message: data.message };
         }
+        
+        addLogEntry({
+          recipient: studentName,
+          recipientPhone: phoneNumber,
+          messageType: '🛑 إشعار غياب',
+          messageText: `إشعار غياب للطالب ${studentName} الحصة ${period}`,
+          status: 'failed'
+        });
+        
         throw new Error('Failed to send WhatsApp message');
       }
+
+      addLogEntry({
+        recipient: studentName,
+        recipientPhone: phoneNumber,
+        messageType: '🛑 إشعار غياب',
+        messageText: `إشعار غياب للطالب ${studentName} الحصة ${period}`,
+        status: 'success'
+      });
+
       return { success: true };
     } catch (error) {
       console.error("Failed to send WhatsApp message", error);
@@ -99,7 +123,7 @@ const DailyAbsenceReport: React.FC = () => {
       return;
     }
     
-    const result = await sendWhatsAppMessage(student.parent_phone, student.student_name);
+    const result = await sendWhatsAppMessage(student.parent_phone, student.student_name, student.period);
     
     if (!result.success) {
       if (result.code === 'MISSING_WHATSAPP_CREDENTIALS') {
@@ -137,7 +161,7 @@ const DailyAbsenceReport: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans" dir="rtl">
       {/* Controls - Hidden in print */}
-      <div className="max-w-4xl mx-auto mb-6 flex justify-between items-center print:hidden">
+      <div className="max-w-4xl mx-auto mb-6 flex flex-col md:flex-row justify-between items-center gap-4 print:hidden">
         <button 
           onClick={() => navigate(-1)}
           className="flex items-center gap-2 text-slate-600 hover:text-slate-900 bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-200"
@@ -145,13 +169,64 @@ const DailyAbsenceReport: React.FC = () => {
           <ArrowRight size={20} />
           عودة
         </button>
-        <button 
-          onClick={handlePrint}
-          className="flex items-center gap-2 bg-primary text-white px-6 py-2 rounded-xl shadow-sm hover:bg-primary/90 font-bold"
-        >
-          <Printer size={20} />
-          طباعة التقرير
-        </button>
+
+        <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-200">
+          <label className="text-sm font-bold text-slate-700 whitespace-nowrap">تصفية بالحصة:</label>
+          <select
+            value={periodFilter}
+            onChange={(e) => setPeriodFilter(e.target.value)}
+            className="bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-lg focus:ring-primary focus:border-primary block w-full p-2"
+          >
+            <option value="">الكل</option>
+            {[1, 2, 3, 4, 5, 6, 7].map((p) => (
+              <option key={p} value={p}>الحصة {p}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex gap-2">
+          <button 
+            onClick={async () => {
+              const studentsWithPhone = data.filter(s => s.parent_phone && s.parent_phone.trim() !== '');
+              if (studentsWithPhone.length === 0) {
+                alert('لا يوجد طلاب لديهم أرقام جوال مسجلة.');
+                return;
+              }
+              
+              if (!window.confirm(`سيتم إرسال رسائل واتساب إلى ${studentsWithPhone.length} طالب. هل أنت متأكد؟`)) {
+                return;
+              }
+
+              let successCount = 0;
+              let failCount = 0;
+
+              for (const student of studentsWithPhone) {
+                const result = await sendWhatsAppMessage(student.parent_phone, student.student_name, student.period);
+                if (result.success) {
+                  successCount++;
+                } else {
+                  failCount++;
+                }
+                // Wait 2000ms between messages to avoid ban
+                await new Promise(resolve => setTimeout(resolve, 2000));
+              }
+
+              alert(`تم الانتهاء من الإرسال.\nنجاح: ${successCount}\nفشل: ${failCount}`);
+            }}
+            className="flex items-center gap-2 bg-[#25D366] text-white px-6 py-2 rounded-xl shadow-sm hover:bg-[#25D366]/90 font-bold"
+          >
+            <MessageCircle size={20} />
+            إرسال واتساب للجميع
+          </button>
+
+          <button 
+            onClick={handlePrint}
+            className="flex items-center gap-2 bg-primary text-white px-6 py-2 rounded-xl shadow-sm hover:bg-primary/90 font-bold"
+          >
+            <Printer size={20} />
+            طباعة التقرير
+          </button>
+        </div>
       </div>
 
       {/* Printable Area */}
@@ -213,6 +288,7 @@ const DailyAbsenceReport: React.FC = () => {
                 <th className="border border-slate-300 p-3 text-right font-bold text-slate-800">اسم الطالب</th>
                 <th className="border border-slate-300 p-3 text-center font-bold text-slate-800">الصف</th>
                 <th className="border border-slate-300 p-3 text-center font-bold text-slate-800">الفصل</th>
+                <th className="border border-slate-300 p-3 text-center font-bold text-slate-800">الحصة</th>
                 <th className="border border-slate-300 p-3 text-center font-bold text-slate-800">حالة الحضور</th>
                 <th className="border border-slate-300 p-3 text-center font-bold text-slate-800 w-32">إجراءات</th>
                 <th className="border border-slate-300 p-3 text-right font-bold text-slate-800 w-48">ملاحظات الوكيل</th>
@@ -226,6 +302,7 @@ const DailyAbsenceReport: React.FC = () => {
                     <td className="border border-slate-300 p-3 font-bold text-slate-800">{row.student_name}</td>
                     <td className="border border-slate-300 p-3 text-center text-slate-600">{row.grade}</td>
                     <td className="border border-slate-300 p-3 text-center text-slate-600">{row.section}</td>
+                    <td className="border border-slate-300 p-3 text-center font-bold text-slate-800">{row.period || '-'}</td>
                     <td className="border border-slate-300 p-3 text-center">
                       <span className={`font-bold ${row.status === 'غائب' ? 'text-red-600 bg-red-50 px-2 py-1 rounded-lg' : 'text-amber-600 bg-amber-50 px-2 py-1 rounded-lg'}`}>
                         {row.status}
@@ -293,6 +370,7 @@ const DailyAbsenceReport: React.FC = () => {
               <th className="border border-black p-2 text-right font-bold">اسم الطالب</th>
               <th className="border border-black p-2 text-center font-bold">الصف</th>
               <th className="border border-black p-2 text-center font-bold">الفصل</th>
+              <th className="border border-black p-2 text-center font-bold">الحصة</th>
               <th className="border border-black p-2 text-center font-bold">حالة الحضور</th>
               <th className="border border-black p-2 text-right font-bold w-48">ملاحظات الوكيل</th>
             </tr>
@@ -305,6 +383,7 @@ const DailyAbsenceReport: React.FC = () => {
                   <td className="border border-black p-2 font-bold">{row.student_name}</td>
                   <td className="border border-black p-2 text-center">{row.grade}</td>
                   <td className="border border-black p-2 text-center">{row.section}</td>
+                  <td className="border border-black p-2 text-center font-bold">{row.period || '-'}</td>
                   <td className="border border-black p-2 text-center font-bold">
                     {row.status}
                   </td>
