@@ -1,3 +1,4 @@
+import { apiFetch } from '../utils/api';
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Referral } from '../types';
@@ -12,7 +13,7 @@ const PrintTemplate: React.FC = () => {
   useEffect(() => {
     const fetchReferral = async () => {
       try {
-        const res = await fetch(`/api/referrals/${referralId}`);
+        const res = await apiFetch(`/api/referrals/${referralId}`);
         if (res.ok) {
           const data = await res.json();
           setReferral(data.referral);

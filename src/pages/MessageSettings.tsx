@@ -1,3 +1,4 @@
+import { apiFetch } from '../utils/api';
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../App';
 import { Save, Eye, EyeOff, MessageSquare, ShieldAlert, CheckCircle2, QrCode, RefreshCw, Trash2 } from 'lucide-react';
@@ -19,8 +20,8 @@ const MessageSettings: React.FC = () => {
 
   useEffect(() => {
     // Load from localStorage on mount
-    const savedInstanceId = localStorage.getItem('ultramsg_instance_id');
-    const savedToken = localStorage.getItem('ultramsg_token');
+    const savedInstanceId = localStorage.getItem('greenapi_instance_id');
+    const savedToken = localStorage.getItem('greenapi_token');
     
     if (savedInstanceId) setInstanceId(savedInstanceId);
     if (savedToken) setToken(savedToken);
@@ -30,26 +31,31 @@ const MessageSettings: React.FC = () => {
     if (!currentInstanceId || !currentToken) return;
     
     try {
-      const res = await fetch(`/api/whatsapp/status?instanceId=${currentInstanceId}&token=${currentToken}`);
+      const res = await apiFetch(`/api/whatsapp/status?instanceId=${currentInstanceId}&token=${currentToken}`);
       if (res.ok) {
         const data = await res.json();
-        const status = data.status?.state || data.state || 'disconnected';
+        const status = data.stateInstance || data.status?.state || data.state || 'disconnected';
         setWaStatus(status);
         
-        if (status === 'connected' || status === 'authenticated') {
+        if (status === 'authorized' || status === 'connected' || status === 'authenticated') {
           setWaQR(null); // Clear QR if connected
-        } else if (status === 'disconnected' || status === 'unauthenticated') {
+        } else if (status === 'notAuthorized' || status === 'disconnected' || status === 'unauthenticated') {
           fetchWhatsAppQR(currentInstanceId, currentToken);
         }
+      } else {
+        const errorData = await res.json();
+        setWaStatus('error');
+        console.error("WhatsApp API Error:", errorData.error);
       }
     } catch (err) {
       console.error("Error checking WhatsApp status:", err);
+      setWaStatus('error');
     }
   };
 
   const fetchWhatsAppQR = async (currentInstanceId: string, currentToken: string) => {
     try {
-      const res = await fetch(`/api/whatsapp/qr?instanceId=${currentInstanceId}&token=${currentToken}`);
+      const res = await apiFetch(`/api/whatsapp/qr?instanceId=${currentInstanceId}&token=${currentToken}`);
       if (res.ok) {
         const data = await res.json();
         if (data.qrCode) {
@@ -57,16 +63,19 @@ const MessageSettings: React.FC = () => {
         } else if (data.qr) {
           setWaQR(data.qr);
         }
+      } else {
+        setWaQR(null);
       }
     } catch (err) {
       console.error("Error fetching WhatsApp QR:", err);
+      setWaQR(null);
     }
   };
 
   // Start polling when instanceId and token are available in localStorage
   useEffect(() => {
-    const savedInstanceId = localStorage.getItem('ultramsg_instance_id');
-    const savedToken = localStorage.getItem('ultramsg_token');
+    const savedInstanceId = localStorage.getItem('greenapi_instance_id');
+    const savedToken = localStorage.getItem('greenapi_token');
 
     if (savedInstanceId && savedToken) {
       // Initial check
@@ -89,8 +98,8 @@ const MessageSettings: React.FC = () => {
     setSaving(true);
     setSuccess(false);
     
-    localStorage.setItem('ultramsg_instance_id', instanceId);
-    localStorage.setItem('ultramsg_token', token);
+    localStorage.setItem('greenapi_instance_id', instanceId);
+    localStorage.setItem('greenapi_token', token);
     
     setTimeout(() => {
       setSaving(false);
@@ -105,8 +114,8 @@ const MessageSettings: React.FC = () => {
   };
 
   const confirmClearData = () => {
-    localStorage.removeItem('ultramsg_instance_id');
-    localStorage.removeItem('ultramsg_token');
+    localStorage.removeItem('greenapi_instance_id');
+    localStorage.removeItem('greenapi_token');
     setInstanceId('');
     setToken('');
     setWaStatus(null);
@@ -127,8 +136,8 @@ const MessageSettings: React.FC = () => {
     );
   }
 
-  const isConnected = waStatus === 'connected' || waStatus === 'authenticated';
-  const hasSavedData = !!localStorage.getItem('ultramsg_instance_id');
+  const isConnected = waStatus === 'authorized' || waStatus === 'connected' || waStatus === 'authenticated';
+  const hasSavedData = !!localStorage.getItem('greenapi_instance_id');
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-20">
@@ -150,10 +159,10 @@ const MessageSettings: React.FC = () => {
         <div className="p-6 md:p-8 border-b border-slate-100 bg-slate-50/50">
           <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
             <span className="w-2 h-6 bg-emerald-500 rounded-full inline-block"></span>
-            بوابة إرسال الواتساب (Ultramsg)
+            بوابة إرسال الواتساب (Green API)
           </h2>
           <p className="text-slate-500 mt-2 text-sm">
-            قم بإدخال بيانات الربط الخاصة بخدمة Ultramsg لتفعيل إرسال الرسائل التلقائية لأولياء الأمور.
+            قم بإدخال بيانات الربط الخاصة بخدمة Green API لتفعيل إرسال الرسائل التلقائية لأولياء الأمور.
           </p>
         </div>
 
@@ -279,6 +288,21 @@ const MessageSettings: React.FC = () => {
                 <div>
                   <h3 className="text-2xl font-bold text-slate-800">الجوال متصل بنجاح ومستعد للإرسال</h3>
                   <p className="text-slate-500 mt-2">نظام إرسال الواتساب جاهز للعمل</p>
+                </div>
+              </motion.div>
+            ) : waStatus === 'error' ? (
+              <motion.div 
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="flex flex-col items-center text-center space-y-4"
+              >
+                <div className="w-24 h-24 bg-red-100 rounded-full flex items-center justify-center">
+                  <ShieldAlert className="w-12 h-12 text-red-500" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-slate-800">خطأ في الربط</h3>
+                  <p className="text-slate-500 mt-2">بيانات الربط غير صحيحة أو الحساب غير مفعل (Forbidden).</p>
+                  <p className="text-slate-500 mt-1 text-sm">تأكد من صحة رقم الجلسة ورمز الأمان، وأن اشتراكك فعال في Green API.</p>
                 </div>
               </motion.div>
             ) : (

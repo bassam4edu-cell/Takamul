@@ -1,3 +1,4 @@
+import { apiFetch } from '../utils/api';
 import React, { useState } from 'react';
 import { 
   Bell, 
@@ -31,7 +32,7 @@ const Settings: React.FC = () => {
     }
     setSaving(true);
     try {
-      const res = await fetch(`/api/admin/users/${user?.id}/update`, {
+      const res = await apiFetch(`/api/admin/users/${user?.id}/update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(profileForm)

@@ -1,3 +1,4 @@
+import { apiFetch } from '../utils/api';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, User, FileText, ChevronLeft, Layers, UserCircle } from 'lucide-react';
@@ -26,7 +27,7 @@ const StudentRecordSearch: React.FC = () => {
   useEffect(() => {
     const fetchStudents = async () => {
       try {
-        const res = await fetch(`/api/students?userId=${user?.id}`);
+        const res = await apiFetch(`/api/students?userId=${user?.id}`);
         if (res.ok) {
           const data = await res.json();
           setStudents(data);

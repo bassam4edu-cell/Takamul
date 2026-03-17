@@ -1,3 +1,4 @@
+import { apiFetch } from '../utils/api';
 import React, { useState, useEffect } from 'react';
 import { 
   Users, 
@@ -25,6 +26,7 @@ import { motion } from 'motion/react';
 import * as XLSX from 'xlsx';
 import { User } from '../types';
 import { useAuth } from '../App';
+import SchoolUsers from './SchoolUsers';
 
 const AdminDashboard: React.FC = () => {
   const { user } = useAuth();
@@ -79,7 +81,7 @@ const AdminDashboard: React.FC = () => {
   const fetchStudents = async () => {
     setLoadingStudents(true);
     try {
-      const res = await fetch('/api/admin/students');
+      const res = await apiFetch('/api/admin/students');
       if (!res.ok) throw new Error('Failed to fetch students');
       const data = await res.json().catch(() => []);
       if (Array.isArray(data)) {
@@ -99,7 +101,7 @@ const AdminDashboard: React.FC = () => {
   const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/admin/students/import', {
+      const res = await apiFetch('/api/admin/students/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ students: [newStudentForm] }),
@@ -120,7 +122,7 @@ const AdminDashboard: React.FC = () => {
 
   const fetchGrades = async () => {
     try {
-      const res = await fetch('/api/students');
+      const res = await apiFetch('/api/students');
       if (!res.ok) throw new Error('Failed to fetch grades');
       const data = await res.json().catch(() => []);
       const grades = Array.from(new Set(data.map((s: any) => s.grade))) as string[];
@@ -132,7 +134,7 @@ const AdminDashboard: React.FC = () => {
 
   const fetchUsers = async () => {
     try {
-      const res = await fetch('/api/admin/users');
+      const res = await apiFetch('/api/admin/users');
       if (!res.ok) throw new Error('Failed to fetch users');
       const data = await res.json().catch(() => []);
       setUsers(data);
@@ -145,7 +147,7 @@ const AdminDashboard: React.FC = () => {
 
   const handleRoleChange = async (userId: number, newRole: string) => {
     try {
-      const res = await fetch(`/api/admin/users/${userId}/role`, {
+      const res = await apiFetch(`/api/admin/users/${userId}/role`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role: newRole }),
@@ -173,7 +175,7 @@ const AdminDashboard: React.FC = () => {
 
   const saveUserUpdate = async (userId: number) => {
     try {
-      const res = await fetch(`/api/admin/users/${userId}/update`, {
+      const res = await apiFetch(`/api/admin/users/${userId}/update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editForm),
@@ -194,7 +196,7 @@ const AdminDashboard: React.FC = () => {
   const savePasswordUpdate = async (userId: number) => {
     if (!newPassword) return;
     try {
-      const res = await fetch(`/api/admin/users/${userId}/password`, {
+      const res = await apiFetch(`/api/admin/users/${userId}/password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: newPassword }),
@@ -223,7 +225,7 @@ const AdminDashboard: React.FC = () => {
   const deleteAllStudents = async () => {
     setDeletingAllStudents(false);
     try {
-      const res = await fetch('/api/admin/database/students/delete', { method: 'POST' });
+      const res = await apiFetch('/api/admin/database/students/delete', { method: 'POST' });
       if (res.ok) {
         fetchStudents();
       } else {
@@ -238,7 +240,7 @@ const AdminDashboard: React.FC = () => {
   const deleteAllUsers = async () => {
     setDeletingAllUsers(false);
     try {
-      const res = await fetch('/api/admin/database/users/delete', { method: 'POST' });
+      const res = await apiFetch('/api/admin/database/users/delete', { method: 'POST' });
       if (res.ok) {
         fetchUsers();
       } else {
@@ -252,7 +254,7 @@ const AdminDashboard: React.FC = () => {
 
   const deleteUser = (userId: number) => {
     setDeletingUserId(null);
-    fetch(`/api/admin/users/${userId}/delete`, {
+    apiFetch(`/api/admin/users/${userId}/delete`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
     })
@@ -273,7 +275,7 @@ const AdminDashboard: React.FC = () => {
   const deleteGrade = async (grade: string) => {
     setDeletingGrade(null);
     try {
-      const res = await fetch('/api/admin/grades/delete', {
+      const res = await apiFetch('/api/admin/grades/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ grade }),
@@ -296,7 +298,7 @@ const AdminDashboard: React.FC = () => {
   const deleteSection = async (grade: string, section: string) => {
     setDeletingSection(null);
     try {
-      const res = await fetch('/api/admin/classes/delete', {
+      const res = await apiFetch('/api/admin/classes/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ grade, section }),
@@ -317,7 +319,7 @@ const AdminDashboard: React.FC = () => {
 
   const saveStudentUpdate = async (id: number) => {
     try {
-      const res = await fetch(`/api/admin/students/${id}/update`, {
+      const res = await apiFetch(`/api/admin/students/${id}/update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(studentEditForm),
@@ -346,7 +348,7 @@ const AdminDashboard: React.FC = () => {
         [field]: value
       };
 
-      const res = await fetch(`/api/admin/students/${id}/update`, {
+      const res = await apiFetch(`/api/admin/students/${id}/update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedData),
@@ -372,7 +374,7 @@ const AdminDashboard: React.FC = () => {
   const deleteStudent = async (id: number) => {
     setDeletingStudentId(null);
     try {
-      const res = await fetch(`/api/admin/students/${id}`, {
+      const res = await apiFetch(`/api/admin/students/${id}`, {
         method: 'DELETE',
       });
       if (res.ok) {
@@ -401,7 +403,7 @@ const AdminDashboard: React.FC = () => {
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/admin/users/create', {
+      const res = await apiFetch('/api/admin/users/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newUserForm),
@@ -423,7 +425,7 @@ const AdminDashboard: React.FC = () => {
 
   const toggleUserStatus = async (userId: number) => {
     try {
-      const res = await fetch(`/api/admin/users/${userId}/toggle-status`, {
+      const res = await apiFetch(`/api/admin/users/${userId}/toggle-status`, {
         method: 'POST',
       });
       if (res.ok) {
@@ -449,7 +451,7 @@ const AdminDashboard: React.FC = () => {
     }
     
     try {
-      const res = await fetch(`/api/admin/users/${userId}/grades`, {
+      const res = await apiFetch(`/api/admin/users/${userId}/grades`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ grades: newGrades }),
@@ -589,7 +591,7 @@ const AdminDashboard: React.FC = () => {
           return;
         }
 
-        const res = await fetch('/api/admin/students/import', {
+        const res = await apiFetch('/api/admin/students/import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
@@ -690,112 +692,8 @@ const AdminDashboard: React.FC = () => {
           <motion.div 
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="space-y-8"
           >
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-primary/5 text-primary rounded-2xl flex items-center justify-center">
-                  <UserCog size={24} />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2">
-                    إدارة المستخدمين والصلاحيات
-                  </h2>
-                  <p className="text-sm text-slate-500 font-bold mt-1">تحكم في حسابات الموظفين وصلاحيات الوصول للنظام.</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setShowAddUser(true)}
-                className="sts-button-accent px-6 py-3.5 flex items-center justify-center gap-3 shadow-xl shadow-accent/20"
-              >
-                <UserPlus size={20} />
-                <span>إضافة مستخدم جديد</span>
-              </button>
-            </div>
-
-            <div className="sts-card overflow-hidden border-none shadow-2xl shadow-slate-200/50">
-              <div className="overflow-x-auto">
-                <table className="w-full text-right">
-                  <thead>
-                    <tr className="bg-slate-50/50 text-slate-500 text-[10px] font-extrabold uppercase tracking-widest">
-                      <th className="px-8 py-6">المستخدم</th>
-                      <th className="px-8 py-6">الدور / الصلاحية</th>
-                      <th className="px-8 py-6 text-center">حالة الحساب</th>
-                      <th className="px-8 py-6 text-left">إجراءات</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {loading ? (
-                      <tr><td colSpan={4} className="px-8 py-20 text-center text-slate-400 font-bold">جاري تحميل البيانات...</td></tr>
-                    ) : (
-                      users.map((u) => (
-                        <tr key={u.id} className="hover:bg-slate-50/20 transition-all group">
-                          <td className="px-8 py-6">
-                            <div className="flex items-center gap-4">
-                              <div className="w-12 h-12 bg-white text-primary rounded-2xl flex items-center justify-center font-black shadow-sm border border-slate-100 group-hover:border-primary/20 transition-colors">
-                                {u.name.charAt(0)}
-                              </div>
-                              <div className="flex flex-col">
-                                <span className="font-extrabold text-slate-800 text-base">{u.name}</span>
-                                <span className="text-slate-400 text-xs font-bold">{u.email}</span>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-8 py-6">
-                            <span className={`px-4 py-1.5 rounded-xl text-[10px] font-black border uppercase tracking-widest shadow-sm ${
-                              u.role === 'admin' ? 'bg-red-50 text-red-700 border-red-100' :
-                              u.role === 'vice_principal' ? 'bg-amber-50 text-amber-700 border-amber-100' :
-                              u.role === 'counselor' ? 'bg-blue-50 text-blue-700 border-blue-100' :
-                              u.role === 'principal' ? 'bg-purple-50 text-purple-700 border-purple-100' :
-                              'bg-emerald-50 text-emerald-700 border-emerald-100'
-                            }`}>
-                              {getRoleLabel(u.role)}
-                            </span>
-                          </td>
-                          <td className="px-8 py-6">
-                            <div className="flex justify-center">
-                              <button 
-                                onClick={() => toggleUserStatus(u.id)}
-                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
-                                  u.is_active ? 'bg-emerald-500' : 'bg-slate-300'
-                                }`}
-                              >
-                                <span
-                                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                    u.is_active ? 'translate-x-6' : 'translate-x-1'
-                                  }`}
-                                />
-                              </button>
-                            </div>
-                          </td>
-                          <td className="px-8 py-6">
-                            <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button 
-                                onClick={() => {
-                                  setSelectedUser(u);
-                                  setShowUserModal(true);
-                                }}
-                                className="p-3 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-2xl transition-all"
-                                title="إدارة الحساب"
-                              >
-                                <Edit2 size={18} />
-                              </button>
-                              <button 
-                                onClick={() => setDeletingUserId(u.id)}
-                                className="p-3 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all"
-                                title="مسح السجل"
-                              >
-                                <Trash2 size={18} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <SchoolUsers />
           </motion.div>
         )}
 
@@ -931,7 +829,8 @@ const AdminDashboard: React.FC = () => {
             </div>
 
             <div className="sts-card overflow-hidden border-none shadow-2xl shadow-slate-200/50">
-              <div className="overflow-x-auto">
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-right">
                   <thead>
                     <tr className="bg-slate-50/50 text-slate-500 text-[10px] font-extrabold uppercase tracking-widest">
@@ -959,7 +858,7 @@ const AdminDashboard: React.FC = () => {
                       });
                       
                       if (filtered.length === 0) {
-                        return <tr><td colSpan={4} className="px-8 py-20 text-center text-slate-400 font-bold">لم يتم العثور على نتائج</td></tr>;
+                        return <tr><td colSpan={5} className="px-8 py-20 text-center text-slate-400 font-bold">لم يتم العثور على نتائج</td></tr>;
                       }
 
                       return filtered.map((s) => (
@@ -1047,14 +946,14 @@ const AdminDashboard: React.FC = () => {
                                   });
                                   setShowStudentModal(true);
                                 }}
-                                className="p-3 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-2xl transition-all"
+                                className="p-3 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-2xl transition-all min-h-[44px] min-w-[44px] flex items-center justify-center"
                                 title="إدارة الحساب"
                               >
                                 <Edit2 size={18} />
                               </button>
                               <button 
                                 onClick={() => setDeletingStudentId(s.id)}
-                                className="p-3 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all"
+                                className="p-3 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all min-h-[44px] min-w-[44px] flex items-center justify-center"
                                 title="مسح السجل"
                               >
                                 <Trash2 size={18} />
@@ -1066,6 +965,142 @@ const AdminDashboard: React.FC = () => {
                     })()}
                   </tbody>
                 </table>
+              </div>
+
+              {/* Mobile Card View */}
+              <div className="md:hidden flex flex-col divide-y divide-slate-100">
+                {(() => {
+                  const filtered = students.filter(s => {
+                    const name = s.name || '';
+                    const nationalId = s.national_id || '';
+                    
+                    const matchesSearch = studentSearch 
+                      ? (name.toLowerCase().includes(studentSearch.toLowerCase()) || nationalId.includes(studentSearch))
+                      : true;
+                    
+                    const matchesGrade = selectedGradeFilter ? s.grade === selectedGradeFilter : true;
+                    const matchesSection = selectedSectionFilter ? s.section === selectedSectionFilter : true;
+                    
+                    return matchesSearch && matchesGrade && matchesSection;
+                  });
+                  
+                  if (filtered.length === 0) {
+                    return <div className="p-8 text-center text-slate-400 font-bold">لم يتم العثور على نتائج</div>;
+                  }
+
+                  return filtered.map((s) => (
+                    <div key={s.id} className="p-4 flex flex-col gap-4">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          {editingStudentCell?.id === s.id && editingStudentCell?.field === 'name' ? (
+                            <input 
+                              type="text"
+                              autoFocus
+                              value={inlineEditValue}
+                              onChange={(e) => setInlineEditValue(e.target.value)}
+                              onKeyDown={(e) => handleInlineEditKeyDown(e, s.id, 'name')}
+                              onBlur={() => saveInlineEdit(s.id, 'name', inlineEditValue)}
+                              className="bg-white border border-slate-200 rounded-xl py-2 px-4 text-sm outline-none focus:ring-2 focus:ring-primary/20 font-bold w-full"
+                            />
+                          ) : (
+                            <h3 
+                              className="font-extrabold text-slate-800 text-base cursor-pointer"
+                              onDoubleClick={() => {
+                                setEditingStudentCell({ id: s.id, field: 'name' });
+                                setInlineEditValue(s.name);
+                              }}
+                            >
+                              {s.name}
+                            </h3>
+                          )}
+                          
+                          <div className="mt-2 flex items-center gap-2">
+                            <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black uppercase tracking-widest">{s.grade}</span>
+                            <span className="px-2 py-1 bg-primary/5 text-primary rounded-lg text-[10px] font-black uppercase tracking-widest">{s.section}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <span className="text-slate-500 block mb-1 text-xs">رقم الهوية</span>
+                          {editingStudentCell?.id === s.id && editingStudentCell?.field === 'national_id' ? (
+                            <input 
+                              type="text"
+                              autoFocus
+                              value={inlineEditValue}
+                              onChange={(e) => setInlineEditValue(e.target.value)}
+                              onKeyDown={(e) => handleInlineEditKeyDown(e, s.id, 'national_id')}
+                              onBlur={() => saveInlineEdit(s.id, 'national_id', inlineEditValue)}
+                              className="bg-white border border-slate-200 rounded-xl py-2 px-4 text-sm outline-none focus:ring-2 focus:ring-primary/20 font-bold w-full"
+                            />
+                          ) : (
+                            <span 
+                              className="font-mono font-bold text-slate-700 cursor-pointer"
+                              onDoubleClick={() => {
+                                setEditingStudentCell({ id: s.id, field: 'national_id' });
+                                setInlineEditValue(s.national_id);
+                              }}
+                            >
+                              {s.national_id}
+                            </span>
+                          )}
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block mb-1 text-xs">رقم الجوال</span>
+                          {editingStudentCell?.id === s.id && editingStudentCell?.field === 'parent_phone' ? (
+                            <input 
+                              type="text"
+                              autoFocus
+                              value={inlineEditValue}
+                              onChange={(e) => setInlineEditValue(e.target.value)}
+                              onKeyDown={(e) => handleInlineEditKeyDown(e, s.id, 'parent_phone')}
+                              onBlur={() => saveInlineEdit(s.id, 'parent_phone', inlineEditValue)}
+                              className="bg-white border border-slate-200 rounded-xl py-2 px-4 text-sm outline-none focus:ring-2 focus:ring-primary/20 font-bold w-full"
+                            />
+                          ) : (
+                            <span 
+                              className="font-mono font-bold text-slate-700 cursor-pointer"
+                              onDoubleClick={() => {
+                                setEditingStudentCell({ id: s.id, field: 'parent_phone' });
+                                setInlineEditValue(s.parent_phone || '');
+                              }}
+                            >
+                              {s.parent_phone || '—'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-2 border-t border-slate-50">
+                        <button 
+                          onClick={() => {
+                            setSelectedStudent(s);
+                            setStudentEditForm({
+                              name: s.name,
+                              national_id: s.national_id,
+                              grade: s.grade,
+                              section: s.section,
+                              parent_phone: s.parent_phone || ''
+                            });
+                            setShowStudentModal(true);
+                          }}
+                          className="flex-1 py-2 text-slate-600 hover:text-primary hover:bg-primary/5 rounded-xl transition-colors text-sm font-bold flex items-center justify-center gap-2 min-h-[44px]"
+                        >
+                          <Edit2 size={16} />
+                          تعديل
+                        </button>
+                        <button 
+                          onClick={() => setDeletingStudentId(s.id)}
+                          className="flex-1 py-2 text-slate-600 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors text-sm font-bold flex items-center justify-center gap-2 min-h-[44px]"
+                        >
+                          <Trash2 size={16} />
+                          حذف
+                        </button>
+                      </div>
+                    </div>
+                  ));
+                })()}
               </div>
             </div>
           </motion.div>

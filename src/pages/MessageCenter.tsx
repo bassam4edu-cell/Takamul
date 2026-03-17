@@ -1,3 +1,4 @@
+import { apiFetch } from '../utils/api';
 import React, { useState, useEffect } from 'react';
 import { useMessageLog } from '../context/MessageLogContext';
 import { useAuth } from '../App';
@@ -29,7 +30,7 @@ const MessageCenter: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    fetch('/api/attendance/grades')
+    apiFetch('/api/attendance/grades')
       .then(res => res.json())
       .then(data => setGrades(data))
       .catch(console.error);
@@ -37,7 +38,7 @@ const MessageCenter: React.FC = () => {
 
   useEffect(() => {
     if (grade !== 'all') {
-      fetch(`/api/attendance/sections/${grade}`)
+      apiFetch(`/api/attendance/sections/${grade}`)
         .then(res => res.json())
         .then(data => setSections(data))
         .catch(console.error);
@@ -49,7 +50,7 @@ const MessageCenter: React.FC = () => {
 
   useEffect(() => {
     if (targetType === 'custom') {
-      fetch(`/api/attendance/command-center?date=${new Date().toISOString().split('T')[0]}&grade=${grade}&section=${section}`)
+      apiFetch(`/api/attendance/command-center?date=${new Date().toISOString().split('T')[0]}&grade=${grade}&section=${section}`)
         .then(res => res.json())
         .then(data => setStudents(data))
         .catch(console.error);
@@ -68,14 +69,14 @@ const MessageCenter: React.FC = () => {
 
   const sendWhatsAppMessage = async (phoneNumber: string, text: string) => {
     try {
-      const instanceId = localStorage.getItem('ultramsg_instance_id');
-      const token = localStorage.getItem('ultramsg_token');
+      const instanceId = localStorage.getItem('greenapi_instance_id');
+      const token = localStorage.getItem('greenapi_token');
 
       if (!instanceId || !token) {
         return { success: false, error: 'MISSING_CREDENTIALS' };
       }
 
-      const response = await fetch('/api/whatsapp/send', {
+      const response = await apiFetch('/api/whatsapp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -86,7 +87,13 @@ const MessageCenter: React.FC = () => {
         })
       });
       
-      if (!response.ok) throw new Error('Failed to send');
+      const data = await response.json();
+      if (!response.ok) {
+        if (data.code === 'MISSING_WHATSAPP_CREDENTIALS' || data.code === 'FORBIDDEN') {
+          return { success: false, error: data.code, message: data.message };
+        }
+        throw new Error('Failed to send');
+      }
       return { success: true };
     } catch (error) {
       return { success: false, error: String(error) };
@@ -108,7 +115,7 @@ const MessageCenter: React.FC = () => {
       if (targetType === 'custom') {
         targetStudents = students.filter(s => selectedStudents.includes(s.id));
       } else {
-        const res = await fetch(`/api/attendance/command-center?date=${new Date().toISOString().split('T')[0]}&grade=${targetType === 'all' ? 'all' : grade}&section=${targetType === 'all' || targetType === 'grade' ? 'all' : section}`);
+        const res = await apiFetch(`/api/attendance/command-center?date=${new Date().toISOString().split('T')[0]}&grade=${targetType === 'all' ? 'all' : grade}&section=${targetType === 'all' || targetType === 'grade' ? 'all' : section}`);
         if (res.ok) {
           targetStudents = await res.json();
         }
@@ -145,6 +152,10 @@ const MessageCenter: React.FC = () => {
           successCount++;
         } else {
           failCount++;
+          if (result.error === 'MISSING_CREDENTIALS' || result.error === 'MISSING_WHATSAPP_CREDENTIALS' || result.error === 'FORBIDDEN') {
+            alert(result.message || 'بيانات الربط مفقودة أو غير صحيحة. يرجى إعداد خدمة الواتساب من شاشة إعدادات الرسائل.');
+            break;
+          }
         }
 
         setProgress({ sent: i + 1, total: validStudents.length });
@@ -178,7 +189,11 @@ const MessageCenter: React.FC = () => {
     if (result.success) {
       alert('تم إعادة الإرسال بنجاح');
     } else {
-      alert('فشل إعادة الإرسال');
+      if (result.error === 'MISSING_CREDENTIALS' || result.error === 'MISSING_WHATSAPP_CREDENTIALS' || result.error === 'FORBIDDEN') {
+        alert(result.message || 'بيانات الربط مفقودة أو غير صحيحة. يرجى إعداد خدمة الواتساب من شاشة إعدادات الرسائل.');
+      } else {
+        alert('فشل إعادة الإرسال');
+      }
     }
   };
 
@@ -387,7 +402,8 @@ const MessageCenter: React.FC = () => {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          {/* Desktop Table View */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-right">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100">
@@ -431,7 +447,7 @@ const MessageCenter: React.FC = () => {
                     <td className="p-4 text-center">
                       <button
                         onClick={() => handleResend(log)}
-                        className="p-2 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                        className="p-2 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                         title="إعادة إرسال"
                       >
                         <RotateCcw size={18} />
@@ -448,6 +464,58 @@ const MessageCenter: React.FC = () => {
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile Card View */}
+          <div className="md:hidden flex flex-col divide-y divide-slate-100">
+            {filteredLogs.length === 0 ? (
+              <div className="p-8 text-center text-slate-500 font-medium">
+                لا توجد رسائل مسجلة
+              </div>
+            ) : (
+              filteredLogs.map(log => (
+                <div key={log.id} className="p-4 flex flex-col gap-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <div className="font-bold text-slate-800 text-base">{log.recipient}</div>
+                      <div className="text-xs text-slate-500 font-mono mt-1">{log.recipientPhone}</div>
+                    </div>
+                    {log.status === 'success' ? (
+                      <span className="inline-flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg text-xs font-bold">
+                        <CheckCircle2 size={14} /> ناجح
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-red-600 bg-red-50 px-2 py-1 rounded-lg text-xs font-bold">
+                        <XCircle size={14} /> فشل
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-full font-bold bg-slate-100 text-slate-700">
+                      {log.messageType}
+                    </span>
+                    <span className="text-slate-500 font-medium">
+                      {new Date(log.timestamp).toLocaleString('ar-SA')}
+                    </span>
+                  </div>
+
+                  <div className="bg-slate-50 p-3 rounded-xl text-sm text-slate-600">
+                    {log.messageText}
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-50">
+                    <button
+                      onClick={() => handleResend(log)}
+                      className="w-full py-2 text-slate-600 hover:text-primary hover:bg-primary/10 rounded-xl transition-colors text-sm font-bold flex items-center justify-center gap-2 min-h-[44px]"
+                    >
+                      <RotateCcw size={16} />
+                      إعادة إرسال
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </motion.div>
       )}

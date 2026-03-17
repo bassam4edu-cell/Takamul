@@ -1,3 +1,4 @@
+import { apiFetch } from '../utils/api';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -32,7 +33,7 @@ const AdminReferrals: React.FC = () => {
 
   const fetchReferrals = async () => {
     try {
-      const res = await fetch(`/api/referrals?userId=${user?.id}&role=${user?.role}`);
+      const res = await apiFetch(`/api/referrals?userId=${user?.id}&role=${user?.role}`);
       if (res.ok) {
         const data = await res.json();
         setReferrals(data);
@@ -47,7 +48,7 @@ const AdminReferrals: React.FC = () => {
   const handleDelete = async (id: number) => {
     setDeletingReferralId(null);
     try {
-      const res = await fetch(`/api/admin/referrals/${id}/delete`, {
+      const res = await apiFetch(`/api/admin/referrals/${id}/delete`, {
         method: 'POST'
       });
       if (res.ok) {
@@ -133,52 +134,104 @@ const AdminReferrals: React.FC = () => {
             لا توجد تحويلات مطابقة للبحث
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-right">
-              <thead>
-                <tr className="border-b-2 border-slate-100">
-                  <th className="pb-4 font-black text-slate-400 text-xs uppercase tracking-widest">رقم التحويل</th>
-                  <th className="pb-4 font-black text-slate-400 text-xs uppercase tracking-widest">الطالب</th>
-                  <th className="pb-4 font-black text-slate-400 text-xs uppercase tracking-widest">المعلم المحيل</th>
-                  <th className="pb-4 font-black text-slate-400 text-xs uppercase tracking-widest">تاريخ التحويل</th>
-                  <th className="pb-4 font-black text-slate-400 text-xs uppercase tracking-widest">الحالة</th>
-                  <th className="pb-4 font-black text-slate-400 text-xs uppercase tracking-widest">الإجراءات</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {filteredReferrals.map((referral) => (
-                  <tr key={referral.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="py-4 text-sm font-bold text-slate-900">#{referral.id}</td>
-                    <td className="py-4">
-                      <div className="font-bold text-slate-900">{referral.student_name}</div>
-                      <div className="text-[10px] text-slate-500">{referral.student_national_id}</div>
-                    </td>
-                    <td className="py-4 text-sm font-bold text-slate-700">{referral.teacher_name}</td>
-                    <td className="py-4 text-sm font-bold text-slate-500">{new Date(referral.created_at).toLocaleDateString('ar-SA')}</td>
-                    <td className="py-4">{getStatusBadge(referral.status)}</td>
-                    <td className="py-4">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => navigate(`/dashboard/referral/${referral.id}`)}
-                          className="p-2 text-primary hover:bg-primary/10 rounded-xl transition-colors"
-                          title="عرض وتعديل"
-                        >
-                          <Edit2 size={18} />
-                        </button>
-                        <button
-                          onClick={() => setDeletingReferralId(referral.id)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition-colors"
-                          title="حذف"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    </td>
+          <>
+            {/* Mobile Card View */}
+            <div className="md:hidden space-y-4">
+              {filteredReferrals.map((referral) => (
+                <div key={referral.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="text-xs font-bold text-slate-400 block mb-1">رقم التحويل</span>
+                      <span className="text-sm font-bold text-slate-900">#{referral.id}</span>
+                    </div>
+                    <div>{getStatusBadge(referral.status)}</div>
+                  </div>
+                  
+                  <div>
+                    <span className="text-xs font-bold text-slate-400 block mb-1">الطالب</span>
+                    <div className="font-bold text-slate-900">{referral.student_name}</div>
+                    <div className="text-[10px] text-slate-500">{referral.student_national_id}</div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <span className="text-xs font-bold text-slate-400 block mb-1">المعلم المحيل</span>
+                      <span className="text-sm font-bold text-slate-700">{referral.teacher_name}</span>
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-slate-400 block mb-1">تاريخ التحويل</span>
+                      <span className="text-sm font-bold text-slate-500">{new Date(referral.created_at).toLocaleDateString('ar-SA')}</span>
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-slate-50 flex gap-2">
+                    <button
+                      onClick={() => navigate(`/dashboard/referral/${referral.id}`)}
+                      className="flex-1 py-2 bg-primary/10 text-primary rounded-xl font-bold text-sm flex items-center justify-center gap-2"
+                    >
+                      <Edit2 size={16} />
+                      عرض وتعديل
+                    </button>
+                    <button
+                      onClick={() => setDeletingReferralId(referral.id)}
+                      className="flex-1 py-2 bg-red-50 text-red-600 rounded-xl font-bold text-sm flex items-center justify-center gap-2"
+                    >
+                      <Trash2 size={16} />
+                      حذف
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-right">
+                <thead>
+                  <tr className="border-b-2 border-slate-100">
+                    <th className="pb-4 font-black text-slate-400 text-xs uppercase tracking-widest">رقم التحويل</th>
+                    <th className="pb-4 font-black text-slate-400 text-xs uppercase tracking-widest">الطالب</th>
+                    <th className="pb-4 font-black text-slate-400 text-xs uppercase tracking-widest">المعلم المحيل</th>
+                    <th className="pb-4 font-black text-slate-400 text-xs uppercase tracking-widest">تاريخ التحويل</th>
+                    <th className="pb-4 font-black text-slate-400 text-xs uppercase tracking-widest">الحالة</th>
+                    <th className="pb-4 font-black text-slate-400 text-xs uppercase tracking-widest">الإجراءات</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {filteredReferrals.map((referral) => (
+                    <tr key={referral.id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="py-4 text-sm font-bold text-slate-900">#{referral.id}</td>
+                      <td className="py-4">
+                        <div className="font-bold text-slate-900">{referral.student_name}</div>
+                        <div className="text-[10px] text-slate-500">{referral.student_national_id}</div>
+                      </td>
+                      <td className="py-4 text-sm font-bold text-slate-700">{referral.teacher_name}</td>
+                      <td className="py-4 text-sm font-bold text-slate-500">{new Date(referral.created_at).toLocaleDateString('ar-SA')}</td>
+                      <td className="py-4">{getStatusBadge(referral.status)}</td>
+                      <td className="py-4">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => navigate(`/dashboard/referral/${referral.id}`)}
+                            className="p-2 text-primary hover:bg-primary/10 rounded-xl transition-colors"
+                            title="عرض وتعديل"
+                          >
+                            <Edit2 size={18} />
+                          </button>
+                          <button
+                            onClick={() => setDeletingReferralId(referral.id)}
+                            className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+                            title="حذف"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 

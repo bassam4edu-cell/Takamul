@@ -1,10 +1,12 @@
-export type Role = 'teacher' | 'vice_principal' | 'counselor' | 'admin' | 'principal';
+export type Role = 'teacher' | 'vice_principal' | 'counselor' | 'admin' | 'principal' | 'super_admin';
 
 export interface User {
   id: number;
   name: string;
   email: string;
   role: Role;
+  school_id?: number;
+  schoolId?: number;
   assigned_grades?: string[];
   is_active?: boolean;
 }

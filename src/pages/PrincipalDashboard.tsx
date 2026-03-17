@@ -1,3 +1,4 @@
+import { apiFetch } from '../utils/api';
 import React, { useState, useEffect } from 'react';
 import { 
   Users, 
@@ -55,9 +56,9 @@ const PrincipalDashboard: React.FC = () => {
     const fetchData = async () => {
       try {
         const [refRes, perfRes, kpiRes] = await Promise.all([
-          fetch(`/api/referrals?userId=${user?.id}&role=${user?.role}`),
-          fetch('/api/admin/performance'),
-          fetch('/api/reports/kpi-stats')
+          apiFetch(`/api/referrals?userId=${user?.id}&role=${user?.role}`),
+          apiFetch('/api/admin/performance'),
+          apiFetch('/api/reports/kpi-stats')
         ]);
 
         if (!refRes.ok || !perfRes.ok || !kpiRes.ok) {

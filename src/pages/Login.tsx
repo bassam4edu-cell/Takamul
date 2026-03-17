@@ -1,3 +1,4 @@
+import { apiFetch } from '../utils/api';
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../App';
@@ -21,7 +22,7 @@ const Login: React.FC = () => {
     setLoading(true);
 
     try {
-      const response = await fetch('/api/login', {
+      const response = await apiFetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -42,7 +43,9 @@ const Login: React.FC = () => {
         // Smart Routing based on role
         let from = (location.state as any)?.from?.pathname;
         if (!from || from === '/') {
-          if (data.user.role === 'admin' || data.user.role === 'vice_principal' || data.user.role === 'principal' || data.user.role === 'counselor') {
+          if (data.user.role === 'super_admin') {
+            from = '/dashboard';
+          } else if (data.user.role === 'admin' || data.user.role === 'vice_principal' || data.user.role === 'principal' || data.user.role === 'counselor') {
             from = '/vp-radar';
           } else if (data.user.role === 'teacher') {
             from = '/teacher-dashboard';

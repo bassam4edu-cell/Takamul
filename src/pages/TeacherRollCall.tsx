@@ -1,3 +1,4 @@
+import { apiFetch } from '../utils/api';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../App';
 import { CheckCircle2, XCircle, Clock, Save, Lock, Users, AlertCircle } from 'lucide-react';
@@ -26,7 +27,7 @@ const TeacherRollCall: React.FC = () => {
   useEffect(() => {
     const fetchClasses = async () => {
       try {
-        const res = await fetch('/api/attendance/classes');
+        const res = await apiFetch('/api/attendance/classes');
         if (res.ok) {
           const data = await res.json();
           setClasses(data);
@@ -63,7 +64,7 @@ const TeacherRollCall: React.FC = () => {
       setLoading(true);
       try {
         const classId = encodeURIComponent(JSON.stringify({ grade, section }));
-        const res = await fetch(`/api/attendance/class/${classId}?date=${date}&period=${period}`);
+        const res = await apiFetch(`/api/attendance/class/${classId}?date=${date}&period=${period}`);
         if (res.ok) {
           const data = await res.json();
           setStudents(data.students);
@@ -112,7 +113,7 @@ const TeacherRollCall: React.FC = () => {
         section
       }));
 
-      const res = await fetch('/api/attendance/submit-bulk', {
+      const res = await apiFetch('/api/attendance/submit-bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

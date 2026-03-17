@@ -1,3 +1,4 @@
+import { apiFetch } from '../utils/api';
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { 
@@ -33,7 +34,7 @@ const Notifications: React.FC = () => {
   const fetchNotifications = async () => {
     if (!user) return;
     try {
-      const res = await fetch(`/api/notifications?userId=${user.id}`);
+      const res = await apiFetch(`/api/notifications?userId=${user.id}`);
       if (!res.ok) throw new Error('Failed to fetch notifications');
       const data = await res.json().catch(() => []);
       setNotifications(data);
@@ -50,7 +51,7 @@ const Notifications: React.FC = () => {
 
   const markAsRead = async (id: number, referralId?: number) => {
     try {
-      const res = await fetch(`/api/notifications/${id}/read`, { method: 'POST' });
+      const res = await apiFetch(`/api/notifications/${id}/read`, { method: 'POST' });
       if (res.ok) {
         setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
         if (referralId) {
@@ -68,7 +69,7 @@ const Notifications: React.FC = () => {
   const markAllAsRead = async () => {
     if (!user) return;
     try {
-      const res = await fetch('/api/notifications/read-all', {
+      const res = await apiFetch('/api/notifications/read-all', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.id })
@@ -87,7 +88,7 @@ const Notifications: React.FC = () => {
   const deleteNotification = async (e: React.MouseEvent, id: number) => {
     e.stopPropagation();
     try {
-      const res = await fetch(`/api/notifications/${id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/notifications/${id}`, { method: 'DELETE' });
       if (res.ok) {
         setNotifications(prev => prev.filter(n => n.id !== id));
       } else {

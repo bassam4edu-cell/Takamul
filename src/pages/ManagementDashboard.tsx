@@ -1,3 +1,4 @@
+import { apiFetch } from '../utils/api';
 import React, { useState, useEffect } from 'react';
 import { 
   Clock, 
@@ -34,7 +35,7 @@ const ManagementDashboard: React.FC = () => {
 
   const fetchDashboardData = async () => {
     try {
-      const res = await fetch('/api/dashboard/pulse');
+      const res = await apiFetch('/api/dashboard/pulse');
       if (res.ok) {
         const data = await res.json();
         setDashboardData(data);
@@ -60,7 +61,7 @@ const ManagementDashboard: React.FC = () => {
       }
       setIsSearching(true);
       try {
-        const res = await fetch(`/api/student-search?query=${encodeURIComponent(searchQuery)}`);
+        const res = await apiFetch(`/api/student-search?query=${encodeURIComponent(searchQuery)}`);
         if (res.ok) {
           const data = await res.json();
           setSearchResults(data);

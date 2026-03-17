@@ -1,3 +1,4 @@
+import { apiFetch } from '../utils/api';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../App';
 import { useMessageLog } from '../context/MessageLogContext';
@@ -97,7 +98,7 @@ const VPRadar: React.FC = () => {
   useEffect(() => {
     const fetchGrades = async () => {
       try {
-        const res = await fetch('/api/attendance/grades');
+        const res = await apiFetch('/api/attendance/grades');
         if (res.ok) {
           const data = await res.json();
           setGrades(data);
@@ -118,7 +119,7 @@ const VPRadar: React.FC = () => {
         return;
       }
       try {
-        const res = await fetch(`/api/attendance/sections/${grade}`);
+        const res = await apiFetch(`/api/attendance/sections/${grade}`);
         if (res.ok) {
           const data = await res.json();
           setSections(data);
@@ -141,9 +142,9 @@ const VPRadar: React.FC = () => {
       });
       
       const [studentsRes, pendingRes, settingsRes] = await Promise.all([
-        fetch(`/api/attendance/command-center?${params}`),
-        fetch(`/api/attendance/pending-classes?date=${date}&period=${selectedPeriod}`),
-        fetch('/api/settings')
+        apiFetch(`/api/attendance/command-center?${params}`),
+        apiFetch(`/api/attendance/pending-classes?date=${date}&period=${selectedPeriod}`),
+        apiFetch('/api/settings')
       ]);
 
       if (settingsRes.ok) {
@@ -214,7 +215,7 @@ const VPRadar: React.FC = () => {
   // Poll for pending classes every 30 seconds
   useEffect(() => {
     const interval = setInterval(() => {
-      fetch(`/api/attendance/pending-classes?date=${date}&period=${selectedPeriod}`)
+      apiFetch(`/api/attendance/pending-classes?date=${date}&period=${selectedPeriod}`)
         .then(res => res.json())
         .then(pendingData => {
           let pending = pendingData.pending || [];
@@ -298,7 +299,7 @@ const VPRadar: React.FC = () => {
         section: student.section
       }];
 
-      const res = await fetch('/api/attendance/submit-bulk', {
+      const res = await apiFetch('/api/attendance/submit-bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -363,7 +364,7 @@ const VPRadar: React.FC = () => {
         section: s.section
       }));
 
-      const res = await fetch('/api/attendance/submit-bulk', {
+      const res = await apiFetch('/api/attendance/submit-bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -390,7 +391,7 @@ const VPRadar: React.FC = () => {
   const handleResetAttendance = async () => {
     setResetting(true);
     try {
-      const res = await fetch('/api/attendance/reset-daily', {
+      const res = await apiFetch('/api/attendance/reset-daily', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ date, period: selectedPeriod })
@@ -439,7 +440,7 @@ const VPRadar: React.FC = () => {
         section: s.section
       }));
 
-      const res = await fetch('/api/attendance/submit-bulk', {
+      const res = await apiFetch('/api/attendance/submit-bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -499,8 +500,8 @@ const VPRadar: React.FC = () => {
 
   const sendWhatsAppMessage = async (phoneNumber: string, studentName: string) => {
     try {
-      const instanceId = localStorage.getItem('ultramsg_instance_id');
-      const token = localStorage.getItem('ultramsg_token');
+      const instanceId = localStorage.getItem('greenapi_instance_id');
+      const token = localStorage.getItem('greenapi_token');
 
       if (!instanceId || !token) {
         return { 
@@ -510,7 +511,7 @@ const VPRadar: React.FC = () => {
         };
       }
 
-      const response = await fetch('/api/whatsapp/send', {
+      const response = await apiFetch('/api/whatsapp/send', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -521,7 +522,7 @@ const VPRadar: React.FC = () => {
       const data = await response.json();
       
       if (!response.ok) {
-        if (data.code === 'MISSING_WHATSAPP_CREDENTIALS') {
+        if (data.code === 'MISSING_WHATSAPP_CREDENTIALS' || data.code === 'FORBIDDEN') {
           return { success: false, code: data.code, message: data.message };
         }
         
@@ -561,7 +562,7 @@ const VPRadar: React.FC = () => {
     const result = await sendWhatsAppMessage(student.parent_phone, student.name);
     
     if (!result.success) {
-      if (result.code === 'MISSING_WHATSAPP_CREDENTIALS') {
+      if (result.code === 'MISSING_WHATSAPP_CREDENTIALS' || result.code === 'FORBIDDEN') {
         setAlertMessage(`⚠️ تعذر الإرسال: ${result.message}`);
       } else {
         setAlertMessage('حدث خطأ أثناء الإرسال.');

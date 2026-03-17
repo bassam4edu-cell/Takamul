@@ -1,3 +1,4 @@
+import { apiFetch } from '../utils/api';
 import React, { useState, useEffect } from 'react';
 import { 
   Plus, 
@@ -22,7 +23,7 @@ const TeacherDashboard: React.FC = () => {
   useEffect(() => {
     const fetchReferrals = async () => {
       try {
-        const res = await fetch(`/api/referrals?userId=${user?.id}&role=${user?.role}`);
+        const res = await apiFetch(`/api/referrals?userId=${user?.id}&role=${user?.role}`);
         if (!res.ok) throw new Error('Failed to fetch referrals');
         const data = await res.json().catch(() => []);
         setReferrals(data);
@@ -125,7 +126,6 @@ const TeacherDashboard: React.FC = () => {
                 <th className="px-10 py-5">نوع التحويل</th>
                 <th className="px-10 py-5">تكرار المخالفة</th>
                 <th className="px-10 py-5">الحالة</th>
-                <th className="px-10 py-5">الشواهد</th>
                 <th className="px-10 py-5">التاريخ</th>
                 <th className="px-10 py-5"></th>
               </tr>

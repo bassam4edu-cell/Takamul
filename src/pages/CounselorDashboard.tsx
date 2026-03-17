@@ -1,3 +1,4 @@
+import { apiFetch } from '../utils/api';
 import React, { useState, useEffect } from 'react';
 import { 
   Clock, 
@@ -23,7 +24,7 @@ const CounselorDashboard: React.FC = () => {
   useEffect(() => {
     const fetchReferrals = async () => {
       try {
-        const res = await fetch(`/api/referrals?userId=${user?.id}&role=${user?.role}`);
+        const res = await apiFetch(`/api/referrals?userId=${user?.id}&role=${user?.role}`);
         if (!res.ok) throw new Error('Failed to fetch referrals');
         const data = await res.json().catch(() => []);
         setReferrals(data);

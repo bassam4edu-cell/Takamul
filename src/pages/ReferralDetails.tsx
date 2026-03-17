@@ -1,3 +1,4 @@
+import { apiFetch } from '../utils/api';
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
@@ -91,7 +92,7 @@ const ReferralDetails: React.FC = () => {
     }
     setSubmittingBonus(true);
     try {
-      const res = await fetch(`/api/students/${data?.referral.student_id}/score`, {
+      const res = await apiFetch(`/api/students/${data?.referral.student_id}/score`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -107,7 +108,7 @@ const ReferralDetails: React.FC = () => {
         setBonusPoints(0);
         setBonusReason('');
         // Refresh data
-        const refreshRes = await fetch(`/api/referrals/${id}`);
+        const refreshRes = await apiFetch(`/api/referrals/${id}`);
         if (refreshRes.ok) {
           const d = await refreshRes.json().catch(() => null);
           if (d) setData(d);
@@ -175,8 +176,8 @@ const ReferralDetails: React.FC = () => {
     const fetchReferral = async () => {
       try {
         const [refRes, violRes] = await Promise.all([
-          fetch(`/api/referrals/${id}`),
-          fetch('/api/violations')
+          apiFetch(`/api/referrals/${id}`),
+          apiFetch('/api/violations')
         ]);
         
         if (refRes.ok) {
@@ -198,7 +199,7 @@ const ReferralDetails: React.FC = () => {
               
               // Fetch specific violation occurrence
               setFetchingOccurrence(true);
-              fetch(`/api/students/${d.referral.student_id}/violations/${d.referral.violation_id}/occurrence`)
+              apiFetch(`/api/students/${d.referral.student_id}/violations/${d.referral.violation_id}/occurrence`)
                 .then(res => res.json())
                 .then(occData => setViolationOccurrence(occData.count))
                 .catch(err => console.error(err))
@@ -264,14 +265,14 @@ const ReferralDetails: React.FC = () => {
   const handleAdminUpdate = async () => {
     setSubmitting(true);
     try {
-      const response = await fetch(`/api/admin/referrals/${id}/update`, {
+      const response = await apiFetch(`/api/admin/referrals/${id}/update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editForm),
       });
 
       if (response.ok) {
-        const refreshRes = await fetch(`/api/referrals/${id}`);
+        const refreshRes = await apiFetch(`/api/referrals/${id}`);
         if (refreshRes.ok) {
           const d = await refreshRes.json().catch(() => null);
           if (d) {
@@ -384,7 +385,7 @@ const ReferralDetails: React.FC = () => {
     
     setSubmitting(true);
     try {
-      const response = await fetch(`/api/referrals/${id}/action`, {
+      const response = await apiFetch(`/api/referrals/${id}/action`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -401,7 +402,7 @@ const ReferralDetails: React.FC = () => {
 
       if (response.ok) {
         // Refresh data
-        const refreshRes = await fetch(`/api/referrals/${id}`);
+        const refreshRes = await apiFetch(`/api/referrals/${id}`);
         if (refreshRes.ok) {
           const d = await refreshRes.json().catch(() => null);
           if (d) {
@@ -1718,61 +1719,61 @@ const ReferralDetails: React.FC = () => {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               transition={{ type: "spring", duration: 0.5 }}
-              className="relative w-full max-w-2xl bg-white rounded-[2rem] shadow-2xl overflow-hidden flex flex-col"
+              className="relative w-full max-w-2xl bg-white rounded-[2rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
             >
-              <div className="p-8 md:p-10 border-b border-slate-100 bg-gradient-to-br from-emerald-50 to-white">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center shadow-inner">
-                      <CheckCircle2 size={32} />
+              <div className="p-6 md:p-8 border-b border-slate-100 bg-gradient-to-br from-emerald-50 to-white">
+                <div className="flex items-start sm:items-center justify-between mb-4 sm:mb-6">
+                  <div className="flex items-center gap-3 sm:gap-4">
+                    <div className="w-12 h-12 sm:w-14 sm:h-14 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center shadow-inner shrink-0">
+                      <CheckCircle2 size={28} className="sm:w-8 sm:h-8" />
                     </div>
                     <div>
-                      <h2 className="text-2xl font-black text-slate-800">تم حفظ الحالة بنجاح</h2>
-                      <p className="text-emerald-600 font-bold mt-1">النماذج الرسمية المقترحة للطباعة</p>
+                      <h2 className="text-xl sm:text-2xl font-black text-slate-800">تم حفظ الحالة بنجاح</h2>
+                      <p className="text-sm sm:text-base text-emerald-600 font-bold mt-1">النماذج الرسمية المقترحة للطباعة</p>
                     </div>
                   </div>
                   <button
                     onClick={() => setShowPrintHub(false)}
-                    className="w-10 h-10 bg-white hover:bg-slate-50 text-slate-400 hover:text-slate-600 rounded-full flex items-center justify-center transition-colors shadow-sm border border-slate-100"
+                    className="w-10 h-10 bg-white hover:bg-slate-50 text-slate-400 hover:text-slate-600 rounded-full flex items-center justify-center transition-colors shadow-sm border border-slate-100 shrink-0"
                   >
                     <X size={20} />
                   </button>
                 </div>
-                <p className="text-slate-500 font-bold leading-relaxed">
+                <p className="text-sm sm:text-base text-slate-500 font-bold leading-relaxed">
                   بناءً على الإجراءات التي قمت بتحديدها، يقترح النظام طباعة النماذج التالية لاستكمال التوثيق الرسمي للحالة.
                 </p>
               </div>
 
-              <div className="p-8 md:p-10 bg-slate-50/50 flex-1 overflow-y-auto">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="p-6 md:p-8 bg-slate-50/50 flex-1 overflow-y-auto">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   {recommendedTemplates.map((template) => (
                     <button
                       key={template.id}
                       onClick={() => {
                         navigate(`/print/${template.id}/${id}`);
                       }}
-                      className="group bg-white p-5 rounded-2xl border border-slate-200 hover:border-primary/30 hover:shadow-xl hover:shadow-primary/5 transition-all flex items-center gap-4 text-right"
+                      className="group bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 hover:border-primary/30 hover:shadow-xl hover:shadow-primary/5 transition-all flex items-center gap-3 sm:gap-4 text-right"
                     >
-                      <div className="w-12 h-12 bg-slate-50 group-hover:bg-primary/5 text-slate-400 group-hover:text-primary rounded-xl flex items-center justify-center transition-colors shrink-0">
-                        <Printer size={24} />
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 bg-slate-50 group-hover:bg-primary/5 text-slate-400 group-hover:text-primary rounded-xl flex items-center justify-center transition-colors shrink-0">
+                        <Printer size={20} className="sm:w-6 sm:h-6" />
                       </div>
                       <div className="flex-1">
-                        <h4 className="font-extrabold text-slate-700 group-hover:text-primary transition-colors">{template.name}</h4>
-                        <p className="text-xs text-slate-400 font-bold mt-1">نموذج رقم {template.id}</p>
+                        <h4 className="text-sm sm:text-base font-extrabold text-slate-700 group-hover:text-primary transition-colors">{template.name}</h4>
+                        <p className="text-[10px] sm:text-xs text-slate-400 font-bold mt-1">نموذج رقم {template.id}</p>
                       </div>
                     </button>
                   ))}
                 </div>
               </div>
 
-              <div className="p-6 border-t border-slate-100 bg-white flex justify-center">
+              <div className="p-4 sm:p-6 border-t border-slate-100 bg-white flex justify-center">
                 <button
                   onClick={() => {
                     // Navigate to all templates or show a dropdown
                     setShowPrintHub(false);
                     // For now, just close. In a real app, might open a full list.
                   }}
-                  className="text-sm font-bold text-slate-500 hover:text-primary transition-colors flex items-center gap-2"
+                  className="w-full sm:w-auto py-3 px-6 bg-slate-50 hover:bg-slate-100 rounded-xl text-sm font-bold text-slate-600 hover:text-primary transition-colors flex items-center justify-center gap-2"
                 >
                   <FileText size={16} />
                   <span>عرض جميع النماذج الأخرى</span>
@@ -1838,11 +1839,11 @@ const ReferralDetails: React.FC = () => {
                 </div>
               </div>
 
-              <div className="p-6 border-t border-slate-100 bg-slate-50 flex gap-3">
+              <div className="p-6 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row gap-3">
                 <button
                   onClick={handleBonusPoints}
                   disabled={submittingBonus}
-                  className="flex-1 py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20"
+                  className="w-full sm:flex-1 py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20"
                 >
                   {submittingBonus ? (
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -1855,7 +1856,7 @@ const ReferralDetails: React.FC = () => {
                 </button>
                 <button
                   onClick={() => setShowBonusModal(false)}
-                  className="px-6 py-3 bg-white text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-all border border-slate-200"
+                  className="w-full sm:w-auto px-6 py-3 bg-white text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-all border border-slate-200"
                 >
                   إلغاء
                 </button>
@@ -1892,7 +1893,7 @@ const ReferralDetails: React.FC = () => {
                 <button 
                   onClick={async () => {
                     try {
-                      const res = await fetch(`/api/admin/referrals/${id}/delete`, {
+                      const res = await apiFetch(`/api/admin/referrals/${id}/delete`, {
                         method: 'POST'
                       });
                       if (res.ok) {

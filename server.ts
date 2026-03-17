@@ -407,7 +407,7 @@ async function startServer() {
   });
 
   app.post("/api/whatsapp/send", async (req, res) => {
-    const { phoneNumber, studentName, instanceId, token, period } = req.body;
+    const { phoneNumber, studentName, instanceId, token, period, message } = req.body;
     
     try {
       if (!instanceId || !token) {
@@ -415,22 +415,33 @@ async function startServer() {
       }
 
       const currentDate = new Date().toLocaleDateString('ar-SA');
-      const messageBody = `ابنكم ${studentName} غائب في (الحصة ${period || 'غير محدد'}) ليوم ${currentDate} ، ثانوية أم القرى`;
+      const messageBody = message || `ابنكم ${studentName} غائب في (الحصة ${period || 'غير محدد'}) ليوم ${currentDate} ، ثانوية أم القرى`;
 
-      const response = await fetch(`https://api.ultramsg.com/${instanceId}/messages/chat`, {
+      // Clean phone number and append @c.us
+      let cleanPhone = phoneNumber.replace(/[\s+]/g, '');
+      if (cleanPhone.startsWith('00')) {
+        cleanPhone = cleanPhone.substring(2);
+      } else if (cleanPhone.startsWith('0')) {
+        cleanPhone = '966' + cleanPhone.substring(1);
+      }
+      const chatId = `${cleanPhone}@c.us`;
+
+      const response = await fetch(`https://api.green-api.com/waInstance${instanceId}/sendMessage/${token}`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
+          'Content-Type': 'application/json'
         },
-        body: new URLSearchParams({
-          token: token,
-          to: phoneNumber,
-          body: messageBody
+        body: JSON.stringify({
+          chatId: chatId,
+          message: messageBody
         })
       });
 
       if (!response.ok) {
-        throw new Error(`Ultramsg API error: ${response.statusText}`);
+        if (response.status === 401 || response.status === 403) {
+          return res.status(403).json({ success: false, code: 'FORBIDDEN', message: "بيانات الربط غير صحيحة أو الحساب غير مفعل (Forbidden)" });
+        }
+        throw new Error(`Green API error: ${response.statusText}`);
       }
 
       const data = await response.json();
@@ -447,13 +458,18 @@ async function startServer() {
       return res.status(400).json({ error: "Missing instanceId or token" });
     }
     try {
-      const response = await fetch(`https://api.ultramsg.com/${instanceId}/instance/status?token=${token}`);
-      if (!response.ok) throw new Error(`Ultramsg API error: ${response.statusText}`);
+      const response = await fetch(`https://api.green-api.com/waInstance${instanceId}/getStateInstance/${token}`);
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          return res.status(403).json({ error: "بيانات الربط غير صحيحة أو الحساب غير مفعل" });
+        }
+        throw new Error(`Green API error: ${response.statusText}`);
+      }
       const data = await response.json();
       res.json(data);
     } catch (error: any) {
       console.error("[WHATSAPP STATUS] Error:", error);
-      res.status(500).json({ error: "Failed to fetch status" });
+      res.status(500).json({ error: error.message || "Failed to fetch status" });
     }
   });
 
@@ -463,18 +479,19 @@ async function startServer() {
       return res.status(400).json({ error: "Missing instanceId or token" });
     }
     try {
-      const response = await fetch(`https://api.ultramsg.com/${instanceId}/instance/qr?token=${token}`);
-      if (!response.ok) throw new Error(`Ultramsg API error: ${response.statusText}`);
+      const response = await fetch(`https://api.green-api.com/waInstance${instanceId}/qr/${token}`);
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          return res.status(403).json({ error: "بيانات الربط غير صحيحة أو الحساب غير مفعل" });
+        }
+        throw new Error(`Green API error: ${response.statusText}`);
+      }
       
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        const data = await response.json();
-        res.json(data);
+      const data = await response.json();
+      if (data.type === 'qrCode' && data.message) {
+        res.json({ qrCode: `data:image/png;base64,${data.message}` });
       } else {
-        const arrayBuffer = await response.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        const base64 = buffer.toString('base64');
-        res.json({ qrCode: `data:${contentType || 'image/png'};base64,${base64}` });
+        res.json(data);
       }
     } catch (error: any) {
       console.error("[WHATSAPP QR] Error:", error);

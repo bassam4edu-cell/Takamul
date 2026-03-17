@@ -1,3 +1,4 @@
+import { apiFetch } from '../utils/api';
 import React, { useState, useEffect } from 'react';
 import { 
   ShieldAlert, 
@@ -108,7 +109,7 @@ const BehavioralViolations: React.FC = () => {
       if (selectedStudent && selectedFormViolation) {
         setFetchingOccurrence(true);
         try {
-          const res = await fetch(`/api/students/${selectedStudent.id}/violations/${selectedFormViolation.id}/occurrence`);
+          const res = await apiFetch(`/api/students/${selectedStudent.id}/violations/${selectedFormViolation.id}/occurrence`);
           if (res.ok) {
             const data = await res.json();
             const count = data.count;
@@ -144,8 +145,8 @@ const BehavioralViolations: React.FC = () => {
     const fetchData = async () => {
       try {
         const [violRes, studRes] = await Promise.all([
-          fetch('/api/violations'),
-          fetch('/api/students')
+          apiFetch('/api/violations'),
+          apiFetch('/api/students')
         ]);
         
         if (violRes.ok) setViolations(await violRes.json());
@@ -181,7 +182,7 @@ const BehavioralViolations: React.FC = () => {
     
     setSubmitting(true);
     try {
-      const res = await fetch('/api/referrals', {
+      const res = await apiFetch('/api/referrals', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

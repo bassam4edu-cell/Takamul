@@ -1,3 +1,4 @@
+import { apiFetch } from '../utils/api';
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { 
@@ -61,10 +62,10 @@ const Reports: React.FC = () => {
     const fetchData = async () => {
       try {
         const [topRes, statusRes, teacherRes, kpiRes] = await Promise.all([
-          fetch('/api/reports/top-students'),
-          fetch('/api/reports/referral-status'),
-          fetch('/api/reports/teacher-stats'),
-          fetch('/api/reports/kpi-stats')
+          apiFetch('/api/reports/top-students'),
+          apiFetch('/api/reports/referral-status'),
+          apiFetch('/api/reports/teacher-stats'),
+          apiFetch('/api/reports/kpi-stats')
         ]);
 
         if (!topRes.ok || !statusRes.ok || !teacherRes.ok || !kpiRes.ok) {
@@ -325,7 +326,33 @@ const Reports: React.FC = () => {
       <div className="sts-card overflow-hidden no-print">
         {activeReport === 'comprehensive' && (
           <div className="overflow-x-auto">
-            <table className="w-full text-right">
+            {/* Mobile Card View */}
+            <div className="md:hidden divide-y divide-slate-100">
+              {referralStatus.map((ref) => (
+                <div key={`mobile-ref-${ref.id}`} className="p-4 space-y-3 cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => navigate(`/referral/${ref.id}`)}>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-black text-slate-800 text-sm">{ref.student_name}</p>
+                      <p className="text-xs font-bold text-slate-500 mt-1">المعلم: {ref.teacher_name}</p>
+                    </div>
+                    <span className={`px-2 py-1 rounded-md text-[10px] font-black ${
+                      ref.status === 'resolved' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
+                    }`}>
+                      {getStatusLabel(ref.status)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-mono font-bold text-slate-400">#{ref.id}</span>
+                    <span className="text-slate-500 font-bold">
+                      {ref.closed_at ? new Date(ref.closed_at).toLocaleDateString('ar-SA') : 'قيد المعالجة'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table View */}
+            <table className="w-full text-right hidden md:table">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100">
                   <th className="p-5 font-black text-slate-600">رقم الحالة</th>
@@ -360,7 +387,28 @@ const Reports: React.FC = () => {
 
         {activeReport === 'repeat' && (
           <div className="overflow-x-auto">
-            <table className="w-full text-right">
+            {/* Mobile Card View */}
+            <div className="md:hidden divide-y divide-slate-100">
+              {topStudents.map((student) => (
+                <div key={`mobile-student-${student.name}`} className="p-4 space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-black text-slate-800 text-sm">{student.name}</p>
+                      <p className="text-xs font-bold text-slate-500 mt-1">الصف: {student.grade}</p>
+                    </div>
+                    <span className="bg-primary/10 text-primary px-3 py-1 rounded-full font-black text-sm">
+                      {student.referral_count}
+                    </span>
+                  </div>
+                  <div className="text-xs font-bold text-slate-600">
+                    أبرز مشكلة: {getTypeLabel(student.most_frequent_problem)}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table View */}
+            <table className="w-full text-right hidden md:table">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100">
                   <th className="p-5 font-black text-slate-600">اسم الطالب</th>
@@ -389,7 +437,32 @@ const Reports: React.FC = () => {
 
         {activeReport === 'teachers' && (
           <div className="overflow-x-auto">
-            <table className="w-full text-right">
+            {/* Mobile Card View */}
+            <div className="md:hidden divide-y divide-slate-100">
+              {teacherStats.map((stat) => (
+                <div key={`mobile-teacher-${stat.name}`} className="p-4 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <p className="font-black text-slate-800 text-sm">{stat.name}</p>
+                    <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full font-black text-xs">
+                      إجمالي: {stat.total_referrals}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs">
+                    <div className="flex items-center gap-1.5 text-emerald-600 font-bold">
+                      <UserCheck size={14} />
+                      <span>مغلقة: {stat.resolved_count}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-indigo-600 font-bold">
+                      <TrendingUp size={14} />
+                      <span>مصعدة: {stat.escalated_count}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table View */}
+            <table className="w-full text-right hidden md:table">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100">
                   <th className="p-5 font-black text-slate-600">اسم المعلم</th>

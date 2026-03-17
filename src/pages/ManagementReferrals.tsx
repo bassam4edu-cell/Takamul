@@ -1,3 +1,4 @@
+import { apiFetch } from '../utils/api';
 import React, { useState, useEffect } from 'react';
 import { 
   Clock, 
@@ -34,7 +35,7 @@ const ManagementReferrals: React.FC = () => {
   useEffect(() => {
     const fetchReferrals = async () => {
       try {
-        const res = await fetch(`/api/referrals?userId=${user?.id}&role=${user?.role}`);
+        const res = await apiFetch(`/api/referrals?userId=${user?.id}&role=${user?.role}`);
         if (!res.ok) throw new Error('Failed to fetch referrals');
         const data = await res.json().catch(() => []);
         setReferrals(data);
@@ -50,7 +51,7 @@ const ManagementReferrals: React.FC = () => {
   const handleExportNoor = async () => {
     setExporting(true);
     try {
-      const response = await fetch('/api/export/noor', {
+      const response = await apiFetch('/api/export/noor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -77,7 +78,7 @@ const ManagementReferrals: React.FC = () => {
 
       setShowExportModal(false);
       // Refresh referrals to update is_exported status if needed (though not shown in UI yet)
-      const res = await fetch(`/api/referrals?userId=${user?.id}&role=${user?.role}`);
+      const res = await apiFetch(`/api/referrals?userId=${user?.id}&role=${user?.role}`);
       if (res.ok) {
         const updatedData = await res.json().catch(() => []);
         setReferrals(updatedData);

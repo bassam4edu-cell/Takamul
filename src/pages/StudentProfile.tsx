@@ -1,3 +1,4 @@
+import { apiFetch } from '../utils/api';
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
@@ -60,7 +61,7 @@ const StudentProfile: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await fetch(`/api/student-profile/${id}`);
+        const res = await apiFetch(`/api/student-profile/${id}`);
         if (!res.ok) throw new Error('Failed to fetch student profile');
         const data = await res.json();
         setStudent(data.student);
@@ -181,35 +182,62 @@ const StudentProfile: React.FC = () => {
                 {referrals.length === 0 ? (
                   <div className="text-center text-slate-400 font-bold py-12">لا توجد تحويلات مسجلة</div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-right border-collapse">
-                      <thead>
-                        <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 text-sm font-bold">
-                          <th className="p-4">التاريخ</th>
-                          <th className="p-4">المعلم</th>
-                          <th className="p-4">السبب</th>
-                          <th className="p-4">الحالة</th>
-                        </tr>
-                      </thead>
-                      <tbody className="text-sm font-bold text-slate-700">
-                        {referrals.map(referral => (
-                          <tr 
-                            key={referral.id} 
-                            onClick={() => navigate(`/dashboard/referral/${referral.id}`)}
-                            className="border-b border-slate-50 last:border-0 hover:bg-slate-50 cursor-pointer transition-colors"
-                          >
-                            <td className="p-4">{new Date(referral.created_at).toLocaleDateString('ar-SA')}</td>
-                            <td className="p-4">{referral.teacher_name}</td>
-                            <td className="p-4 max-w-xs truncate">{referral.reason}</td>
-                            <td className="p-4">
-                              <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-xs">
-                                {getStatusText(referral.status)}
-                              </span>
-                            </td>
+                  <div>
+                    {/* Desktop Table */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <table className="w-full text-right border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 text-sm font-bold">
+                            <th className="p-4">التاريخ</th>
+                            <th className="p-4">المعلم</th>
+                            <th className="p-4">السبب</th>
+                            <th className="p-4">الحالة</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody className="text-sm font-bold text-slate-700">
+                          {referrals.map(referral => (
+                            <tr 
+                              key={referral.id} 
+                              onClick={() => navigate(`/dashboard/referral/${referral.id}`)}
+                              className="border-b border-slate-50 last:border-0 hover:bg-slate-50 cursor-pointer transition-colors"
+                            >
+                              <td className="p-4">{new Date(referral.created_at).toLocaleDateString('ar-SA')}</td>
+                              <td className="p-4">{referral.teacher_name}</td>
+                              <td className="p-4 max-w-xs truncate">{referral.reason}</td>
+                              <td className="p-4">
+                                <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-xs">
+                                  {getStatusText(referral.status)}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {/* Mobile Card View */}
+                    <div className="md:hidden flex flex-col gap-4 p-4">
+                      {referrals.map(referral => (
+                        <div 
+                          key={referral.id}
+                          onClick={() => navigate(`/dashboard/referral/${referral.id}`)}
+                          className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-3 cursor-pointer hover:border-primary/30 transition-colors"
+                        >
+                          <div className="flex justify-between items-start">
+                            <div className="flex items-center gap-2">
+                              <FileText size={16} className="text-slate-400" />
+                              <span className="font-bold text-slate-800 text-sm">{referral.teacher_name}</span>
+                            </div>
+                            <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded-lg text-xs font-bold">
+                              {getStatusText(referral.status)}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-600 font-bold line-clamp-2">{referral.reason}</p>
+                          <div className="text-[10px] text-slate-400 font-bold">
+                            {new Date(referral.created_at).toLocaleDateString('ar-SA')}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </motion.div>
@@ -225,36 +253,65 @@ const StudentProfile: React.FC = () => {
                 {behaviorRecords.length === 0 ? (
                   <div className="text-center text-slate-400 font-bold py-12">لا توجد مشكلات سلوكية مسجلة</div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-right border-collapse">
-                      <thead>
-                        <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 text-sm font-bold">
-                          <th className="p-4">التاريخ</th>
-                          <th className="p-4">نوع المخالفة</th>
-                          <th className="p-4">الدرجة</th>
-                          <th className="p-4">الإجراء المتخذ</th>
-                        </tr>
-                      </thead>
-                      <tbody className="text-sm font-bold text-slate-700">
-                        {behaviorRecords.map(record => (
-                          <tr key={record.id} className="border-b border-slate-50 last:border-0">
-                            <td className="p-4">{new Date(record.created_at).toLocaleDateString('ar-SA')}</td>
-                            <td className="p-4">{record.violation_name}</td>
-                            <td className="p-4">
-                              <span className={`px-3 py-1 rounded-full text-xs ${
-                                record.degree >= 4 ? 'bg-rose-100 text-rose-700' :
-                                record.degree === 3 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
-                              }`}>
-                                الدرجة {record.degree}
-                              </span>
-                            </td>
-                            <td className="p-4 max-w-xs truncate">
-                              {record.remedial_plan || getStatusText(record.status)}
-                            </td>
+                  <div>
+                    {/* Desktop Table */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <table className="w-full text-right border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 text-sm font-bold">
+                            <th className="p-4">التاريخ</th>
+                            <th className="p-4">نوع المخالفة</th>
+                            <th className="p-4">الدرجة</th>
+                            <th className="p-4">الإجراء المتخذ</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody className="text-sm font-bold text-slate-700">
+                          {behaviorRecords.map(record => (
+                            <tr key={record.id} className="border-b border-slate-50 last:border-0">
+                              <td className="p-4">{new Date(record.created_at).toLocaleDateString('ar-SA')}</td>
+                              <td className="p-4">{record.violation_name}</td>
+                              <td className="p-4">
+                                <span className={`px-3 py-1 rounded-full text-xs ${
+                                  record.degree >= 4 ? 'bg-rose-100 text-rose-700' :
+                                  record.degree === 3 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+                                }`}>
+                                  الدرجة {record.degree}
+                                </span>
+                              </td>
+                              <td className="p-4 max-w-xs truncate">
+                                {record.remedial_plan || getStatusText(record.status)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {/* Mobile Card View */}
+                    <div className="md:hidden flex flex-col gap-4 p-4">
+                      {behaviorRecords.map(record => (
+                        <div key={record.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-3">
+                          <div className="flex justify-between items-start">
+                            <div className="flex items-center gap-2">
+                              <ShieldAlert size={16} className="text-slate-400" />
+                              <span className="font-bold text-slate-800 text-sm">{record.violation_name}</span>
+                            </div>
+                            <span className={`px-2 py-1 rounded-lg text-xs font-bold ${
+                              record.degree >= 4 ? 'bg-rose-100 text-rose-700' :
+                              record.degree === 3 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+                            }`}>
+                              الدرجة {record.degree}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-600 font-bold line-clamp-2">
+                            <span className="text-slate-400 ml-1">الإجراء:</span>
+                            {record.remedial_plan || getStatusText(record.status)}
+                          </p>
+                          <div className="text-[10px] text-slate-400 font-bold">
+                            {new Date(record.created_at).toLocaleDateString('ar-SA')}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </motion.div>
@@ -270,45 +327,90 @@ const StudentProfile: React.FC = () => {
                 {attendanceRecords.length === 0 ? (
                   <div className="text-center text-slate-400 font-bold py-12">لا توجد سجلات غياب أو تأخر</div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-right border-collapse">
-                      <thead>
-                        <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 text-sm font-bold">
-                          <th className="p-4">اليوم</th>
-                          <th className="p-4">التاريخ</th>
-                          <th className="p-4">حالة الحضور</th>
-                        </tr>
-                      </thead>
-                      <tbody className="text-sm font-bold text-slate-700">
-                        {attendanceRecords.map(record => {
-                          let statusColor = 'text-slate-700';
-                          let statusText = record.status;
-                          
-                          if (record.status === 'حاضر') {
-                            statusColor = 'text-emerald-600';
-                          } else if (record.status === 'غائب') {
-                            if (record.is_excused) {
-                              statusColor = 'text-blue-600';
-                              statusText = 'مستأذن/بعذر';
-                            } else {
-                              statusColor = 'text-rose-600';
+                  <div>
+                    {/* Desktop Table */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <table className="w-full text-right border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 text-sm font-bold">
+                            <th className="p-4">اليوم</th>
+                            <th className="p-4">التاريخ</th>
+                            <th className="p-4">حالة الحضور</th>
+                          </tr>
+                        </thead>
+                        <tbody className="text-sm font-bold text-slate-700">
+                          {attendanceRecords.map(record => {
+                            let statusColor = 'text-slate-700';
+                            let statusText = record.status;
+                            
+                            if (record.status === 'حاضر') {
+                              statusColor = 'text-emerald-600';
+                            } else if (record.status === 'غائب') {
+                              if (record.is_excused) {
+                                statusColor = 'text-blue-600';
+                                statusText = 'مستأذن/بعذر';
+                              } else {
+                                statusColor = 'text-rose-600';
+                              }
+                            } else if (record.status === 'متأخر') {
+                              statusColor = 'text-orange-500';
                             }
-                          } else if (record.status === 'متأخر') {
-                            statusColor = 'text-orange-500';
-                          }
 
-                          return (
-                            <tr key={record.id} className="border-b border-slate-50 last:border-0">
-                              <td className="p-4">{getDayName(record.date)}</td>
-                              <td className="p-4">{new Date(record.date).toLocaleDateString('ar-SA')}</td>
-                              <td className={`p-4 font-black ${statusColor}`}>
-                                {statusText}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                            return (
+                              <tr key={record.id} className="border-b border-slate-50 last:border-0">
+                                <td className="p-4">{getDayName(record.date)}</td>
+                                <td className="p-4">{new Date(record.date).toLocaleDateString('ar-SA')}</td>
+                                <td className={`p-4 font-black ${statusColor}`}>
+                                  {statusText}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    {/* Mobile Card View */}
+                    <div className="md:hidden flex flex-col gap-4 p-4">
+                      {attendanceRecords.map(record => {
+                        let statusColor = 'text-slate-700';
+                        let statusBg = 'bg-slate-50';
+                        let statusText = record.status;
+                        
+                        if (record.status === 'حاضر') {
+                          statusColor = 'text-emerald-600';
+                          statusBg = 'bg-emerald-50';
+                        } else if (record.status === 'غائب') {
+                          if (record.is_excused) {
+                            statusColor = 'text-blue-600';
+                            statusBg = 'bg-blue-50';
+                            statusText = 'مستأذن/بعذر';
+                          } else {
+                            statusColor = 'text-rose-600';
+                            statusBg = 'bg-rose-50';
+                          }
+                        } else if (record.status === 'متأخر') {
+                          statusColor = 'text-orange-600';
+                          statusBg = 'bg-orange-50';
+                        }
+
+                        return (
+                          <div key={record.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${statusBg} ${statusColor}`}>
+                                <Clock size={18} />
+                              </div>
+                              <div>
+                                <p className="text-sm font-bold text-slate-800">{getDayName(record.date)}</p>
+                                <p className="text-[10px] text-slate-400 font-bold">{new Date(record.date).toLocaleDateString('ar-SA')}</p>
+                              </div>
+                            </div>
+                            <span className={`text-xs font-black px-3 py-1 rounded-lg ${statusBg} ${statusColor}`}>
+                              {statusText}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </motion.div>

@@ -1,3 +1,4 @@
+import { apiFetch } from '../utils/api';
 import React, { useState, useEffect, useRef } from 'react';
 import { Bell, Check, Clock, AlertCircle, ChevronLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -23,7 +24,7 @@ const NotificationBell: React.FC = () => {
   const fetchNotifications = async () => {
     if (!user) return;
     try {
-      const res = await fetch(`/api/notifications?userId=${user.id}`);
+      const res = await apiFetch(`/api/notifications?userId=${user.id}`);
       if (res.ok) {
         const data = await res.json().catch(() => []);
         setNotifications(data);
@@ -54,7 +55,7 @@ const NotificationBell: React.FC = () => {
   const handleNotificationClick = async (notification: Notification) => {
     if (!notification.is_read) {
       try {
-        const res = await fetch(`/api/notifications/${notification.id}/read`, { method: 'POST' });
+        const res = await apiFetch(`/api/notifications/${notification.id}/read`, { method: 'POST' });
         if (res.ok) {
           setNotifications(prev => prev.map(n => n.id === notification.id ? { ...n, is_read: true } : n));
         } else {
@@ -71,7 +72,7 @@ const NotificationBell: React.FC = () => {
 
   const markAllAsRead = async () => {
     try {
-      const res = await fetch('/api/notifications/read-all', {
+      const res = await apiFetch('/api/notifications/read-all', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user?.id })

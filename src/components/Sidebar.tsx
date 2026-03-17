@@ -25,7 +25,11 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-const Sidebar: React.FC = () => {
+interface SidebarProps {
+  onClose?: () => void;
+}
+
+const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
   const { user, logout } = useAuth();
 
   const menuItems = [
@@ -33,7 +37,7 @@ const Sidebar: React.FC = () => {
       title: 'لوحة التحكم', 
       path: '/dashboard', 
       icon: LayoutDashboard,
-      roles: ['teacher', 'vice_principal', 'counselor', 'principal']
+      roles: ['teacher', 'vice_principal', 'counselor', 'principal', 'super_admin']
     },
     { 
       title: 'تحويل جديد', 
@@ -125,8 +129,9 @@ const Sidebar: React.FC = () => {
           <NavLink
             key={item.path}
             to={item.path}
+            onClick={onClose}
             className={({ isActive }) => cn(
-              "flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 group",
+              "flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 group min-h-[44px]",
               isActive 
                 ? "bg-primary text-white shadow-lg shadow-primary/20 font-bold" 
                 : "text-slate-500 hover:bg-slate-50 hover:text-primary"

@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import { apiFetch } from '../utils/api';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Printer, ArrowRight, ChevronRight, ChevronLeft, MessageCircle } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../App';
 import { useMessageLog } from '../context/MessageLogContext';
 
-const DailyAbsenceReport: React.FC = () => {
+const DailyAbsenceReport: React.FC = React.memo(() => {
   const { user } = useAuth();
   const { addLogEntry } = useMessageLog();
   const [data, setData] = useState<any[]>([]);
@@ -35,8 +36,8 @@ const DailyAbsenceReport: React.FC = () => {
         }
 
         const [res, settingsRes] = await Promise.all([
-          fetch(url),
-          fetch('/api/settings')
+          apiFetch(url),
+          apiFetch('/api/settings')
         ]);
 
         if (res.ok) {
@@ -65,8 +66,8 @@ const DailyAbsenceReport: React.FC = () => {
 
   const sendWhatsAppMessage = async (phoneNumber: string, studentName: string, period: number) => {
     try {
-      const instanceId = localStorage.getItem('ultramsg_instance_id');
-      const token = localStorage.getItem('ultramsg_token');
+      const instanceId = localStorage.getItem('greenapi_instance_id');
+      const token = localStorage.getItem('greenapi_token');
 
       if (!instanceId || !token) {
         return { 
@@ -76,7 +77,7 @@ const DailyAbsenceReport: React.FC = () => {
         };
       }
 
-      const response = await fetch('/api/whatsapp/send', {
+      const response = await apiFetch('/api/whatsapp/send', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -87,7 +88,7 @@ const DailyAbsenceReport: React.FC = () => {
       const data = await response.json();
       
       if (!response.ok) {
-        if (data.code === 'MISSING_WHATSAPP_CREDENTIALS') {
+        if (data.code === 'MISSING_WHATSAPP_CREDENTIALS' || data.code === 'FORBIDDEN') {
           return { success: false, code: data.code, message: data.message };
         }
         
@@ -126,7 +127,7 @@ const DailyAbsenceReport: React.FC = () => {
     const result = await sendWhatsAppMessage(student.parent_phone, student.student_name, student.period);
     
     if (!result.success) {
-      if (result.code === 'MISSING_WHATSAPP_CREDENTIALS') {
+      if (result.code === 'MISSING_WHATSAPP_CREDENTIALS' || result.code === 'FORBIDDEN') {
         alert(`⚠️ تعذر الإرسال: ${result.message}`);
       } else {
         alert('حدث خطأ أثناء الإرسال.');
@@ -143,8 +144,8 @@ const DailyAbsenceReport: React.FC = () => {
   const dayName = reportDate.toLocaleDateString('ar-SA', { weekday: 'long' });
   const dateStr = reportDate.toLocaleDateString('ar-SA');
 
-  const totalPages = Math.ceil(data.length / itemsPerPage) || 1;
-  const paginatedData = data.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const totalPages = useMemo(() => Math.ceil(data.length / itemsPerPage) || 1, [data.length, itemsPerPage]);
+  const paginatedData = useMemo(() => data.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage), [data, currentPage, itemsPerPage]);
 
   const handleNextPage = () => {
     if (currentPage < totalPages) setCurrentPage(prev => prev + 1);
@@ -280,61 +281,102 @@ const DailyAbsenceReport: React.FC = () => {
         </div>
 
         {/* UI Table (Paginated) */}
-        <div className="print:hidden overflow-x-auto">
-          <table className="w-full border-collapse border border-slate-300 text-sm">
-            <thead>
-              <tr className="bg-slate-100">
-                <th className="border border-slate-300 p-3 text-center w-12 font-bold text-slate-800">م</th>
-                <th className="border border-slate-300 p-3 text-right font-bold text-slate-800">اسم الطالب</th>
-                <th className="border border-slate-300 p-3 text-center font-bold text-slate-800">الصف</th>
-                <th className="border border-slate-300 p-3 text-center font-bold text-slate-800">الفصل</th>
-                <th className="border border-slate-300 p-3 text-center font-bold text-slate-800">الحصة</th>
-                <th className="border border-slate-300 p-3 text-center font-bold text-slate-800">حالة الحضور</th>
-                <th className="border border-slate-300 p-3 text-center font-bold text-slate-800 w-32">إجراءات</th>
-                <th className="border border-slate-300 p-3 text-right font-bold text-slate-800 w-48">ملاحظات الوكيل</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginatedData.length > 0 ? (
-                paginatedData.map((row, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50">
-                    <td className="border border-slate-300 p-3 text-center text-slate-600">{(currentPage - 1) * itemsPerPage + idx + 1}</td>
-                    <td className="border border-slate-300 p-3 font-bold text-slate-800">{row.student_name}</td>
-                    <td className="border border-slate-300 p-3 text-center text-slate-600">{row.grade}</td>
-                    <td className="border border-slate-300 p-3 text-center text-slate-600">{row.section}</td>
-                    <td className="border border-slate-300 p-3 text-center font-bold text-slate-800">{row.period || '-'}</td>
-                    <td className="border border-slate-300 p-3 text-center">
-                      <span className={`font-bold ${row.status === 'غائب' ? 'text-red-600 bg-red-50 px-2 py-1 rounded-lg' : 'text-amber-600 bg-amber-50 px-2 py-1 rounded-lg'}`}>
-                        {row.status}
-                      </span>
-                    </td>
-                    <td className="border border-slate-300 p-3 text-center">
-                      <button
-                        onClick={() => handleSendWhatsApp(row)}
-                        disabled={!row.parent_phone || row.parent_phone.trim() === ''}
-                        title={(!row.parent_phone || row.parent_phone.trim() === '') ? '⚠️ رقم الجوال غير مسجل' : 'إرسال واتساب لولي الأمر'}
-                        className={`w-full py-2 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all ${
-                          (!row.parent_phone || row.parent_phone.trim() === '')
-                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                            : 'bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/20 border border-[#25D366]/20'
-                        }`}
-                      >
-                        <MessageCircle size={14} />
-                        واتساب
-                      </button>
-                    </td>
-                    <td className="border border-slate-300 p-3"></td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={7} className="border border-slate-300 p-8 text-center text-slate-500 font-bold">
-                    لا يوجد غياب أو تأخر مسجل لهذا اليوم
-                  </td>
+        <div className="print:hidden">
+          {/* Desktop Table View */}
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full border-collapse border border-slate-300 text-sm">
+              <thead>
+                <tr className="bg-slate-100">
+                  <th className="border border-slate-300 p-3 text-center w-12 font-bold text-slate-800">م</th>
+                  <th className="border border-slate-300 p-3 text-right font-bold text-slate-800">اسم الطالب</th>
+                  <th className="border border-slate-300 p-3 text-center font-bold text-slate-800">الصف</th>
+                  <th className="border border-slate-300 p-3 text-center font-bold text-slate-800">الفصل</th>
+                  <th className="border border-slate-300 p-3 text-center font-bold text-slate-800">الحصة</th>
+                  <th className="border border-slate-300 p-3 text-center font-bold text-slate-800">حالة الحضور</th>
+                  <th className="border border-slate-300 p-3 text-center font-bold text-slate-800 w-32">إجراءات</th>
+                  <th className="border border-slate-300 p-3 text-right font-bold text-slate-800 w-48">ملاحظات الوكيل</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {paginatedData.length > 0 ? (
+                  paginatedData.map((row, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50">
+                      <td className="border border-slate-300 p-3 text-center text-slate-600">{(currentPage - 1) * itemsPerPage + idx + 1}</td>
+                      <td className="border border-slate-300 p-3 font-bold text-slate-800">{row.student_name}</td>
+                      <td className="border border-slate-300 p-3 text-center text-slate-600">{row.grade}</td>
+                      <td className="border border-slate-300 p-3 text-center text-slate-600">{row.section}</td>
+                      <td className="border border-slate-300 p-3 text-center font-bold text-slate-800">{row.period || '-'}</td>
+                      <td className="border border-slate-300 p-3 text-center">
+                        <span className={`font-bold ${row.status === 'غائب' ? 'text-red-600 bg-red-50 px-2 py-1 rounded-lg' : 'text-amber-600 bg-amber-50 px-2 py-1 rounded-lg'}`}>
+                          {row.status}
+                        </span>
+                      </td>
+                      <td className="border border-slate-300 p-3 text-center">
+                        <button
+                          onClick={() => handleSendWhatsApp(row)}
+                          disabled={!row.parent_phone || row.parent_phone.trim() === ''}
+                          title={(!row.parent_phone || row.parent_phone.trim() === '') ? '⚠️ رقم الجوال غير مسجل' : 'إرسال واتساب لولي الأمر'}
+                          className={`w-full py-2 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all min-h-[44px] ${
+                            (!row.parent_phone || row.parent_phone.trim() === '')
+                              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                              : 'bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/20 border border-[#25D366]/20'
+                          }`}
+                        >
+                          <MessageCircle size={14} />
+                          واتساب
+                        </button>
+                      </td>
+                      <td className="border border-slate-300 p-3"></td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={8} className="border border-slate-300 p-8 text-center text-slate-500 font-bold">
+                      لا يوجد غياب أو تأخر مسجل لهذا اليوم
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile Card View */}
+          <div className="md:hidden flex flex-col gap-4">
+            {paginatedData.length > 0 ? (
+              paginatedData.map((row, idx) => (
+                <div key={idx} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="font-bold text-slate-800 text-base">{row.student_name}</h3>
+                      <p className="text-xs text-slate-500 mt-1">الصف: {row.grade} - الفصل: {row.section}</p>
+                    </div>
+                    <span className={`text-xs font-bold px-2 py-1 rounded-lg ${row.status === 'غائب' ? 'text-red-600 bg-red-50' : 'text-amber-600 bg-amber-50'}`}>
+                      {row.status}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-slate-600">الحصة: <span className="font-bold text-slate-800">{row.period || '-'}</span></span>
+                  </div>
+                  <button
+                    onClick={() => handleSendWhatsApp(row)}
+                    disabled={!row.parent_phone || row.parent_phone.trim() === ''}
+                    className={`w-full py-3 px-4 rounded-xl text-sm font-black flex items-center justify-center gap-2 transition-all min-h-[44px] ${
+                      (!row.parent_phone || row.parent_phone.trim() === '')
+                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                        : 'bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/20 border border-[#25D366]/20'
+                    }`}
+                  >
+                    <MessageCircle size={18} />
+                    {(!row.parent_phone || row.parent_phone.trim() === '') ? 'رقم الجوال غير مسجل' : 'إرسال واتساب لولي الأمر'}
+                  </button>
+                </div>
+              ))
+            ) : (
+              <div className="bg-white p-8 rounded-xl border border-slate-200 text-center text-slate-500 font-bold">
+                لا يوجد غياب أو تأخر مسجل لهذا اليوم
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Pagination Controls */}
@@ -415,6 +457,6 @@ const DailyAbsenceReport: React.FC = () => {
       </div>
     </div>
   );
-};
+});
 
 export default DailyAbsenceReport;

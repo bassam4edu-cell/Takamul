@@ -1,3 +1,4 @@
+import { apiFetch } from '../utils/api';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../App';
@@ -46,7 +47,7 @@ const ReferralForm: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch(`/api/students?userId=${user?.id}`);
+        const response = await apiFetch(`/api/students?userId=${user?.id}`);
         if (response.ok) {
           const studentsData = await response.json();
           setStudents(studentsData);
@@ -92,7 +93,7 @@ const ReferralForm: React.FC = () => {
     setLoading(true);
 
     try {
-      const response = await fetch('/api/referrals', {
+      const response = await apiFetch('/api/referrals', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
