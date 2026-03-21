@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Referral } from '../types';
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 import * as XLSX from 'xlsx';
 
@@ -103,7 +103,6 @@ const ManagementReferrals: React.FC = () => {
   const stats = [
     { label: 'تحويلات جديدة', value: referrals.filter(r => r.status === 'pending_vp').length, icon: AlertCircle, color: 'bg-red-500' },
     { label: 'قيد المتابعة', value: referrals.filter(r => r.status === 'pending_counselor' || r.status === 'scheduled_meeting').length, icon: Clock, color: 'bg-amber-500' },
-    { label: 'إجمالي الطلاب', value: 124, icon: Users, color: 'bg-blue-500' },
   ];
 
   const getStatusBadge = (status: string) => {
@@ -156,7 +155,7 @@ const ManagementReferrals: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 md:gap-8">
         {stats.map((stat, i) => (
           <motion.div 
             key={stat.label}

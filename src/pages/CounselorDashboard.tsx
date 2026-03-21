@@ -5,15 +5,80 @@ import {
   CheckCircle2, 
   AlertCircle, 
   Search,
-  Filter,
-  ArrowUpRight,
-  Users,
-  FileText
+  ArrowUpRight
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Referral } from '../types';
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 import { motion } from 'motion/react';
+
+const KanbanColumn = ({ title, icon: Icon, color, cases, count }: any) => (
+  <div className="flex flex-col h-full bg-slate-50/50 rounded-[2rem] border border-slate-100 p-4 md:p-6">
+    <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center gap-3">
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white ${color}`}>
+          <Icon size={20} />
+        </div>
+        <h2 className="font-extrabold text-lg text-slate-800">{title}</h2>
+      </div>
+      <span className="bg-white px-3 py-1 rounded-full text-sm font-bold text-slate-500 shadow-sm border border-slate-100">
+        {count}
+      </span>
+    </div>
+
+    <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
+      {cases.length === 0 ? (
+        <div className="h-32 flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-200 rounded-2xl">
+          <p className="font-bold text-sm">لا توجد حالات</p>
+        </div>
+      ) : (
+        cases.map((referral: Referral) => (
+          <motion.div
+            key={referral.id}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md hover:border-primary/30 transition-all group"
+          >
+            <div className="flex justify-between items-start mb-3">
+              <div>
+                <h3 className="font-extrabold text-slate-800">{referral.student_name}</h3>
+                <p className="text-xs text-slate-500 font-bold mt-1">
+                  {referral.student_grade} - {referral.student_section}
+                </p>
+              </div>
+              <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold ${
+                referral.severity === 'high' ? 'bg-red-50 text-red-600' :
+                referral.severity === 'medium' ? 'bg-amber-50 text-amber-600' :
+                'bg-emerald-50 text-emerald-600'
+              }`}>
+                {referral.severity === 'high' ? 'عالية' : referral.severity === 'medium' ? 'متوسطة' : 'عادية'}
+              </span>
+            </div>
+            
+            <div className="mb-4">
+              <p className="text-sm text-slate-600 font-medium line-clamp-2">
+                {referral.reason}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between pt-4 border-t border-slate-50">
+              <div className="flex items-center gap-2 text-xs text-slate-400 font-bold">
+                <Clock size={14} />
+                <span>{new Date(referral.created_at).toLocaleDateString('ar-SA')}</span>
+              </div>
+              <Link
+                to={`/dashboard/referral/${referral.id}`}
+                className="w-8 h-8 rounded-full bg-slate-50 text-slate-400 flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors"
+              >
+                <ArrowUpRight size={16} />
+              </Link>
+            </div>
+          </motion.div>
+        ))
+      )}
+    </div>
+  </div>
+);
 
 const CounselorDashboard: React.FC = () => {
   const { user } = useAuth();
@@ -53,74 +118,6 @@ const CounselorDashboard: React.FC = () => {
   const newCases = filteredReferrals.filter(r => r.status === 'pending_counselor');
   const inProgressCases = filteredReferrals.filter(r => r.status === 'scheduled_meeting');
   const resolvedCases = filteredReferrals.filter(r => r.status === 'resolved' || r.status === 'closed');
-
-  const KanbanColumn = ({ title, icon: Icon, color, cases, count }: any) => (
-    <div className="flex flex-col h-full bg-slate-50/50 rounded-[2rem] border border-slate-100 p-4 md:p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white ${color}`}>
-            <Icon size={20} />
-          </div>
-          <h2 className="font-extrabold text-lg text-slate-800">{title}</h2>
-        </div>
-        <span className="bg-white px-3 py-1 rounded-full text-sm font-bold text-slate-500 shadow-sm border border-slate-100">
-          {count}
-        </span>
-      </div>
-
-      <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
-        {cases.length === 0 ? (
-          <div className="h-32 flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-200 rounded-2xl">
-            <p className="font-bold text-sm">لا توجد حالات</p>
-          </div>
-        ) : (
-          cases.map((referral: Referral) => (
-            <motion.div
-              key={referral.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md hover:border-primary/30 transition-all group"
-            >
-              <div className="flex justify-between items-start mb-3">
-                <div>
-                  <h3 className="font-extrabold text-slate-800">{referral.student_name}</h3>
-                  <p className="text-xs text-slate-500 font-bold mt-1">
-                    {referral.student_grade} - {referral.student_section}
-                  </p>
-                </div>
-                <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold ${
-                  referral.severity === 'high' ? 'bg-red-50 text-red-600' :
-                  referral.severity === 'medium' ? 'bg-amber-50 text-amber-600' :
-                  'bg-emerald-50 text-emerald-600'
-                }`}>
-                  {referral.severity === 'high' ? 'عالية' : referral.severity === 'medium' ? 'متوسطة' : 'عادية'}
-                </span>
-              </div>
-              
-              <div className="mb-4">
-                <p className="text-sm text-slate-600 font-medium line-clamp-2">
-                  {referral.reason}
-                </p>
-              </div>
-
-              <div className="flex items-center justify-between pt-4 border-t border-slate-50">
-                <div className="flex items-center gap-2 text-xs text-slate-400 font-bold">
-                  <Clock size={14} />
-                  <span>{new Date(referral.created_at).toLocaleDateString('ar-SA')}</span>
-                </div>
-                <Link
-                  to={`/dashboard/referral/${referral.id}`}
-                  className="w-8 h-8 rounded-full bg-slate-50 text-slate-400 flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors"
-                >
-                  <ArrowUpRight size={16} />
-                </Link>
-              </div>
-            </motion.div>
-          ))
-        )}
-      </div>
-    </div>
-  );
 
   if (loading) {
     return (

@@ -1,6 +1,6 @@
 import { apiFetch } from '../utils/api';
 import React, { useState, useEffect, useMemo } from 'react';
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 import { 
   Users, 
   UserPlus, 
@@ -13,7 +13,10 @@ import {
   Briefcase,
   Compass,
   Crown,
-  X
+  X,
+  CheckCircle,
+  XCircle,
+  Clock
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { User } from '../types';
@@ -22,12 +25,12 @@ const SchoolUsers: React.FC = React.memo(() => {
   const { user } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'teacher' | 'vice_principal' | 'counselor' | 'principal'>('teacher');
+  const [activeTab, setActiveTab] = useState<'teacher' | 'vice_principal' | 'counselor' | 'principal' | 'pending'>('teacher');
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newUserForm, setNewUserForm] = useState({ name: '', email: '', password: '', role: 'teacher' });
+  const [newUserForm, setNewUserForm] = useState({ name: '', email: '', password: '', role: 'teacher', phone_number: '', whatsapp_enabled: true });
   const [showEditModal, setShowEditModal] = useState(false);
-  const [editUserForm, setEditUserForm] = useState({ id: 0, name: '', email: '', role: 'teacher' });
+  const [editUserForm, setEditUserForm] = useState({ id: 0, name: '', email: '', role: 'teacher', phone_number: '', whatsapp_enabled: true });
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ id: 0, password: '' });
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -71,14 +74,30 @@ const SchoolUsers: React.FC = React.memo(() => {
 
   const filteredUsers = useMemo(() => {
     return users.filter(u => {
-      const matchesRole = u.role === activeTab;
+      if (activeTab === 'pending') {
+        return u.status === 'PENDING' && (u.name.toLowerCase().includes(searchQuery.toLowerCase()) || u.email?.toLowerCase().includes(searchQuery.toLowerCase()) || u.national_id?.includes(searchQuery) || u.phone_number?.includes(searchQuery));
+      }
+      const matchesRole = u.role === activeTab && u.status !== 'PENDING';
       const matchesSearch = u.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                            u.email.toLowerCase().includes(searchQuery.toLowerCase());
+                            u.email?.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesRole && matchesSearch;
     });
   }, [users, activeTab, searchQuery]);
 
-  const getRoleCount = (role: string) => users.filter(u => u.role === role).length;
+  const getRoleCount = (role: string) => users.filter(u => u.role === role && u.status !== 'PENDING').length;
+
+  const handleApproveUser = async (id: number) => {
+    try {
+      const res = await apiFetch(`/api/admin/users/${id}/approve`, {
+        method: 'POST',
+      });
+      if (res.ok) {
+        fetchUsers();
+      }
+    } catch (err) {
+      console.error('Failed to approve user:', err);
+    }
+  };
 
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -109,7 +128,7 @@ const SchoolUsers: React.FC = React.memo(() => {
           'Content-Type': 'application/json',
           'x-school-id': user?.schoolId?.toString() || ''
         },
-        body: JSON.stringify({ name: editUserForm.name, email: editUserForm.email }),
+        body: JSON.stringify({ name: editUserForm.name, email: editUserForm.email, phone_number: editUserForm.phone_number, whatsapp_enabled: editUserForm.whatsapp_enabled }),
       });
       if (res.ok) {
         // Also update role if changed
@@ -214,6 +233,7 @@ const SchoolUsers: React.FC = React.memo(() => {
     { id: 'vice_principal', label: 'الوكلاء', icon: Briefcase, count: getRoleCount('vice_principal') },
     { id: 'counselor', label: 'الموجه الطلابي', icon: Compass, count: getRoleCount('counselor') },
     { id: 'principal', label: 'الإدارة', icon: Crown, count: getRoleCount('principal') },
+    { id: 'pending', label: 'طلبات الانضمام', icon: Clock, count: users.filter(u => u.status === 'PENDING').length },
   ];
 
   return (
@@ -288,39 +308,72 @@ const SchoolUsers: React.FC = React.memo(() => {
               <tr className="bg-slate-50/50 text-slate-500 text-xs font-bold uppercase tracking-wider">
                 <th className="px-6 py-4">الاسم</th>
                 <th className="px-6 py-4">البريد الإلكتروني / اسم المستخدم</th>
-                <th className="px-6 py-4">حالة الحساب</th>
-                {activeTab === 'teacher' && <th className="px-6 py-4">الفصول المسندة</th>}
+                {activeTab === 'pending' ? (
+                  <>
+                    <th className="px-6 py-4">رقم الهوية</th>
+                    <th className="px-6 py-4">رقم الجوال</th>
+                    <th className="px-6 py-4">الدور</th>
+                  </>
+                ) : (
+                  <th className="px-6 py-4">حالة الحساب</th>
+                )}
+                {(activeTab === 'teacher' || activeTab === 'vice_principal' || activeTab === 'counselor') && <th className="px-6 py-4">الفصول المسندة</th>}
                 {(activeTab === 'vice_principal' || activeTab === 'counselor') && <th className="px-6 py-4">الصلاحيات</th>}
                 <th className="px-6 py-4 text-left">إجراءات</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {loading ? (
-                <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-400">جاري التحميل...</td></tr>
+                <tr><td colSpan={activeTab === 'pending' ? 6 : 6} className="px-6 py-12 text-center text-slate-400">جاري التحميل...</td></tr>
               ) : filteredUsers.length === 0 ? (
-                <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-400">لا يوجد مستخدمين في هذا القسم</td></tr>
+                <tr><td colSpan={activeTab === 'pending' ? 6 : 6} className="px-6 py-12 text-center text-slate-400">لا يوجد مستخدمين في هذا القسم</td></tr>
               ) : (
                 filteredUsers.map(u => (
                   <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-6 py-4 font-bold text-slate-800">{u.name}</td>
                     <td className="px-6 py-4 text-slate-500" dir="ltr">{u.email}</td>
-                    <td className="px-6 py-4">
-                      <div className="flex justify-center">
-                        <button 
-                          onClick={() => toggleUserStatus(u.id)}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none min-h-[44px] min-w-[44px] ${
-                            u.is_active !== false ? 'bg-emerald-500' : 'bg-slate-300'
-                          }`}
-                        >
-                          <span
-                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                              u.is_active !== false ? 'translate-x-6' : 'translate-x-1'
+                    {activeTab === 'pending' ? (
+                      <>
+                        <td className="px-6 py-4 text-slate-500">{u.national_id}</td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <span className="text-slate-500" dir="ltr">{u.phone_number}</span>
+                            {u.is_phone_verified ? (
+                              <span className="flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full">
+                                <CheckCircle size={12} />
+                                موثق بالواتساب
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 text-xs font-bold text-red-600 bg-red-50 px-2 py-1 rounded-full">
+                                <XCircle size={12} />
+                                غير موثق
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-slate-500">
+                          {u.role === 'teacher' ? 'معلم' : u.role === 'vice_principal' ? 'وكيل' : u.role === 'counselor' ? 'موجه طلابي' : 'إداري'}
+                        </td>
+                      </>
+                    ) : (
+                      <td className="px-6 py-4">
+                        <div className="flex justify-center">
+                          <button 
+                            onClick={() => toggleUserStatus(u.id)}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none min-h-[44px] min-w-[44px] ${
+                              u.is_active !== false ? 'bg-emerald-500' : 'bg-slate-300'
                             }`}
-                          />
-                        </button>
-                      </div>
-                    </td>
-                    {activeTab === 'teacher' && (
+                          >
+                            <span
+                              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                u.is_active !== false ? 'translate-x-6' : 'translate-x-1'
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                    {(activeTab === 'teacher' || activeTab === 'vice_principal' || activeTab === 'counselor') && (
                       <td className="px-6 py-4 text-slate-500">
                         {u.assigned_grades?.join('، ') || 'غير محدد'}
                       </td>
@@ -332,49 +385,74 @@ const SchoolUsers: React.FC = React.memo(() => {
                     )}
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-2">
-                        {activeTab === 'teacher' && (
-                          <button 
-                            onClick={() => {
-                              setAssignGradesUserId(u.id);
-                              setSelectedGrades(u.assigned_grades || []);
-                              setShowAssignGradesModal(true);
-                            }}
-                            className="p-2 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-                            title="إسناد الفصول"
-                          >
-                            <GraduationCap size={18} />
-                          </button>
+                        {activeTab === 'pending' ? (
+                          <>
+                            <button 
+                              onClick={() => handleApproveUser(u.id)}
+                              className="px-4 py-2 bg-emerald-500 text-white hover:bg-emerald-600 rounded-lg transition-colors text-sm font-bold flex items-center gap-2"
+                              title="اعتماد الحساب"
+                            >
+                              <CheckCircle size={16} />
+                              اعتماد
+                            </button>
+                            <button 
+                              onClick={() => {
+                                setDeletingUserId(u.id);
+                                setShowDeleteModal(true);
+                              }}
+                              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                              title="رفض وحذف"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            {(activeTab === 'teacher' || activeTab === 'vice_principal' || activeTab === 'counselor') && (
+                              <button 
+                                onClick={() => {
+                                  setAssignGradesUserId(u.id);
+                                  setSelectedGrades(u.assigned_grades || []);
+                                  setShowAssignGradesModal(true);
+                                }}
+                                className="p-2 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                                title="إسناد الفصول"
+                              >
+                                <GraduationCap size={18} />
+                              </button>
+                            )}
+                            <button 
+                              onClick={() => {
+                                setEditUserForm({ id: u.id, name: u.name, email: u.email || '', role: u.role, phone_number: u.phone_number || '', whatsapp_enabled: u.whatsapp_enabled !== false });
+                                setShowEditModal(true);
+                              }}
+                              className="p-2 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                              title="تعديل المستخدم"
+                            >
+                              <Edit2 size={18} />
+                            </button>
+                            <button 
+                              onClick={() => {
+                                setPasswordForm({ id: u.id, password: '' });
+                                setShowPasswordModal(true);
+                              }}
+                              className="p-2 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                              title="تغيير كلمة المرور"
+                            >
+                              <Lock size={18} />
+                            </button>
+                            <button 
+                              onClick={() => {
+                                setDeletingUserId(u.id);
+                                setShowDeleteModal(true);
+                              }}
+                              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                              title="حذف المستخدم"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </>
                         )}
-                        <button 
-                          onClick={() => {
-                            setEditUserForm({ id: u.id, name: u.name, email: u.email, role: u.role });
-                            setShowEditModal(true);
-                          }}
-                          className="p-2 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-                          title="تعديل المستخدم"
-                        >
-                          <Edit2 size={18} />
-                        </button>
-                        <button 
-                          onClick={() => {
-                            setPasswordForm({ id: u.id, password: '' });
-                            setShowPasswordModal(true);
-                          }}
-                          className="p-2 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-                          title="تغيير كلمة المرور"
-                        >
-                          <Lock size={18} />
-                        </button>
-                        <button 
-                          onClick={() => {
-                            setDeletingUserId(u.id);
-                            setShowDeleteModal(true);
-                          }}
-                          className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-                          title="حذف المستخدم"
-                        >
-                          <Trash2 size={18} />
-                        </button>
                       </div>
                     </td>
                   </tr>
@@ -397,22 +475,46 @@ const SchoolUsers: React.FC = React.memo(() => {
                   <div>
                     <h3 className="font-bold text-slate-800 text-base">{u.name}</h3>
                     <p className="text-sm text-slate-500 mt-1" dir="ltr">{u.email}</p>
+                    {activeTab === 'pending' && (
+                      <div className="mt-2 space-y-1">
+                        <p className="text-sm text-slate-600">الهوية: {u.national_id}</p>
+                        <p className="text-sm text-slate-600 flex items-center gap-2">
+                          الجوال: <span dir="ltr">{u.phone_number}</span>
+                          {u.is_phone_verified ? (
+                            <span className="flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                              <CheckCircle size={10} />
+                              موثق
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1 text-xs font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
+                              <XCircle size={10} />
+                              غير موثق
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-sm text-slate-600">
+                          الدور: {u.role === 'teacher' ? 'معلم' : u.role === 'vice_principal' ? 'وكيل' : u.role === 'counselor' ? 'موجه طلابي' : 'إداري'}
+                        </p>
+                      </div>
+                    )}
                   </div>
-                  <button 
-                    onClick={() => toggleUserStatus(u.id)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none min-h-[44px] min-w-[44px] ${
-                      u.is_active !== false ? 'bg-emerald-500' : 'bg-slate-300'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        u.is_active !== false ? 'translate-x-6' : 'translate-x-1'
+                  {activeTab !== 'pending' && (
+                    <button 
+                      onClick={() => toggleUserStatus(u.id)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none min-h-[44px] min-w-[44px] ${
+                        u.is_active !== false ? 'bg-emerald-500' : 'bg-slate-300'
                       }`}
-                    />
-                  </button>
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          u.is_active !== false ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  )}
                 </div>
                 
-                {activeTab === 'teacher' && (
+                {(activeTab === 'teacher' || activeTab === 'vice_principal' || activeTab === 'counselor') && (
                   <div className="text-sm">
                     <span className="text-slate-500">الفصول المسندة: </span>
                     <span className="font-bold text-slate-700">{u.assigned_grades?.join('، ') || 'غير محدد'}</span>
@@ -426,37 +528,74 @@ const SchoolUsers: React.FC = React.memo(() => {
                   </div>
                 )}
 
-                <div className="flex items-center gap-2 pt-2 border-t border-slate-50">
-                  <button 
-                    onClick={() => {
-                      setEditUserForm({ id: u.id, name: u.name, email: u.email, role: u.role });
-                      setShowEditModal(true);
-                    }}
-                    className="flex-1 py-2 text-slate-600 hover:text-primary hover:bg-primary/5 rounded-xl transition-colors text-sm font-bold flex items-center justify-center gap-2 min-h-[44px]"
-                  >
-                    <Edit2 size={16} />
-                    تعديل
-                  </button>
-                  <button 
-                    onClick={() => {
-                      setPasswordForm({ id: u.id, password: '' });
-                      setShowPasswordModal(true);
-                    }}
-                    className="flex-1 py-2 text-slate-600 hover:text-amber-500 hover:bg-amber-50 rounded-xl transition-colors text-sm font-bold flex items-center justify-center gap-2 min-h-[44px]"
-                  >
-                    <Lock size={16} />
-                    كلمة المرور
-                  </button>
-                  <button 
-                    onClick={() => {
-                      setDeletingUserId(u.id);
-                      setShowDeleteModal(true);
-                    }}
-                    className="flex-1 py-2 text-slate-600 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors text-sm font-bold flex items-center justify-center gap-2 min-h-[44px]"
-                  >
-                    <Trash2 size={16} />
-                    حذف
-                  </button>
+                <div className="flex items-center gap-2 pt-2 border-t border-slate-50 flex-wrap">
+                  {activeTab === 'pending' ? (
+                    <>
+                      <button 
+                        onClick={() => handleApproveUser(u.id)}
+                        className="flex-1 py-2 bg-emerald-500 text-white hover:bg-emerald-600 rounded-xl transition-colors text-sm font-bold flex items-center justify-center gap-2 min-h-[44px]"
+                      >
+                        <CheckCircle size={16} />
+                        اعتماد
+                      </button>
+                      <button 
+                        onClick={() => {
+                          setDeletingUserId(u.id);
+                          setShowDeleteModal(true);
+                        }}
+                        className="flex-1 py-2 text-red-600 hover:bg-red-50 rounded-xl transition-colors text-sm font-bold flex items-center justify-center gap-2 min-h-[44px]"
+                      >
+                        <Trash2 size={16} />
+                        رفض وحذف
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {(activeTab === 'teacher' || activeTab === 'vice_principal' || activeTab === 'counselor') && (
+                        <button 
+                          onClick={() => {
+                            setAssignGradesUserId(u.id);
+                            setSelectedGrades(u.assigned_grades || []);
+                            setShowAssignGradesModal(true);
+                          }}
+                          className="flex-1 py-2 text-slate-600 hover:text-emerald-500 hover:bg-emerald-50 rounded-xl transition-colors text-sm font-bold flex items-center justify-center gap-2 min-h-[44px]"
+                        >
+                          <GraduationCap size={16} />
+                          إسناد
+                        </button>
+                      )}
+                      <button 
+                        onClick={() => {
+                          setEditUserForm({ id: u.id, name: u.name, email: u.email || '', role: u.role, phone_number: u.phone_number || '', whatsapp_enabled: u.whatsapp_enabled !== false });
+                          setShowEditModal(true);
+                        }}
+                        className="flex-1 py-2 text-slate-600 hover:text-primary hover:bg-primary/5 rounded-xl transition-colors text-sm font-bold flex items-center justify-center gap-2 min-h-[44px]"
+                      >
+                        <Edit2 size={16} />
+                        تعديل
+                      </button>
+                      <button 
+                        onClick={() => {
+                          setPasswordForm({ id: u.id, password: '' });
+                          setShowPasswordModal(true);
+                        }}
+                        className="flex-1 py-2 text-slate-600 hover:text-amber-500 hover:bg-amber-50 rounded-xl transition-colors text-sm font-bold flex items-center justify-center gap-2 min-h-[44px]"
+                      >
+                        <Lock size={16} />
+                        كلمة المرور
+                      </button>
+                      <button 
+                        onClick={() => {
+                          setDeletingUserId(u.id);
+                          setShowDeleteModal(true);
+                        }}
+                        className="flex-1 py-2 text-slate-600 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors text-sm font-bold flex items-center justify-center gap-2 min-h-[44px]"
+                      >
+                        <Trash2 size={16} />
+                        حذف
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             ))
@@ -499,6 +638,31 @@ const SchoolUsers: React.FC = React.memo(() => {
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
                   dir="ltr"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">رقم الجوال</label>
+                <input
+                  type="tel"
+                  required
+                  pattern="^(05|9665)[0-9]{8}$"
+                  title="يجب أن يبدأ الرقم بـ 05 أو 9665 ويليه 8 أرقام"
+                  placeholder="05XXXXXXXX"
+                  value={newUserForm.phone_number}
+                  onChange={e => setNewUserForm({...newUserForm, phone_number: e.target.value})}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                  dir="ltr"
+                />
+              </div>
+              <div>
+                <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200 cursor-pointer hover:border-emerald-200 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={newUserForm.whatsapp_enabled}
+                    onChange={(e) => setNewUserForm({ ...newUserForm, whatsapp_enabled: e.target.checked })}
+                    className="w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span className="font-bold text-slate-700 text-sm">تفعيل إشعارات الواتساب لهذا المستخدم</span>
+                </label>
               </div>
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1">كلمة المرور</label>
@@ -571,6 +735,31 @@ const SchoolUsers: React.FC = React.memo(() => {
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
                   dir="ltr"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">رقم الجوال</label>
+                <input
+                  type="tel"
+                  required
+                  pattern="^(05|9665)[0-9]{8}$"
+                  title="يجب أن يبدأ الرقم بـ 05 أو 9665 ويليه 8 أرقام"
+                  placeholder="05XXXXXXXX"
+                  value={editUserForm.phone_number}
+                  onChange={e => setEditUserForm({...editUserForm, phone_number: e.target.value})}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                  dir="ltr"
+                />
+              </div>
+              <div>
+                <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200 cursor-pointer hover:border-emerald-200 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={editUserForm.whatsapp_enabled}
+                    onChange={(e) => setEditUserForm({ ...editUserForm, whatsapp_enabled: e.target.checked })}
+                    className="w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span className="font-bold text-slate-700 text-sm">تفعيل إشعارات الواتساب لهذا المستخدم</span>
+                </label>
               </div>
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1">الدور الوظيفي</label>

@@ -25,8 +25,9 @@ import {
 import { motion } from 'motion/react';
 import * as XLSX from 'xlsx';
 import { User } from '../types';
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 import SchoolUsers from './SchoolUsers';
+import AdminSettings from './AdminSettings';
 
 const AdminDashboard: React.FC = () => {
   const { user } = useAuth();
@@ -1241,6 +1242,8 @@ const AdminDashboard: React.FC = () => {
 
           {/* Quick Actions & Stats */}
           <div className="space-y-8">
+            <AdminSettings />
+            
             <div className="sts-card p-10 space-y-6 border-none shadow-2xl shadow-slate-200/50">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center">
@@ -1515,42 +1518,44 @@ const AdminDashboard: React.FC = () => {
                 </div>
               </div>
 
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                    <Settings size={14} />
-                    الصفوف المسندة
-                  </h4>
-                  <span className="text-[10px] bg-primary/5 text-primary px-3 py-1 rounded-full font-black">
-                    {selectedUser.assigned_grades?.length || 0} صفوف
-                  </span>
+              {(selectedUser.role === 'teacher' || selectedUser.role === 'vice_principal' || selectedUser.role === 'counselor') && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                      <Settings size={14} />
+                      الصفوف المسندة
+                    </h4>
+                    <span className="text-[10px] bg-primary/5 text-primary px-3 py-1 rounded-full font-black">
+                      {selectedUser.assigned_grades?.length || 0} صفوف
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2">
+                    {allGrades.map(grade => {
+                      const isSelected = selectedUser.assigned_grades?.includes(grade);
+                      return (
+                        <button
+                          key={grade}
+                          onClick={() => toggleGrade(selectedUser.id, grade, selectedUser.assigned_grades || [])}
+                          className={`flex items-center justify-between p-4 rounded-2xl transition-all border ${
+                            isSelected
+                              ? 'bg-primary/5 border-primary/20 shadow-sm'
+                              : 'bg-white border-slate-100 hover:border-primary/20 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span className={`font-bold text-sm ${isSelected ? 'text-primary' : 'text-slate-700'}`}>
+                            {grade}
+                          </span>
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                            isSelected ? 'bg-primary text-white' : 'bg-slate-100 text-slate-300'
+                          }`}>
+                            <Check size={14} className={isSelected ? 'opacity-100' : 'opacity-0'} />
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                <div className="grid grid-cols-1 gap-2">
-                  {allGrades.map(grade => {
-                    const isSelected = selectedUser.assigned_grades?.includes(grade);
-                    return (
-                      <button
-                        key={grade}
-                        onClick={() => toggleGrade(selectedUser.id, grade, selectedUser.assigned_grades || [])}
-                        className={`flex items-center justify-between p-4 rounded-2xl transition-all border ${
-                          isSelected
-                            ? 'bg-primary/5 border-primary/20 shadow-sm'
-                            : 'bg-white border-slate-100 hover:border-primary/20 hover:bg-slate-50'
-                        }`}
-                      >
-                        <span className={`font-bold text-sm ${isSelected ? 'text-primary' : 'text-slate-700'}`}>
-                          {grade}
-                        </span>
-                        <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
-                          isSelected ? 'bg-primary text-white' : 'bg-slate-100 text-slate-300'
-                        }`}>
-                          <Check size={14} className={isSelected ? 'opacity-100' : 'opacity-0'} />
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+              )}
             </div>
             <div className="p-8 border-t border-slate-100 bg-slate-50/50">
               <button 

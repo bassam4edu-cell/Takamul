@@ -15,7 +15,7 @@ import {
   Edit2
 } from 'lucide-react';
 import { Referral } from '../types';
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 import { motion } from 'motion/react';
 
 const AdminReferrals: React.FC = () => {

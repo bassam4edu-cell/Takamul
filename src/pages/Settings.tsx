@@ -13,7 +13,7 @@ import {
   LogOut
 } from 'lucide-react';
 import { motion } from 'motion/react';
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 
 const Settings: React.FC = () => {
   const { user, login, logout } = useAuth();

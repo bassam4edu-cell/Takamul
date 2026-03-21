@@ -11,15 +11,16 @@ import {
   MailOpen,
   Mail
 } from 'lucide-react';
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 interface Notification {
-  id: number;
+  id: string;
   sender_id: number;
-  recipient_id: number;
+  user_id: number;
+  title: string;
   message: string;
-  referral_id: number;
+  reference_id: number;
   is_read: boolean;
   created_at: string;
   sender_name: string;
@@ -47,15 +48,32 @@ const Notifications: React.FC = () => {
 
   useEffect(() => {
     fetchNotifications();
+    
+    if (!user) return;
+
+    const eventSource = new EventSource(`/api/notifications/stream?userId=${user.id}`);
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const newNotification = JSON.parse(event.data);
+        setNotifications(prev => [newNotification, ...prev]);
+      } catch (err) {
+        console.error('Error parsing real-time notification', err);
+      }
+    };
+
+    return () => {
+      eventSource.close();
+    };
   }, [user]);
 
-  const markAsRead = async (id: number, referralId?: number) => {
+  const markAsRead = async (id: string, referenceId?: number) => {
     try {
       const res = await apiFetch(`/api/notifications/${id}/read`, { method: 'POST' });
       if (res.ok) {
         setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
-        if (referralId) {
-          navigate(`/referral/${referralId}`);
+        if (referenceId) {
+          navigate(`/referral/${referenceId}`);
         }
       } else {
         const data = await res.json().catch(() => ({ error: 'فشل تحديث حالة الإشعار' }));
@@ -85,7 +103,7 @@ const Notifications: React.FC = () => {
     }
   };
 
-  const deleteNotification = async (e: React.MouseEvent, id: number) => {
+  const deleteNotification = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     try {
       const res = await apiFetch(`/api/notifications/${id}`, { method: 'DELETE' });
@@ -141,7 +159,7 @@ const Notifications: React.FC = () => {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.05 }}
-                onClick={() => markAsRead(notification.id, notification.referral_id)}
+                onClick={() => markAsRead(notification.id, notification.reference_id)}
                 className={`p-6 md:p-8 flex items-start gap-4 md:gap-6 cursor-pointer transition-all hover:bg-slate-50/50 relative group ${!notification.is_read ? 'bg-primary/[0.02]' : ''}`}
               >
                 {!notification.is_read && (
@@ -157,14 +175,17 @@ const Notifications: React.FC = () => {
                 <div className="flex-1 space-y-2">
                   <div className="flex items-center justify-between gap-4">
                     <p className={`text-sm md:text-base leading-relaxed ${!notification.is_read ? 'font-black text-slate-900' : 'font-bold text-slate-600'}`}>
-                      {notification.message}
+                      {notification.title}
                     </p>
                     <span className="text-[10px] md:text-xs text-slate-400 font-bold whitespace-nowrap">
                       {new Date(notification.created_at).toLocaleDateString('ar-SA')}
                     </span>
                   </div>
+                  <p className="text-xs text-slate-500">
+                    {notification.message}
+                  </p>
                   
-                  <div className="flex items-center gap-4 text-[10px] md:text-xs font-bold uppercase tracking-wider">
+                  <div className="flex items-center gap-4 text-[10px] md:text-xs font-bold uppercase tracking-wider pt-2">
                     <span className="text-primary">من: {notification.sender_name || 'النظام'}</span>
                     <span className="w-1 h-1 bg-slate-200 rounded-full" />
                     <span className="text-slate-400 flex items-center gap-1">

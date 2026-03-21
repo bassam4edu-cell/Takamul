@@ -12,7 +12,7 @@ import {
   School,
   UserCheck
 } from 'lucide-react';
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 interface TopStudent {
@@ -118,39 +118,29 @@ const Reports: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto space-y-10 pb-20">
       {/* 1. Official Print Header (Visible only on print) */}
-      <div className="hidden print:block w-full">
-        <div className="flex justify-between items-start mb-8 border-b-2 border-slate-900 pb-6">
+      <div className="hidden print:block w-full print-report font-sans" dir="rtl">
+        <div className="flex justify-between items-start border-b-2 border-black pb-4 mb-8">
           <div className="text-right space-y-1">
             <p className="text-sm font-black">المملكة العربية السعودية</p>
             <p className="text-sm font-black">وزارة التعليم</p>
-            <p className="text-xs font-bold">الإدارة العامة للتعليم بمنطقة الخرج</p>
-            <p className="text-xs font-bold">ثانوية أم القرى</p>
+            <p className="text-sm font-black">الإدارة العامة للتعليم بمنطقة الرياض</p>
+            <p className="text-sm font-black">مدرسة ثانوية أم القرى</p>
           </div>
-
           <div className="text-center">
-            <img 
-              src="https://i.ibb.co/QFwrvnqF/photo-2026-02-20-15-16-20.jpg" 
-              alt="شعار الوزارة" 
-              className="w-20 h-20 object-contain mx-auto mb-2"
-              referrerPolicy="no-referrer"
-            />
-            <h1 className="text-xl font-black text-slate-900">
-              {activeReport === 'comprehensive' ? 'تقرير السجل الشامل للحالات' : 
-               activeReport === 'repeat' ? 'تقرير الطلاب الأكثر تحويلاً' : 
-               'تقرير أداء المعلمين والتحويلات'}
-            </h1>
-            <p className="text-xs font-bold text-slate-600 mt-1">تاريخ الطباعة: {new Date().toLocaleDateString('ar-SA')}</p>
+            <img src="https://upload.wikimedia.org/wikipedia/ar/thumb/a/a3/Ministry_of_Education_%28Saudi_Arabia%29_Logo.svg/1200px-Ministry_of_Education_%28Saudi_Arabia%29_Logo.svg.png" alt="شعار الوزارة" className="w-20 h-auto mx-auto grayscale opacity-80" />
           </div>
-
-          <div className="text-left">
-            <img 
-              src="https://upload.wikimedia.org/wikipedia/ar/thumb/a/a2/Saudi_Vision_2030_logo.svg/512px-Saudi_Vision_2030_logo.svg.png" 
-              alt="رؤية 2030" 
-              className="w-20 h-20 object-contain"
-              referrerPolicy="no-referrer"
-            />
+          <div className="text-right space-y-1 text-sm font-bold">
+            <p>الرقم: ....................</p>
+            <p>التاريخ: {new Date().toLocaleDateString('ar-SA')}</p>
+            <p>المرفقات: ....................</p>
           </div>
         </div>
+
+        <h1 className="text-xl font-black text-center mb-8 underline underline-offset-8">
+          {activeReport === 'comprehensive' ? 'تقرير السجل الشامل للحالات' : 
+           activeReport === 'repeat' ? 'تقرير الطلاب الأكثر تحويلاً' : 
+           'تقرير أداء المعلمين والتحويلات'}
+        </h1>
 
         {/* Dynamic Report Tables for Print */}
         {activeReport === 'comprehensive' && (
@@ -233,26 +223,21 @@ const Reports: React.FC = () => {
         )}
 
         {/* Dynamic Signatures Section */}
-        <div className="mt-16 grid grid-cols-4 gap-8 text-center page-break-inside-avoid">
+        <div className="mt-16 print-grid grid-cols-3 gap-8 text-center page-break-inside-avoid">
           <div className="space-y-8">
-            <p className="font-black text-sm">المعلم</p>
-            <div className="h-px bg-slate-300 w-3/4 mx-auto"></div>
-            <p className="text-xs font-bold">التوقيع: .................</p>
+            <p className="print-label">المعلم</p>
+            <div className="h-px bg-black w-3/4 mx-auto"></div>
+            <p className="text-sm font-bold">التوقيع: .................</p>
           </div>
           <div className="space-y-8">
-            <p className="font-black text-sm">وكيل شؤون الطلاب</p>
-            <div className="h-px bg-slate-300 w-3/4 mx-auto"></div>
-            <p className="text-xs font-bold">أ. فهد السالم</p>
+            <p className="print-label">الموجه الطلابي</p>
+            <div className="h-px bg-black w-3/4 mx-auto"></div>
+            <p className="text-sm font-bold">التوقيع: .................</p>
           </div>
           <div className="space-y-8">
-            <p className="font-black text-sm">الموجه الطلابي</p>
-            <div className="h-px bg-slate-300 w-3/4 mx-auto"></div>
-            <p className="text-xs font-bold">أ. محمد الفهيد</p>
-          </div>
-          <div className="space-y-8">
-            <p className="font-black text-sm">مدير المدرسة</p>
-            <div className="h-px bg-slate-300 w-3/4 mx-auto"></div>
-            <p className="text-xs font-bold">د. خالد المنصور</p>
+            <p className="print-label">مدير المدرسة</p>
+            <div className="h-px bg-black w-3/4 mx-auto"></div>
+            <p className="text-sm font-bold">التوقيع: .................</p>
           </div>
         </div>
 

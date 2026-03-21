@@ -1,6 +1,6 @@
 import { apiFetch } from '../utils/api';
 import React, { useState, useEffect, useRef } from 'react';
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 import { Save, Eye, EyeOff, MessageSquare, ShieldAlert, CheckCircle2, QrCode, RefreshCw, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -44,8 +44,13 @@ const MessageSettings: React.FC = () => {
         }
       } else {
         const errorData = await res.json();
-        setWaStatus('error');
-        console.error("WhatsApp API Error:", errorData.error);
+        if (res.status === 429) {
+          setWaStatus('rate_limited');
+          // Don't log 429 errors to console to avoid spam
+        } else {
+          setWaStatus('error');
+          console.error("WhatsApp API Error:", errorData.error);
+        }
       }
     } catch (err) {
       console.error("Error checking WhatsApp status:", err);
@@ -72,19 +77,44 @@ const MessageSettings: React.FC = () => {
     }
   };
 
-  // Start polling when instanceId and token are available in localStorage
+  // Load settings from database on mount
   useEffect(() => {
-    const savedInstanceId = localStorage.getItem('greenapi_instance_id');
-    const savedToken = localStorage.getItem('greenapi_token');
+    const loadSettings = async () => {
+      try {
+        const res = await apiFetch('/api/settings');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.whatsapp_instance_id && data.whatsapp_token) {
+            setInstanceId(data.whatsapp_instance_id);
+            setToken(data.whatsapp_token);
+            // Save to localStorage for backward compatibility
+            localStorage.setItem('greenapi_instance_id', data.whatsapp_instance_id);
+            localStorage.setItem('greenapi_token', data.whatsapp_token);
+          } else {
+            // Fallback to localStorage if not in DB
+            const savedInstanceId = localStorage.getItem('greenapi_instance_id');
+            const savedToken = localStorage.getItem('greenapi_token');
+            if (savedInstanceId) setInstanceId(savedInstanceId);
+            if (savedToken) setToken(savedToken);
+          }
+        }
+      } catch (err) {
+        console.error("Error loading settings:", err);
+      }
+    };
+    loadSettings();
+  }, []);
 
-    if (savedInstanceId && savedToken) {
+  // Start polling when instanceId and token are available
+  useEffect(() => {
+    if (instanceId && token) {
       // Initial check
-      checkWhatsAppStatus(savedInstanceId, savedToken);
+      checkWhatsAppStatus(instanceId, token);
       
-      // Setup polling every 5 seconds
+      // Setup polling every 30 seconds to avoid rate limits
       pollingIntervalRef.current = setInterval(() => {
-        checkWhatsAppStatus(savedInstanceId, savedToken);
-      }, 5000);
+        checkWhatsAppStatus(instanceId, token);
+      }, 30000);
     }
 
     return () => {
@@ -92,38 +122,72 @@ const MessageSettings: React.FC = () => {
         clearInterval(pollingIntervalRef.current);
       }
     };
-  }, [success]); // Re-run effect when success changes (after saving)
+  }, [instanceId, token, success]); // Re-run effect when success changes (after saving)
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setSaving(true);
     setSuccess(false);
     
-    localStorage.setItem('greenapi_instance_id', instanceId);
-    localStorage.setItem('greenapi_token', token);
-    
-    setTimeout(() => {
+    try {
+      // Save to database
+      await apiFetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          settings: {
+            whatsapp_instance_id: instanceId,
+            whatsapp_token: token
+          }
+        })
+      });
+
+      // Save to localStorage as backup
+      localStorage.setItem('greenapi_instance_id', instanceId);
+      localStorage.setItem('greenapi_token', token);
+      
       setSaving(false);
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
       checkWhatsAppStatus(instanceId, token);
-    }, 500);
+    } catch (err) {
+      console.error("Error saving settings:", err);
+      setSaving(false);
+      alert("حدث خطأ أثناء حفظ الإعدادات");
+    }
   };
 
   const handleClearData = () => {
     setShowConfirmClear(true);
   };
 
-  const confirmClearData = () => {
-    localStorage.removeItem('greenapi_instance_id');
-    localStorage.removeItem('greenapi_token');
-    setInstanceId('');
-    setToken('');
-    setWaStatus(null);
-    setWaQR(null);
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
+  const confirmClearData = async () => {
+    try {
+      // Clear from database
+      await apiFetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          settings: {
+            whatsapp_instance_id: '',
+            whatsapp_token: ''
+          }
+        })
+      });
+
+      localStorage.removeItem('greenapi_instance_id');
+      localStorage.removeItem('greenapi_token');
+      setInstanceId('');
+      setToken('');
+      setWaStatus(null);
+      setWaQR(null);
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+      setShowConfirmClear(false);
+    } catch (err) {
+      console.error("Error clearing settings:", err);
+      alert("حدث خطأ أثناء مسح الإعدادات");
     }
-    setShowConfirmClear(false);
   };
 
   if (user?.role !== 'admin') {
@@ -288,6 +352,21 @@ const MessageSettings: React.FC = () => {
                 <div>
                   <h3 className="text-2xl font-bold text-slate-800">الجوال متصل بنجاح ومستعد للإرسال</h3>
                   <p className="text-slate-500 mt-2">نظام إرسال الواتساب جاهز للعمل</p>
+                </div>
+              </motion.div>
+            ) : waStatus === 'rate_limited' ? (
+              <motion.div 
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="flex flex-col items-center text-center space-y-4"
+              >
+                <div className="w-24 h-24 bg-amber-100 rounded-full flex items-center justify-center">
+                  <ShieldAlert className="w-12 h-12 text-amber-500" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-slate-800">تجاوز الحد المسموح</h3>
+                  <p className="text-slate-500 mt-2">تم تجاوز الحد المسموح من الطلبات لخدمة Green API.</p>
+                  <p className="text-slate-500 mt-1 text-sm">يرجى الانتظار قليلاً وسيعاود النظام المحاولة تلقائياً.</p>
                 </div>
               </motion.div>
             ) : waStatus === 'error' ? (

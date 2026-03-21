@@ -1,9 +1,12 @@
-import React, { createContext, useContext, useState, useEffect, Suspense, lazy } from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { User } from './types';
 import Layout from './components/Layout';
 import { MessageLogProvider } from './context/MessageLogContext';
 import LoadingSpinner from './components/LoadingSpinner';
+import { AuthProvider, useAuth } from './context/AuthContext';
+
+export { useAuth };
 
 const Landing = lazy(() => import('./pages/Landing'));
 const Login = lazy(() => import('./pages/Login'));
@@ -28,49 +31,20 @@ const VPRadar = lazy(() => import('./pages/VPRadar'));
 const StudentRecordSearch = lazy(() => import('./pages/StudentRecordSearch'));
 const TeacherRollCall = lazy(() => import('./pages/TeacherRollCall'));
 const DailyAbsenceReport = lazy(() => import('./pages/DailyAbsenceReport'));
+const ParentLogin = lazy(() => import('./pages/ParentLogin'));
+const ParentPortal = lazy(() => import('./pages/ParentPortal'));
+const Register = lazy(() => import('./pages/Register'));
 
-interface AuthContextType {
-  user: User | null;
-  login: (user: User) => void;
-  logout: () => void;
-}
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within AuthProvider');
-  return context;
-};
-
-const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('user');
-    return saved ? JSON.parse(saved) : null;
-  });
-
-  const login = (userData: User) => {
-    setUser(userData);
-    localStorage.setItem('user', JSON.stringify(userData));
-  };
-
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('user');
-  };
-
-  return (
-    <AuthContext.Provider value={{ user, login, logout }}>
-      {children}
-    </AuthContext.Provider>
-  );
-};
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: string[] }> = ({ children, allowedRoles }) => {
   const { user } = useAuth();
   const location = useLocation();
 
   if (!user) {
+    if (location.pathname === '/parent-portal') {
+      return <Navigate to="/parent-login" state={{ from: location }} replace />;
+    }
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
@@ -90,6 +64,13 @@ const App: React.FC = () => {
             <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/parent-login" element={<ParentLogin />} />
+            <Route path="/parent-portal" element={
+              <ProtectedRoute allowedRoles={['parent']}>
+                <ParentPortal />
+              </ProtectedRoute>
+            } />
             
             <Route path="/print/:templateId/:referralId" element={
               <ProtectedRoute>
@@ -173,6 +154,7 @@ const App: React.FC = () => {
 
 const DashboardSwitcher = () => {
   const { user } = useAuth();
+  if (user?.role === 'parent') return <Navigate to="/parent-portal" replace />;
   if (user?.role === 'teacher') return <TeacherDashboard />;
   if (user?.role === 'counselor') return <CounselorDashboard />;
   if (user?.role === 'admin') return <AdminDashboard />;

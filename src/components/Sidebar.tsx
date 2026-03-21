@@ -16,7 +16,7 @@ import {
   FileText,
   MessageSquare
 } from 'lucide-react';
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import Logo from './Logo';

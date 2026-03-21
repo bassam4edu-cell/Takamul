@@ -25,7 +25,9 @@ async function initDb() {
         email TEXT UNIQUE,
         password TEXT,
         role TEXT, -- 'teacher', 'vice_principal', 'counselor', 'admin'
-        is_active BOOLEAN DEFAULT TRUE
+        is_active BOOLEAN DEFAULT TRUE,
+        phone_number TEXT,
+        whatsapp_enabled BOOLEAN DEFAULT TRUE
       )
     `;
 
@@ -67,6 +69,12 @@ async function initDb() {
     await sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS evidence_file TEXT`;
     await sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS is_exported_to_noor BOOLEAN DEFAULT FALSE`;
     await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE`;
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_number TEXT`;
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS whatsapp_enabled BOOLEAN DEFAULT TRUE`;
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_phone_verified BOOLEAN DEFAULT FALSE`;
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_code TEXT`;
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'ACTIVE'`;
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS national_id TEXT`;
 
     // New Columns for Students (Behavior & Attendance)
     await sql`ALTER TABLE students ADD COLUMN IF NOT EXISTS behavior_score INT DEFAULT 80`;
@@ -146,11 +154,13 @@ async function initDb() {
 
     await sql`
       CREATE TABLE IF NOT EXISTS notifications (
-        id SERIAL PRIMARY KEY,
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        school_id INTEGER,
+        user_id INTEGER REFERENCES users(id),
         sender_id INTEGER REFERENCES users(id),
-        recipient_id INTEGER REFERENCES users(id),
+        title TEXT,
         message TEXT,
-        referral_id INTEGER REFERENCES referrals(id),
+        reference_id INTEGER REFERENCES referrals(id),
         is_read BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -234,11 +244,7 @@ async function initDb() {
     // Seed Behavioral Violations Dictionary
     const behavioralViolationsCount = await sql`SELECT COUNT(*) as count FROM behavioral_violations_dict`;
     if (parseInt(behavioralViolationsCount[0].count) === 0) {
-      const generalProcedures = [
-        "استدعاء الهلال الأحمر لنقل الطالب المصاب إلى أقرب مركز صحي (إذا تطلب الأمر).",
-        "تبليغ الجهات الأمنية المختصة فور وقوع المشكلة.",
-        "التواصل مباشرة مع مركز تلقي البلاغات (1919) للتبليغ عن حالات الإيذاء."
-      ];
+      const generalProcedures: string[] = [];
 
       const degree1Procedures = [
         "الإجراء الأول: التنبيه الشفهي الأول من المعلم أو إدارة المدرسة للطالب عن السلوك وأضراره المترتبة، وكونه يعد سلوكا غير مرغوب بأسلوب تربوي حكيم.",
@@ -407,11 +413,23 @@ async function startServer() {
   });
 
   app.post("/api/whatsapp/send", async (req, res) => {
-    const { phoneNumber, studentName, instanceId, token, period, message } = req.body;
+    let { phoneNumber, studentName, instanceId, token, period, message } = req.body;
     
     try {
       if (!instanceId || !token) {
-        return res.status(400).json({ success: false, code: 'MISSING_WHATSAPP_CREDENTIALS', message: "لم يتم ربط بوابة الواتساب. يرجى التوجه إلى (إعدادات الرسائل) وإدخال مفاتيح الربط أولاً." });
+        // Fetch from database if not provided
+        const settings = await sql`SELECT key, value FROM system_settings WHERE key IN ('whatsapp_instance_id', 'whatsapp_token')`;
+        const settingsMap = settings.reduce((acc: any, row: any) => {
+          acc[row.key] = row.value;
+          return acc;
+        }, {});
+        
+        instanceId = settingsMap.whatsapp_instance_id;
+        token = settingsMap.whatsapp_token;
+        
+        if (!instanceId || !token) {
+          return res.status(400).json({ success: false, code: 'MISSING_WHATSAPP_CREDENTIALS', message: "لم يتم ربط بوابة الواتساب. يرجى التوجه إلى (إعدادات الرسائل) وإدخال مفاتيح الربط أولاً." });
+        }
       }
 
       const currentDate = new Date().toLocaleDateString('ar-SA');
@@ -441,6 +459,9 @@ async function startServer() {
         if (response.status === 401 || response.status === 403) {
           return res.status(403).json({ success: false, code: 'FORBIDDEN', message: "بيانات الربط غير صحيحة أو الحساب غير مفعل (Forbidden)" });
         }
+        if (response.status === 429) {
+          return res.status(429).json({ success: false, code: 'TOO_MANY_REQUESTS', message: "تم تجاوز الحد المسموح من الطلبات. يرجى المحاولة لاحقاً." });
+        }
         throw new Error(`Green API error: ${response.statusText}`);
       }
 
@@ -452,20 +473,34 @@ async function startServer() {
     }
   });
 
+  const statusCache = new Map<string, { data: any, timestamp: number }>();
+
   app.get("/api/whatsapp/status", async (req, res) => {
     const { instanceId, token } = req.query;
     if (!instanceId || !token) {
       return res.status(400).json({ error: "Missing instanceId or token" });
     }
+
+    const cacheKey = `${instanceId}_${token}`;
+    const cached = statusCache.get(cacheKey);
+    // Cache for 30 seconds to prevent rate limits
+    if (cached && Date.now() - cached.timestamp < 30000) {
+      return res.json(cached.data);
+    }
+
     try {
       const response = await fetch(`https://api.green-api.com/waInstance${instanceId}/getStateInstance/${token}`);
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
           return res.status(403).json({ error: "بيانات الربط غير صحيحة أو الحساب غير مفعل" });
         }
+        if (response.status === 429) {
+          return res.status(429).json({ error: "Too Many Requests", stateInstance: "rate_limited" });
+        }
         throw new Error(`Green API error: ${response.statusText}`);
       }
       const data = await response.json();
+      statusCache.set(cacheKey, { data, timestamp: Date.now() });
       res.json(data);
     } catch (error: any) {
       console.error("[WHATSAPP STATUS] Error:", error);
@@ -473,29 +508,103 @@ async function startServer() {
     }
   });
 
+  const qrCache = new Map<string, { data: any, timestamp: number }>();
+
   app.get("/api/whatsapp/qr", async (req, res) => {
     const { instanceId, token } = req.query;
     if (!instanceId || !token) {
       return res.status(400).json({ error: "Missing instanceId or token" });
     }
+
+    const cacheKey = `${instanceId}_${token}`;
+    const cached = qrCache.get(cacheKey);
+    // Cache for 60 seconds to prevent rate limits
+    if (cached && Date.now() - cached.timestamp < 60000) {
+      return res.json(cached.data);
+    }
+
     try {
       const response = await fetch(`https://api.green-api.com/waInstance${instanceId}/qr/${token}`);
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
           return res.status(403).json({ error: "بيانات الربط غير صحيحة أو الحساب غير مفعل" });
         }
+        if (response.status === 429) {
+          return res.status(429).json({ error: "Too Many Requests", qr: null });
+        }
         throw new Error(`Green API error: ${response.statusText}`);
       }
       
       const data = await response.json();
+      let responseData;
       if (data.type === 'qrCode' && data.message) {
-        res.json({ qrCode: `data:image/png;base64,${data.message}` });
+        responseData = { qrCode: `data:image/png;base64,${data.message}` };
       } else {
-        res.json(data);
+        responseData = data;
       }
+      qrCache.set(cacheKey, { data: responseData, timestamp: Date.now() });
+      res.json(responseData);
     } catch (error: any) {
       console.error("[WHATSAPP QR] Error:", error);
       res.status(500).json({ error: "Failed to fetch QR code" });
+    }
+  });
+
+  app.post("/api/forgot-password", async (req, res) => {
+    const { identifier } = req.body; // Can be email or phone
+    try {
+      let cleanPhone = identifier.replace(/[\s+]/g, '');
+      if (cleanPhone.startsWith('00')) {
+        cleanPhone = cleanPhone.substring(2);
+      } else if (cleanPhone.startsWith('0')) {
+        cleanPhone = '966' + cleanPhone.substring(1);
+      }
+
+      const users = await sql`SELECT id, name, phone_number FROM users WHERE email = ${identifier} OR phone_number = ${cleanPhone} OR phone_number = ${identifier} LIMIT 1`;
+      
+      if (users.length === 0) {
+        return res.status(404).json({ success: false, message: "لم يتم العثور على حساب بهذا البريد أو رقم الجوال" });
+      }
+
+      const user = users[0];
+      const otp_code = Math.floor(1000 + Math.random() * 9000).toString();
+
+      await sql`UPDATE users SET otp_code = ${otp_code} WHERE id = ${user.id}`;
+
+      res.json({ success: true, otp_code, phone_number: user.phone_number, user_id: user.id });
+    } catch (err) {
+      console.error("[FORGOT PASSWORD] Error:", err);
+      res.status(500).json({ success: false, message: "حدث خطأ في النظام" });
+    }
+  });
+
+  app.post("/api/verify-forgot-password-otp", async (req, res) => {
+    const { user_id, otp_code } = req.body;
+    try {
+      const users = await sql`SELECT id FROM users WHERE id = ${user_id} AND otp_code = ${otp_code} LIMIT 1`;
+      if (users.length === 0) {
+        return res.status(400).json({ success: false, message: "كود التحقق غير صحيح" });
+      }
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[VERIFY OTP] Error:", err);
+      res.status(500).json({ success: false, message: "حدث خطأ في النظام" });
+    }
+  });
+
+  app.post("/api/reset-password", async (req, res) => {
+    const { user_id, otp_code, new_password } = req.body;
+    try {
+      const users = await sql`SELECT id FROM users WHERE id = ${user_id} AND otp_code = ${otp_code} LIMIT 1`;
+      if (users.length === 0) {
+        return res.status(400).json({ success: false, message: "كود التحقق غير صحيح أو منتهي الصلاحية" });
+      }
+
+      await sql`UPDATE users SET password = ${new_password}, otp_code = NULL WHERE id = ${user_id}`;
+      res.json({ success: true, message: "تم تغيير كلمة المرور بنجاح" });
+    } catch (err) {
+      console.error("[RESET PASSWORD] Error:", err);
+      res.status(500).json({ success: false, message: "حدث خطأ في النظام" });
     }
   });
 
@@ -505,12 +614,27 @@ async function startServer() {
     
     try {
       // البحث عن المستخدم بالبريد الإلكتروني فقط أولاً للتأكد من وجوده
-      const users = await sql`SELECT * FROM users WHERE email = ${email} AND is_active = TRUE`;
+      const users = await sql`SELECT * FROM users WHERE email = ${email}`;
       const user = users[0];
       
       if (!user) {
         console.log(`[LOGIN] User not found: ${email}`);
         return res.status(401).json({ success: false, message: "البريد الإلكتروني غير مسجل" });
+      }
+
+      if (!user.is_phone_verified && user.role !== 'admin' && user.role !== 'principal') {
+        console.log(`[LOGIN] User phone not verified: ${email}`);
+        return res.status(403).json({ success: false, message: "لم يتم توثيق رقم الجوال. يرجى إكمال التسجيل." });
+      }
+
+      if (user.status === 'PENDING') {
+        console.log(`[LOGIN] User pending approval: ${email}`);
+        return res.status(403).json({ success: false, message: "حسابك بانتظار اعتماد الإدارة" });
+      }
+
+      if (!user.is_active) {
+        console.log(`[LOGIN] User is inactive: ${email}`);
+        return res.status(403).json({ success: false, message: "حسابك موقوف، يرجى مراجعة الإدارة" });
       }
 
       if (user.password !== password) {
@@ -525,6 +649,111 @@ async function startServer() {
       res.json({ success: true, user: { ...user, assigned_grades: grades } });
     } catch (err) {
       console.error("[LOGIN] Error:", err);
+      res.status(500).json({ success: false, message: "حدث خطأ في السيرفر" });
+    }
+  });
+
+  app.post("/api/register", async (req, res) => {
+    const { name, national_id, phone_number, email, password, role } = req.body;
+    
+    try {
+      // Generate 4-digit OTP
+      const otp_code = Math.floor(1000 + Math.random() * 9000).toString();
+
+      // Check if email or national_id already exists
+      const existingUser = await sql`SELECT * FROM users WHERE email = ${email} OR national_id = ${national_id}`;
+      if (existingUser.length > 0) {
+        const user = existingUser[0];
+        // If user exists but phone is not verified, update their OTP and allow them to continue
+        if (!user.is_phone_verified) {
+          const result = await sql`
+            UPDATE users 
+            SET name = ${name}, phone_number = ${phone_number}, password = ${password}, role = ${role}, otp_code = ${otp_code}
+            WHERE id = ${user.id}
+            RETURNING id, name, email
+          `;
+          return res.json({ 
+            success: true, 
+            user: result[0], 
+            otp_code: otp_code,
+            message: "تم تحديث البيانات، يرجى إدخال كود التحقق" 
+          });
+        } else {
+          return res.status(400).json({ success: false, message: "البريد الإلكتروني أو رقم الهوية مسجل ومفعل مسبقاً" });
+        }
+      }
+      
+      const result = await sql`
+        INSERT INTO users (name, national_id, phone_number, email, password, role, is_active, status, is_phone_verified, otp_code)
+        VALUES (${name}, ${national_id}, ${phone_number}, ${email}, ${password}, ${role}, FALSE, 'PENDING', FALSE, ${otp_code})
+        RETURNING id, name, email
+      `;
+
+      res.json({ 
+        success: true, 
+        user: result[0], 
+        otp_code: otp_code, // Added for frontend testing
+        message: "تم التسجيل بنجاح، يرجى إدخال كود التحقق" 
+      });
+    } catch (err) {
+      console.error("[REGISTER] Error:", err);
+      res.status(500).json({ success: false, message: "حدث خطأ أثناء التسجيل" });
+    }
+  });
+
+  app.post("/api/verify-otp", async (req, res) => {
+    const { email, otp_code } = req.body;
+    
+    try {
+      const users = await sql`SELECT * FROM users WHERE email = ${email}`;
+      const user = users[0];
+
+      if (!user) {
+        return res.status(404).json({ success: false, message: "المستخدم غير موجود" });
+      }
+
+      if (user.otp_code !== otp_code) {
+        return res.status(400).json({ success: false, message: "كود التحقق غير صحيح" });
+      }
+
+      await sql`
+        UPDATE users 
+        SET is_phone_verified = TRUE, otp_code = NULL 
+        WHERE id = ${user.id}
+      `;
+
+      res.json({ success: true, message: "تم توثيق الجوال بنجاح! حسابك الآن بانتظار اعتماد إدارة المدرسة للبدء بالعمل." });
+    } catch (err) {
+      console.error("[VERIFY OTP] Error:", err);
+      res.status(500).json({ success: false, message: "حدث خطأ أثناء التحقق" });
+    }
+  });
+
+  app.post("/api/parent-login", async (req, res) => {
+    const { national_id, parent_phone } = req.body;
+    console.log(`[PARENT LOGIN] Attempt for national_id: ${national_id}`);
+    
+    try {
+      const students = await sql`SELECT * FROM students WHERE national_id = ${national_id} AND parent_phone = ${parent_phone}`;
+      const student = students[0];
+      
+      if (!student) {
+        console.log(`[PARENT LOGIN] Student not found or phone mismatch: ${national_id}`);
+        return res.status(401).json({ success: false, message: "بيانات الدخول غير صحيحة، يرجى التأكد من هوية الطالب ورقم الجوال المسجل بالمدرسة" });
+      }
+
+      console.log(`[PARENT LOGIN] Success for student: ${student.name}`);
+      res.json({ success: true, user: { 
+        id: student.id, 
+        name: student.name, 
+        role: 'parent', 
+        student_id: student.id,
+        national_id: student.national_id,
+        grade: student.grade,
+        section: student.section
+      }});
+    } catch (err) {
+      console.error("[PARENT LOGIN] Error:", err);
       res.status(500).json({ success: false, message: "حدث خطأ في السيرفر" });
     }
   });
@@ -1105,8 +1334,8 @@ async function startServer() {
     const { student_id, teacher_id, type, severity, reason, teacher_notes, remedial_plan, remedial_plan_file, violation_id, applied_remedial_actions, status } = req.body;
     
     try {
-      // 1. Data Validation: Ensure at least one procedure is selected for behavior violations
-      if (type === 'behavior' && (!applied_remedial_actions || !Array.isArray(applied_remedial_actions) || applied_remedial_actions.length === 0)) {
+      // 1. Data Validation: Ensure at least one procedure is selected for behavior violations (only if it's a specific violation)
+      if (type === 'behavior' && violation_id && (!applied_remedial_actions || !Array.isArray(applied_remedial_actions) || applied_remedial_actions.length === 0)) {
         return res.status(400).json({ success: false, error: "يجب اختيار إجراء علاجي/تربوي واحد على الأقل لاعتماد الحالة نظاماً." });
       }
 
@@ -1159,16 +1388,26 @@ async function startServer() {
         VALUES (${referralId}, ${teacher_id}, ${logAction}, ${logNotes}, ${remedial_plan}, ${remedial_plan_file})
       `;
 
-      // Notify Vice Principals and Principals
+      // Smart Routing: Notify based on referral type
       const student = await sql`SELECT name FROM students WHERE id = ${student_id}`;
-      const recipients = await sql`SELECT id FROM users WHERE role IN ('vice_principal', 'principal')`;
       const teacher = await sql`SELECT name FROM users WHERE id = ${teacher_id}`;
       
+      let targetRoles = ['vice_principal', 'principal'];
+      if (type === 'academic' || type === 'psychological' || type === 'health') {
+        targetRoles = ['counselor'];
+      }
+      
+      const recipients = await sql`SELECT id, role, phone_number FROM users WHERE role = ANY(${targetRoles})`;
+      
       for (const recipient of recipients) {
-        await sql`
-          INSERT INTO notifications (sender_id, recipient_id, message, referral_id)
-          VALUES (${teacher_id}, ${recipient.id}, ${`تحويل جديد للطالب: ${student[0].name} من قبل ${teacher[0].name}`}, ${referralId})
-        `;
+        await sendNotificationWithWhatsApp(
+          1,
+          recipient.id,
+          teacher_id,
+          'تحويل طالب جديد',
+          `تم تحويل الطالب ${student[0].name} من قبل ${teacher[0].name}`,
+          referralId
+        );
       }
       
       res.json({ success: true, id: referralId });
@@ -1206,7 +1445,15 @@ async function startServer() {
         ORDER BY l.created_at DESC
       `;
 
-      res.json({ referral: referralResult[0], logs, studentReferralsCount: parseInt(studentReferralsCount[0].count) });
+      const principalResult = await sql`SELECT name FROM users WHERE role = 'principal' LIMIT 1`;
+      const principalName = principalResult.length > 0 ? principalResult[0].name : 'غير محدد';
+
+      res.json({ 
+        referral: referralResult[0], 
+        logs, 
+        studentReferralsCount: parseInt(studentReferralsCount[0].count),
+        principalName
+      });
     } catch (err) {
       console.error("Error fetching referral details:", err);
       res.status(500).json({ error: "Internal server error" });
@@ -1264,47 +1511,68 @@ async function startServer() {
       `;
 
       // Notification Logic
-      const referral = await sql`SELECT teacher_id, student_id FROM referrals WHERE id = ${referralId}`;
+      const referral = await sql`SELECT teacher_id, student_id, type FROM referrals WHERE id = ${referralId}`;
       if (referral.length === 0) return res.status(404).json({ error: "Referral not found" });
       
       const student = await sql`SELECT name FROM students WHERE id = ${referral[0].student_id}`;
       const actor = await sql`SELECT name, role FROM users WHERE id = ${user_id}`;
 
-      // 1. If evidence added by VP -> Notify Teacher
-      if (actor[0].role === 'vice_principal' && (evidence_file || evidence_text)) {
-        await sql`
-          INSERT INTO notifications (sender_id, recipient_id, message, referral_id)
-          VALUES (${user_id}, ${referral[0].teacher_id}, ${`تم إضافة شواهد جديدة لتحويل الطالب: ${student[0].name}`}, ${referralId})
-        `;
+      // 1. If evidence added by VP or Counselor -> Notify Teacher
+      if ((actor[0].role === 'vice_principal' || actor[0].role === 'counselor') && (evidence_file || evidence_text)) {
+        await sendNotificationWithWhatsApp(
+          1,
+          referral[0].teacher_id,
+          Number(user_id),
+          'إضافة شواهد',
+          `تم إضافة شواهد جديدة لتحويل الطالب: ${student[0].name}`,
+          Number(referralId)
+        );
       }
 
       // 2. If status changed to pending_counselor -> Notify Counselors
       if (status === 'pending_counselor') {
         const counselors = await sql`SELECT id FROM users WHERE role = 'counselor'`;
         for (const counselor of counselors) {
-          await sql`
-            INSERT INTO notifications (sender_id, recipient_id, message, referral_id)
-            VALUES (${user_id}, ${counselor.id}, ${`تم تصعيد حالة الطالب: ${student[0].name} للمرشد الطلابي`}, ${referralId})
-          `;
+          await sendNotificationWithWhatsApp(
+            1,
+            counselor.id,
+            Number(user_id),
+            'تصعيد حالة',
+            `تم تصعيد حالة الطالب: ${student[0].name} للمرشد الطلابي`,
+            Number(referralId)
+          );
         }
       }
 
       // 3. If status changed to returned_to_teacher -> Notify Teacher
       if (status === 'returned_to_teacher') {
-        await sql`
-          INSERT INTO notifications (sender_id, recipient_id, message, referral_id)
-          VALUES (${user_id}, ${referral[0].teacher_id}, ${`تم إرجاع تحويل الطالب: ${student[0].name} لاستكمال النواقص`}, ${referralId})
-        `;
+        await sendNotificationWithWhatsApp(
+          1,
+          referral[0].teacher_id,
+          Number(user_id),
+          'إرجاع تحويل',
+          `تم إرجاع تحويل الطالب: ${student[0].name} لاستكمال النواقص`,
+          Number(referralId)
+        );
       }
 
-      // 4. If status changed to pending_vp and actor is teacher -> Notify Vice Principals
+      // 4. If status changed to pending_vp and actor is teacher -> Notify Vice Principals (or Counselors if academic/psychological/health)
       if (status === 'pending_vp' && actor[0].role === 'teacher') {
-        const vps = await sql`SELECT id FROM users WHERE role = 'vice_principal'`;
-        for (const vp of vps) {
-          await sql`
-            INSERT INTO notifications (sender_id, recipient_id, message, referral_id)
-            VALUES (${user_id}, ${vp.id}, ${`تم استكمال النواقص وإعادة إرسال تحويل الطالب: ${student[0].name}`}, ${referralId})
-          `;
+        let targetRoles = ['vice_principal', 'principal'];
+        if (referral[0].type === 'academic' || referral[0].type === 'psychological' || referral[0].type === 'health') {
+          targetRoles = ['counselor'];
+        }
+        
+        const recipients = await sql`SELECT id FROM users WHERE role = ANY(${targetRoles})`;
+        for (const recipient of recipients) {
+          await sendNotificationWithWhatsApp(
+            1,
+            recipient.id,
+            Number(user_id),
+            'إعادة إرسال تحويل',
+            `تم استكمال النواقص وإعادة إرسال تحويل الطالب: ${student[0].name}`,
+            Number(referralId)
+          );
         }
       }
 
@@ -1346,6 +1614,118 @@ async function startServer() {
     }
   });
 
+  // SSE Clients
+  const notificationClients = new Map<string, Set<express.Response>>();
+
+  app.get("/api/notifications/stream", (req, res) => {
+    const { userId } = req.query;
+    if (!userId || typeof userId !== 'string') {
+      return res.status(400).end();
+    }
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    // Send an initial heartbeat to establish connection
+    res.write(': heartbeat\n\n');
+
+    const heartbeatInterval = setInterval(() => {
+      res.write(': heartbeat\n\n');
+    }, 30000);
+
+    if (!notificationClients.has(userId)) {
+      notificationClients.set(userId, new Set());
+    }
+    notificationClients.get(userId)!.add(res);
+
+    req.on('close', () => {
+      clearInterval(heartbeatInterval);
+      const clients = notificationClients.get(userId);
+      if (clients) {
+        clients.delete(res);
+        if (clients.size === 0) {
+          notificationClients.delete(userId);
+        }
+      }
+    });
+  });
+
+  // Helper function to send real-time notification
+  const sendRealtimeNotification = (userId: string, notification: any) => {
+    const clients = notificationClients.get(userId.toString());
+    if (clients) {
+      clients.forEach(client => {
+        client.write(`data: ${JSON.stringify(notification)}\n\n`);
+      });
+    }
+  };
+
+  // Helper function to send WhatsApp message (Mock)
+  const sendWhatsAppMessage = async (phoneNumber: string, message: string) => {
+    if (!phoneNumber) return;
+    console.log(`[WhatsApp API Mock] Sending to ${phoneNumber}: ${message}`);
+    // Here you would integrate with a real WhatsApp API provider like Twilio, Gupshup, or Meta Cloud API
+    // Example:
+    // await fetch('https://api.whatsapp.com/send', { method: 'POST', body: JSON.stringify({ to: phoneNumber, text: message }) });
+  };
+
+  const sendNotificationWithWhatsApp = async (
+    schoolId: number,
+    userId: number,
+    senderId: number,
+    title: string,
+    message: string,
+    referenceId: number
+  ) => {
+    try {
+      // 1. Insert into DB and get sender name
+      const [newNotif] = await sql`
+        WITH inserted AS (
+          INSERT INTO notifications (school_id, user_id, sender_id, title, message, reference_id)
+          VALUES (${schoolId}, ${userId}, ${senderId}, ${title}, ${message}, ${referenceId})
+          RETURNING *
+        )
+        SELECT i.*, COALESCE(u.name, 'مستخدم محذوف') as sender_name
+        FROM inserted i
+        LEFT JOIN users u ON i.sender_id = u.id
+      `;
+      
+      // 2. Send Realtime
+      sendRealtimeNotification(userId.toString(), newNotif);
+
+      // 3. Check WhatsApp Settings and User Phone
+      const userRes = await sql`SELECT role, phone_number, whatsapp_enabled FROM users WHERE id = ${userId}`;
+      if (userRes.length === 0) return;
+      const recipient = userRes[0];
+
+      const settings = await sql`SELECT key, value FROM system_settings WHERE key IN ('whatsapp_notif_enabled', 'whatsapp_notif_counselor', 'whatsapp_notif_deputy', 'whatsapp_notif_teachers')`;
+      const settingsMap = settings.reduce((acc: any, row: any) => {
+        acc[row.key] = row.value === 'true';
+        return acc;
+      }, {});
+
+      // If global WhatsApp notifications are disabled, stop here
+      if (!settingsMap['whatsapp_notif_enabled']) return;
+      
+      // If user specifically disabled WhatsApp notifications, stop here
+      if (recipient.whatsapp_enabled === false) return;
+
+      let shouldSendWhatsApp = false;
+      if (recipient.role === 'counselor' && settingsMap['whatsapp_notif_counselor']) shouldSendWhatsApp = true;
+      if (recipient.role === 'vice_principal' && settingsMap['whatsapp_notif_deputy']) shouldSendWhatsApp = true;
+      if (recipient.role === 'teacher' && settingsMap['whatsapp_notif_teachers']) shouldSendWhatsApp = true;
+
+      if (shouldSendWhatsApp && recipient.phone_number) {
+        const waMessage = `🔔 تنبيه من النظام: ${message}`;
+        await sendWhatsAppMessage(recipient.phone_number, waMessage);
+      }
+    } catch (err) {
+      console.error("Error sending notification:", err);
+    }
+  };
+
   app.get("/api/notifications", async (req, res) => {
     const { userId } = req.query;
     try {
@@ -1353,7 +1733,7 @@ async function startServer() {
         SELECT n.*, COALESCE(u.name, 'مستخدم محذوف') as sender_name
         FROM notifications n
         LEFT JOIN users u ON n.sender_id = u.id
-        WHERE n.recipient_id = ${userId}
+        WHERE n.user_id = ${userId}
         ORDER BY n.created_at DESC
         LIMIT 20
       `;
@@ -1376,10 +1756,21 @@ async function startServer() {
   app.post("/api/notifications/read-all", async (req, res) => {
     const { userId } = req.body;
     try {
-      await sql`UPDATE notifications SET is_read = TRUE WHERE recipient_id = ${userId}`;
+      await sql`UPDATE notifications SET is_read = TRUE WHERE user_id = ${userId}`;
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: "Failed to mark all notifications as read" });
+    }
+  });
+
+  app.delete("/api/notifications/:id", async (req, res) => {
+    const id = req.params.id;
+    try {
+      await sql`DELETE FROM notifications WHERE id = ${id}`;
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Failed to delete notification:", err);
+      res.status(500).json({ error: "Failed to delete notification" });
     }
   });
 
@@ -1509,7 +1900,7 @@ async function startServer() {
 
   app.get("/api/admin/users", async (req, res) => {
     try {
-      const users = await sql`SELECT id, name, email, role, is_active FROM users` as any[];
+      const users = await sql`SELECT id, name, email, role, is_active, phone_number, whatsapp_enabled, status, is_phone_verified, national_id FROM users WHERE is_phone_verified = TRUE OR role IN ('admin', 'principal')` as any[];
       const usersWithGrades = await Promise.all(users.map(async u => {
         const gradesResult = await sql`SELECT grade FROM user_grades WHERE user_id = ${u.id}`;
         const grades = gradesResult.map((g: any) => g.grade);
@@ -1518,6 +1909,21 @@ async function startServer() {
       res.json(usersWithGrades);
     } catch (err) {
       res.status(500).json({ error: "Failed to fetch users" });
+    }
+  });
+
+  app.post("/api/admin/users/:id/approve", async (req, res) => {
+    const userId = req.params.id;
+    try {
+      await sql`
+        UPDATE users 
+        SET status = 'ACTIVE', is_active = TRUE 
+        WHERE id = ${userId}
+      `;
+      res.json({ success: true, message: "تم اعتماد المستخدم بنجاح" });
+    } catch (err) {
+      console.error("[APPROVE USER] Error:", err);
+      res.status(500).json({ error: "Failed to approve user" });
     }
   });
 
@@ -1548,9 +1954,9 @@ async function startServer() {
   });
 
   app.post("/api/admin/users/:id/update", async (req, res) => {
-    const { name, email } = req.body;
+    const { name, email, phone_number, whatsapp_enabled } = req.body;
     try {
-      await sql`UPDATE users SET name = ${name}, email = ${email} WHERE id = ${req.params.id}`;
+      await sql`UPDATE users SET name = ${name}, email = ${email}, phone_number = ${phone_number || null}, whatsapp_enabled = ${whatsapp_enabled !== undefined ? whatsapp_enabled : true} WHERE id = ${req.params.id}`;
       res.json({ success: true });
     } catch (err) {
       console.error("Failed to update user:", err);
@@ -1578,7 +1984,7 @@ async function startServer() {
       await sql`UPDATE referrals SET assigned_to_id = NULL WHERE assigned_to_id = ${userId}`;
       await sql`UPDATE referral_logs SET user_id = NULL WHERE user_id = ${userId}`;
       await sql`UPDATE notifications SET sender_id = NULL WHERE sender_id = ${userId}`;
-      await sql`UPDATE notifications SET recipient_id = NULL WHERE recipient_id = ${userId}`;
+      await sql`UPDATE notifications SET user_id = NULL WHERE user_id = ${userId}`;
       await sql`UPDATE attendance_records SET teacher_id = NULL WHERE teacher_id = ${userId}`;
       await sql`UPDATE student_score_logs SET created_by_user_id = NULL WHERE created_by_user_id = ${userId}`;
       
@@ -1629,7 +2035,7 @@ async function startServer() {
         await sql`UPDATE referrals SET assigned_to_id = NULL WHERE assigned_to_id = ANY(${userIds})`;
         await sql`UPDATE referral_logs SET user_id = NULL WHERE user_id = ANY(${userIds})`;
         await sql`UPDATE notifications SET sender_id = NULL WHERE sender_id = ANY(${userIds})`;
-        await sql`UPDATE notifications SET recipient_id = NULL WHERE recipient_id = ANY(${userIds})`;
+        await sql`UPDATE notifications SET user_id = NULL WHERE user_id = ANY(${userIds})`;
         await sql`UPDATE attendance_records SET teacher_id = NULL WHERE teacher_id = ANY(${userIds})`;
         await sql`UPDATE student_score_logs SET created_by_user_id = NULL WHERE created_by_user_id = ANY(${userIds})`;
         
@@ -1654,7 +2060,7 @@ async function startServer() {
     try {
       // Delete associated logs and notifications first
       await sql`DELETE FROM referral_logs WHERE referral_id = ${referralId}`;
-      await sql`DELETE FROM notifications WHERE referral_id = ${referralId}`;
+      await sql`DELETE FROM notifications WHERE reference_id = ${referralId}`;
       await sql`DELETE FROM referrals WHERE id = ${referralId}`;
       console.log(`- Successfully deleted referral ${referralId}`);
       res.json({ success: true });
@@ -1665,13 +2071,13 @@ async function startServer() {
   });
 
   app.post("/api/admin/users/create", async (req, res) => {
-    const { name, email, password, role } = req.body;
+    const { name, email, password, role, phone_number, whatsapp_enabled } = req.body;
     try {
       const existing = await sql`SELECT * FROM users WHERE email = ${email}`;
       if (existing.length > 0) {
         return res.status(400).json({ success: false, error: "البريد الإلكتروني موجود مسبقاً" });
       }
-      await sql`INSERT INTO users (name, email, password, role) VALUES (${name}, ${email}, ${password}, ${role})`;
+      await sql`INSERT INTO users (name, email, password, role, phone_number, whatsapp_enabled) VALUES (${name}, ${email}, ${password}, ${role}, ${phone_number || null}, ${whatsapp_enabled !== undefined ? whatsapp_enabled : true})`;
       res.json({ success: true });
     } catch (err) {
       console.error("User creation failed:", err);
@@ -1828,7 +2234,7 @@ async function startServer() {
         if (referrals.length > 0) {
           const refIds = referrals.map((r: any) => r.id);
           // 3. Delete notifications for these referrals
-          await sql`DELETE FROM notifications WHERE referral_id = ANY(${refIds})`;
+          await sql`DELETE FROM notifications WHERE reference_id = ANY(${refIds})`;
           // 4. Delete logs for these referrals
           await sql`DELETE FROM referral_logs WHERE referral_id = ANY(${refIds})`;
           // 5. Delete the referrals
@@ -1870,7 +2276,7 @@ async function startServer() {
         if (referrals.length > 0) {
           const refIds = referrals.map((r: any) => r.id);
           // 3. Delete notifications for these referrals
-          await sql`DELETE FROM notifications WHERE referral_id = ANY(${refIds})`;
+          await sql`DELETE FROM notifications WHERE reference_id = ANY(${refIds})`;
           // 4. Delete logs for these referrals
           await sql`DELETE FROM referral_logs WHERE referral_id = ANY(${refIds})`;
           // 5. Delete the referrals
@@ -1921,7 +2327,7 @@ async function startServer() {
       if (referrals.length > 0) {
         const refIds = referrals.map((r: any) => r.id);
         // 2. Delete notifications for these referrals
-        await sql`DELETE FROM notifications WHERE referral_id = ANY(${refIds})`;
+        await sql`DELETE FROM notifications WHERE reference_id = ANY(${refIds})`;
         // 3. Delete logs for these referrals
         await sql`DELETE FROM referral_logs WHERE referral_id = ANY(${refIds})`;
         // 4. Delete the referrals

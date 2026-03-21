@@ -10,7 +10,7 @@ import {
   ShieldAlert,
   Clock
 } from 'lucide-react';
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 
 interface Student {
   id: number;
@@ -46,8 +46,14 @@ interface BehaviorRecord {
   status: string;
 }
 
-const StudentProfile: React.FC = () => {
-  const { id } = useParams();
+interface StudentProfileProps {
+  studentId?: string | number;
+  isReadOnly?: boolean;
+}
+
+const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly = false }) => {
+  const { id: paramId } = useParams();
+  const id = studentId || paramId;
   const { user } = useAuth();
   const navigate = useNavigate();
   
@@ -99,15 +105,17 @@ const StudentProfile: React.FC = () => {
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-20">
-      <div className="flex items-center justify-between">
-        <button 
-          onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-slate-500 hover:text-primary transition-colors font-bold"
-        >
-          <ArrowRight size={20} />
-          <span>العودة</span>
-        </button>
-      </div>
+      {!isReadOnly && (
+        <div className="flex items-center justify-between">
+          <button 
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-2 text-slate-500 hover:text-primary transition-colors font-bold"
+          >
+            <ArrowRight size={20} />
+            <span>العودة</span>
+          </button>
+        </div>
+      )}
 
       {/* Student Header Card */}
       <motion.div 
@@ -198,8 +206,8 @@ const StudentProfile: React.FC = () => {
                           {referrals.map(referral => (
                             <tr 
                               key={referral.id} 
-                              onClick={() => navigate(`/dashboard/referral/${referral.id}`)}
-                              className="border-b border-slate-50 last:border-0 hover:bg-slate-50 cursor-pointer transition-colors"
+                              onClick={() => !isReadOnly && navigate(`/dashboard/referral/${referral.id}`)}
+                              className={`border-b border-slate-50 last:border-0 transition-colors ${!isReadOnly ? 'hover:bg-slate-50 cursor-pointer' : ''}`}
                             >
                               <td className="p-4">{new Date(referral.created_at).toLocaleDateString('ar-SA')}</td>
                               <td className="p-4">{referral.teacher_name}</td>
@@ -219,8 +227,8 @@ const StudentProfile: React.FC = () => {
                       {referrals.map(referral => (
                         <div 
                           key={referral.id}
-                          onClick={() => navigate(`/dashboard/referral/${referral.id}`)}
-                          className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-3 cursor-pointer hover:border-primary/30 transition-colors"
+                          onClick={() => !isReadOnly && navigate(`/dashboard/referral/${referral.id}`)}
+                          className={`bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-3 transition-colors ${!isReadOnly ? 'cursor-pointer hover:border-primary/30' : ''}`}
                         >
                           <div className="flex justify-between items-start">
                             <div className="flex items-center gap-2">

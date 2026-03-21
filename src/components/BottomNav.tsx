@@ -10,7 +10,7 @@ import {
   ClipboardList,
   Users
 } from 'lucide-react';
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 
 const BottomNav: React.FC = () => {
   const { user } = useAuth();

@@ -1,20 +1,293 @@
 import { apiFetch } from '../utils/api';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../App';
-import { ShieldCheck, Lock, Mail, ChevronRight, User as UserIcon } from 'lucide-react';
-import { motion } from 'motion/react';
+import { useAuth } from '../context/AuthContext';
+import { ShieldCheck, Lock, Mail, ChevronRight, User as UserIcon, ArrowRight, X, Phone } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import Logo from '../components/Logo';
+
+const ForgotPasswordModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+  const [step, setStep] = useState<'identifier' | 'otp' | 'new_password' | 'success'>('identifier');
+  const [identifier, setIdentifier] = useState('');
+  const [otp, setOtp] = useState(['', '', '', '']);
+  const [newPassword, setNewPassword] = useState('');
+  const [userId, setUserId] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+
+  // Reset state when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setStep('identifier');
+      setIdentifier('');
+      setOtp(['', '', '', '']);
+      setNewPassword('');
+      setError('');
+      setUserId(null);
+    }
+  }, [isOpen]);
+
+  const handleIdentifierSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const res = await apiFetch('/api/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setUserId(data.user_id);
+        setPhoneNumber(data.phone_number);
+        
+        // Send WhatsApp message
+        try {
+          const otpMessage = `مرحباً بك في منصة المدرسة.\nكود استعادة كلمة المرور الخاص بك هو: *${data.otp_code}*\nيرجى إدخاله لإكمال العملية.`;
+          const waResponse = await apiFetch('/api/whatsapp/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phoneNumber: data.phone_number, message: otpMessage })
+          });
+          const waData = await waResponse.json();
+          if (!waResponse.ok || !waData.success) {
+            setError("⚠️ تعذر إرسال كود التحقق. يرجى التأكد من ربط الواتساب.");
+            setLoading(false);
+            return;
+          }
+          setStep('otp');
+        } catch (err) {
+          setError("🔌 خطأ في الاتصال بالخادم أثناء إرسال الرسالة.");
+        }
+      } else {
+        setError(data.message || 'لم يتم العثور على حساب');
+      }
+    } catch (err) {
+      setError('حدث خطأ في الاتصال');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOtpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const otpCode = otp.join('');
+    if (otpCode.length !== 4) {
+      setError('يرجى إدخال كود التحقق كاملاً');
+      return;
+    }
+    setError('');
+    setLoading(true);
+    try {
+      const res = await apiFetch('/api/verify-forgot-password-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, otp_code: otpCode })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setStep('new_password');
+      } else {
+        setError(data.message || 'كود التحقق غير صحيح');
+      }
+    } catch (err) {
+      setError('حدث خطأ في الاتصال');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword.length < 6) {
+      setError('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+      return;
+    }
+    setError('');
+    setLoading(true);
+    try {
+      const res = await apiFetch('/api/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, otp_code: otp.join(''), new_password: newPassword })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setStep('success');
+      } else {
+        setError(data.message || 'حدث خطأ أثناء تغيير كلمة المرور');
+      }
+    } catch (err) {
+      setError('حدث خطأ في الاتصال');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden relative"
+      >
+        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+          <h3 className="text-xl font-bold text-slate-800">استعادة كلمة المرور</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-red-500 transition-colors">
+            <X size={24} />
+          </button>
+        </div>
+
+        <div className="p-6">
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-xl text-sm font-medium border border-red-100">
+              {error}
+            </div>
+          )}
+
+          {step === 'identifier' && (
+            <form onSubmit={handleIdentifierSubmit} className="space-y-4">
+              <p className="text-slate-600 text-sm mb-4">أدخل رقم الجوال أو البريد الإلكتروني المسجل في النظام لإرسال كود التحقق عبر الواتساب.</p>
+              <div className="relative">
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">
+                  <UserIcon size={20} />
+                </div>
+                <input
+                  type="text"
+                  placeholder="رقم الجوال أو البريد الإلكتروني"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pr-12 pl-4 text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={loading || !identifier}
+                className="w-full bg-primary hover:bg-primary-dark text-white py-3 rounded-xl font-bold transition-all disabled:opacity-70 flex justify-center items-center"
+              >
+                {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : 'إرسال كود التحقق'}
+              </button>
+            </form>
+          )}
+
+          {step === 'otp' && (
+            <form onSubmit={handleOtpSubmit} className="space-y-6 text-center">
+              <p className="text-slate-600 text-sm mb-4">تم إرسال كود التحقق إلى الرقم {phoneNumber}</p>
+              <div className="flex justify-center gap-3 dir-ltr">
+                {otp.map((digit, index) => (
+                  <input
+                    key={index}
+                    id={`f-otp-${index}`}
+                    type="text"
+                    maxLength={1}
+                    value={digit}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val.length > 1 || !/^\d*$/.test(val)) return;
+                      const newOtp = [...otp];
+                      newOtp[index] = val;
+                      setOtp(newOtp);
+                      if (val && index < 3) document.getElementById(`f-otp-${index + 1}`)?.focus();
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Backspace' && !otp[index] && index > 0) {
+                        document.getElementById(`f-otp-${index - 1}`)?.focus();
+                      }
+                    }}
+                    className="w-12 h-12 text-center text-xl font-bold bg-slate-50 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                    autoFocus={index === 0}
+                  />
+                ))}
+              </div>
+              <button
+                type="submit"
+                disabled={loading || otp.join('').length !== 4}
+                className="w-full bg-primary hover:bg-primary-dark text-white py-3 rounded-xl font-bold transition-all disabled:opacity-70 flex justify-center items-center"
+              >
+                {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : 'تأكيد الكود'}
+              </button>
+            </form>
+          )}
+
+          {step === 'new_password' && (
+            <form onSubmit={handlePasswordSubmit} className="space-y-4">
+              <p className="text-slate-600 text-sm mb-4">أدخل كلمة المرور الجديدة.</p>
+              <div className="relative">
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">
+                  <Lock size={20} />
+                </div>
+                <input
+                  type="password"
+                  placeholder="كلمة المرور الجديدة"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pr-12 pl-4 text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-left dir-ltr"
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={loading || newPassword.length < 6}
+                className="w-full bg-primary hover:bg-primary-dark text-white py-3 rounded-xl font-bold transition-all disabled:opacity-70 flex justify-center items-center"
+              >
+                {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : 'حفظ كلمة المرور'}
+              </button>
+            </form>
+          )}
+
+          {step === 'success' && (
+            <div className="text-center py-4">
+              <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <ShieldCheck size={32} />
+              </div>
+              <h3 className="text-xl font-bold text-slate-800 mb-2">تم تغيير كلمة المرور بنجاح</h3>
+              <p className="text-slate-600 mb-6">يمكنك الآن تسجيل الدخول باستخدام كلمة المرور الجديدة.</p>
+              <button
+                onClick={onClose}
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-bold transition-all"
+              >
+                العودة لتسجيل الدخول
+              </button>
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  );
+};
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
   
-  const { login } = useAuth();
+  const { user, login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    if ((location.state as any)?.openForgotModal) {
+      setIsForgotModalOpen(true);
+      // Clean up state so it doesn't reopen on refresh
+      window.history.replaceState({}, document.title);
+    }
+  }, [location]);
+
+  useEffect(() => {
+    if (user?.role === 'parent') {
+      navigate('/parent-portal');
+    } else if (user) {
+      navigate('/dashboard');
+    }
+  }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,15 +316,7 @@ const Login: React.FC = () => {
         // Smart Routing based on role
         let from = (location.state as any)?.from?.pathname;
         if (!from || from === '/') {
-          if (data.user.role === 'super_admin') {
-            from = '/dashboard';
-          } else if (data.user.role === 'admin' || data.user.role === 'vice_principal' || data.user.role === 'principal' || data.user.role === 'counselor') {
-            from = '/vp-radar';
-          } else if (data.user.role === 'teacher') {
-            from = '/teacher-dashboard';
-          } else {
-            from = '/dashboard';
-          }
+          from = '/dashboard';
         }
         navigate(from, { replace: true });
       } else {
@@ -97,7 +362,14 @@ const Login: React.FC = () => {
       </div>
 
       {/* Right Side: Login Form */}
-      <div className="md:w-1/2 flex items-center justify-center p-8 md:p-16 bg-bg-light">
+      <div className="md:w-1/2 flex items-center justify-center p-8 md:p-16 bg-bg-light relative">
+        <button 
+          onClick={() => navigate('/')}
+          className="absolute top-6 left-6 text-slate-400 hover:text-primary transition-colors flex items-center gap-1 text-sm font-bold z-10"
+        >
+          <span>الرئيسية</span>
+          <ArrowRight size={16} className="rotate-180" />
+        </button>
         <div className="max-w-md w-full">
           <div className="mb-10 flex flex-col items-center text-center">
             <img 
@@ -174,10 +446,20 @@ const Login: React.FC = () => {
             </form>
 
             <div className="mt-12 pt-8 border-t border-slate-100 text-center space-y-4">
-              <div className="flex items-center justify-center gap-4">
-                <button className="text-xs font-bold text-slate-400 hover:text-primary transition-colors">إنشاء حساب</button>
+              <div className="flex flex-col gap-4 items-center">
+                <button 
+                  type="button"
+                  onClick={() => navigate('/parent-login')}
+                  className="text-sm font-bold text-primary hover:text-indigo-600 transition-colors flex items-center gap-2 bg-primary/5 px-4 py-2 rounded-xl"
+                >
+                  <UserIcon size={16} />
+                  <span>دخول ولي الأمر</span>
+                </button>
+              </div>
+              <div className="flex items-center justify-center gap-4 mt-4">
+                <button type="button" onClick={() => navigate('/register')} className="text-xs font-bold text-slate-400 hover:text-primary transition-colors">إنشاء حساب</button>
                 <div className="w-1 h-1 bg-slate-300 rounded-full"></div>
-                <button className="text-xs font-bold text-slate-400 hover:text-primary transition-colors">نسيت كلمة المرور</button>
+                <button type="button" onClick={() => setIsForgotModalOpen(true)} className="text-xs font-bold text-slate-400 hover:text-primary transition-colors">نسيت كلمة المرور</button>
               </div>
               <div className="text-[10px] text-slate-400 space-y-1">
                 <p>© 2026 نظام تحويل الطلاب الذكي. جميع الحقوق محفوظة.</p>
@@ -187,6 +469,12 @@ const Login: React.FC = () => {
           </motion.div>
         </div>
       </div>
+      
+      <AnimatePresence>
+        {isForgotModalOpen && (
+          <ForgotPasswordModal isOpen={isForgotModalOpen} onClose={() => setIsForgotModalOpen(false)} />
+        )}
+      </AnimatePresence>
     </div>
   );
 };

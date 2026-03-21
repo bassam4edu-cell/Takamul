@@ -2,7 +2,7 @@ import { apiFetch } from '../utils/api';
 import React, { useEffect, useState, useMemo } from 'react';
 import { Printer, ArrowRight, ChevronRight, ChevronLeft, MessageCircle } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 import { useMessageLog } from '../context/MessageLogContext';
 
 const DailyAbsenceReport: React.FC = React.memo(() => {
@@ -12,6 +12,8 @@ const DailyAbsenceReport: React.FC = React.memo(() => {
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [principalName, setPrincipalName] = useState('مدير المدرسة');
+  const [absenceTemplate, setAbsenceTemplate] = useState("المكرم ولي أمر الطالب {اسم_الطالب}، نود إشعاركم بغياب ابنكم اليوم {التاريخ} عن {الحصة}. إدارة {اسم_المدرسة}.");
+  const [schoolName, setSchoolName] = useState('ثانوية أم القرى');
   const [periodFilter, setPeriodFilter] = useState<string>('');
   const itemsPerPage = 15;
   const [reportNumber] = useState(Math.floor(Math.random() * 1000000));
@@ -50,6 +52,12 @@ const DailyAbsenceReport: React.FC = React.memo(() => {
           if (settingsJson.principal_name) {
             setPrincipalName(settingsJson.principal_name);
           }
+          if (settingsJson.absence_template) {
+            setAbsenceTemplate(settingsJson.absence_template);
+          }
+          if (settingsJson.school_name) {
+            setSchoolName(settingsJson.school_name);
+          }
         }
       } catch (err) {
         console.error(err);
@@ -66,23 +74,21 @@ const DailyAbsenceReport: React.FC = React.memo(() => {
 
   const sendWhatsAppMessage = async (phoneNumber: string, studentName: string, period: number) => {
     try {
-      const instanceId = localStorage.getItem('greenapi_instance_id');
-      const token = localStorage.getItem('greenapi_token');
-
-      if (!instanceId || !token) {
-        return { 
-          success: false, 
-          code: 'MISSING_WHATSAPP_CREDENTIALS', 
-          message: 'بيانات الربط مفقودة. يرجى إعداد خدمة الواتساب من شاشة إعدادات الرسائل.' 
-        };
-      }
+      const currentDate = new Date().toLocaleDateString('ar-SA');
+      const periodName = period ? `الحصة ${period}` : 'غير محدد';
+      
+      const finalMessage = absenceTemplate
+        .replace(/{اسم_الطالب}/g, studentName)
+        .replace(/{التاريخ}/g, currentDate)
+        .replace(/{الحصة}/g, periodName)
+        .replace(/{اسم_المدرسة}/g, schoolName);
 
       const response = await apiFetch('/api/whatsapp/send', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ phoneNumber, studentName, instanceId, token, period })
+        body: JSON.stringify({ phoneNumber, studentName, period, message: finalMessage })
       });
       
       const data = await response.json();
@@ -96,7 +102,7 @@ const DailyAbsenceReport: React.FC = React.memo(() => {
           recipient: studentName,
           recipientPhone: phoneNumber,
           messageType: '🛑 إشعار غياب',
-          messageText: `إشعار غياب للطالب ${studentName} الحصة ${period}`,
+          messageText: finalMessage,
           status: 'failed'
         });
         
@@ -107,7 +113,7 @@ const DailyAbsenceReport: React.FC = React.memo(() => {
         recipient: studentName,
         recipientPhone: phoneNumber,
         messageType: '🛑 إشعار غياب',
-        messageText: `إشعار غياب للطالب ${studentName} الحصة ${period}`,
+        messageText: finalMessage,
         status: 'success'
       });
 
@@ -231,22 +237,23 @@ const DailyAbsenceReport: React.FC = React.memo(() => {
       </div>
 
       {/* Printable Area */}
-      <div className="max-w-4xl mx-auto bg-white p-8 md:p-12 shadow-sm border border-slate-200 rounded-2xl print:shadow-none print:border-none print:p-0">
+      <div className="max-w-4xl mx-auto bg-white p-8 md:p-12 shadow-sm border border-slate-200 rounded-2xl print:shadow-none print:border-none print:p-0 print-report font-sans" dir="rtl">
         
         {/* Print Header (الكليشة) */}
-        <div className="hidden print:flex justify-between items-start border-b-2 border-black pb-4 mb-4">
-          <div className="text-right text-sm font-bold text-black">
-            <p>المملكة العربية السعودية</p>
-            <p>وزارة التعليم</p>
-            <p>الإدارة العامة للتعليم بمنطقة الرياض</p>
-            <p>ثانوية أم القرى</p>
+        <div className="hidden print:flex justify-between items-start border-b-2 border-black pb-4 mb-8">
+          <div className="text-right space-y-1">
+            <p className="text-sm font-black">المملكة العربية السعودية</p>
+            <p className="text-sm font-black">وزارة التعليم</p>
+            <p className="text-sm font-black">الإدارة العامة للتعليم بمنطقة الرياض</p>
+            <p className="text-sm font-black">مدرسة ثانوية أم القرى</p>
           </div>
-          <div className="text-center font-bold text-lg flex-1 text-black">
-            التقرير اليومي للغياب
+          <div className="text-center">
+            <img src="https://upload.wikimedia.org/wikipedia/ar/thumb/a/a3/Ministry_of_Education_%28Saudi_Arabia%29_Logo.svg/1200px-Ministry_of_Education_%28Saudi_Arabia%29_Logo.svg.png" alt="شعار الوزارة" className="w-20 h-auto mx-auto grayscale opacity-80" />
           </div>
-          <div className="text-left text-sm font-bold text-black">
-            <p>تاريخ التقرير: {dateStr}</p>
-            <p>رقم التقرير: {reportNumber}</p>
+          <div className="text-right space-y-1 text-sm font-bold">
+            <p>الرقم: {reportNumber}</p>
+            <p>التاريخ: {dateStr}</p>
+            <p>المرفقات: ....................</p>
           </div>
         </div>
 
@@ -279,6 +286,11 @@ const DailyAbsenceReport: React.FC = React.memo(() => {
             <p>التاريخ: {dateStr}</p>
           </div>
         </div>
+
+        <h1 className="hidden print:block text-xl font-black text-center mb-8 underline underline-offset-8">
+          تقرير الغياب والتأخر اليومي
+          {new URLSearchParams(location.search).get('grade') && ` - ${new URLSearchParams(location.search).get('grade')} / ${new URLSearchParams(location.search).get('section')}`}
+        </h1>
 
         {/* UI Table (Paginated) */}
         <div className="print:hidden">
@@ -443,14 +455,16 @@ const DailyAbsenceReport: React.FC = React.memo(() => {
         </table>
 
         {/* Print Footer (التوقيعات الديناميكية) */}
-        <div className="hidden print:flex justify-between mt-12 pt-8 text-black">
-          <div className="text-right">
-            <p className="font-bold">وكيل شؤون الطلاب</p>
-            <p className="font-bold mt-2">الاسم: {user?.name || 'غير محدد'}</p>
+        <div className="hidden print:grid mt-16 print-grid grid-cols-2 gap-8 text-center page-break-inside-avoid">
+          <div className="space-y-8">
+            <p className="print-label">وكيل شؤون الطلاب</p>
+            <div className="h-px bg-black w-3/4 mx-auto"></div>
+            <p className="text-sm font-bold">الاسم: {user?.name || 'غير محدد'}</p>
           </div>
-          <div className="text-left">
-            <p className="font-bold">مدير المدرسة</p>
-            <p className="font-bold mt-2">الاسم: {principalName}</p>
+          <div className="space-y-8">
+            <p className="print-label">مدير المدرسة</p>
+            <div className="h-px bg-black w-3/4 mx-auto"></div>
+            <p className="text-sm font-bold">الاسم: {principalName}</p>
           </div>
         </div>
 

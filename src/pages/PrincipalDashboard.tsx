@@ -29,7 +29,7 @@ import {
   Pie
 } from 'recharts';
 import { Referral } from '../types';
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 

@@ -1,6 +1,6 @@
 import { apiFetch } from '../utils/api';
 import React, { useState, useEffect, useMemo } from 'react';
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 import { CheckCircle2, XCircle, Clock, Save, Lock, Users, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 

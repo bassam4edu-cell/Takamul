@@ -17,8 +17,9 @@ import {
   Users,
   X
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 
 interface Violation {
   id: number;
@@ -42,6 +43,7 @@ interface Student {
 
 const BehavioralViolations: React.FC = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'record' | 'dictionary'>('record');
   const [violations, setViolations] = useState<Violation[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
@@ -89,11 +91,14 @@ const BehavioralViolations: React.FC = () => {
   const activeProcedures = selectedFormViolation ? [
     recommendedStep,
     ...(selectedFormViolation.procedures.general || []).filter(proc => {
-      if (proc.includes('1919') || proc.includes('مركز البلاغات')) return needs1919;
-      if (proc.includes('الجهات الأمنية')) return needsSecurity;
-      if (proc.includes('الهلال الأحمر') || proc.includes('مركز صحي')) return needsAmbulance;
+      if (proc.includes('1919') || proc.includes('مركز البلاغات')) return false;
+      if (proc.includes('الجهات الأمنية')) return false;
+      if (proc.includes('الهلال الأحمر') || proc.includes('مركز صحي')) return false;
       return true; // Keep any other general procedures if they exist
-    })
+    }),
+    ...(needs1919 ? ["التواصل مباشرة مع مركز تلقي البلاغات (1919) للتبليغ عن حالات الإيذاء."] : []),
+    ...(needsSecurity ? ["تبليغ الجهات الأمنية المختصة فور وقوع المشكلة."] : []),
+    ...(needsAmbulance ? ["استدعاء الهلال الأحمر لنقل الطالب المصاب إلى أقرب مركز صحي (إذا تطلب الأمر)."] : [])
   ] : [];
 
   const activeProceduresText = activeProcedures.join(' ');
@@ -177,7 +182,7 @@ const BehavioralViolations: React.FC = () => {
     return matchesSearch && matchesCategory;
   }).slice(0, 5);
 
-  const handleRecordViolation = async () => {
+  const handleRecordViolation = async (templateId?: number) => {
     if (!selectedStudent || !selectedFormViolation) return;
     
     setSubmitting(true);
@@ -199,16 +204,21 @@ const BehavioralViolations: React.FC = () => {
       });
 
       if (res.ok) {
-        setSuccess(true);
-        setTimeout(() => {
-          setSuccess(false);
-          setStep(1);
-          setSelectedStudent(null);
-          setSelectedFormViolation(null);
-          setNotes('');
-          setStudentSearch('');
-          setFormViolationSearch('');
-        }, 3000);
+        const data = await res.json();
+        if (typeof templateId === 'number') {
+          navigate(`/print/${templateId}/${data.id}`);
+        } else {
+          setSuccess(true);
+          setTimeout(() => {
+            setSuccess(false);
+            setStep(1);
+            setSelectedStudent(null);
+            setSelectedFormViolation(null);
+            setNotes('');
+            setStudentSearch('');
+            setFormViolationSearch('');
+          }, 3000);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -602,7 +612,9 @@ const BehavioralViolations: React.FC = () => {
                           </li>
                         );
                       })}
-                      {selectedFormViolation?.procedures.general.map((proc, i) => (
+                      {selectedFormViolation?.procedures.general
+                        .filter(proc => !proc.includes('الهلال الأحمر') && !proc.includes('الجهات الأمنية') && !proc.includes('1919') && !proc.includes('مركز البلاغات'))
+                        .map((proc, i) => (
                         <li key={`gen-${i}`} className="p-4 rounded-2xl border bg-transparent border-transparent text-slate-600">
                           <span className="leading-relaxed">{proc}</span>
                         </li>
@@ -618,14 +630,14 @@ const BehavioralViolations: React.FC = () => {
                     </h4>
                     <div className="space-y-4">
                       {needsPledge && (
-                        <button className="w-full py-5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-2xl text-sm font-black flex items-center justify-center gap-3 border border-slate-200 transition-all shadow-sm">
+                        <button onClick={() => handleRecordViolation(1)} className="w-full py-5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-2xl text-sm font-black flex items-center justify-center gap-3 border border-slate-200 transition-all shadow-sm">
                           <span className="text-xl">🖨️</span>
                           <span>طباعة التعهد السلوكي</span>
                         </button>
                       )}
                       
                       {needsParent && (
-                        <button className="w-full py-5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-2xl text-sm font-black flex items-center justify-center gap-3 border border-slate-200 transition-all shadow-sm">
+                        <button onClick={() => handleRecordViolation(2)} className="w-full py-5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-2xl text-sm font-black flex items-center justify-center gap-3 border border-slate-200 transition-all shadow-sm">
                           <span className="text-xl">🖨️</span>
                           <span>طباعة إشعار ولي الأمر</span>
                         </button>
@@ -642,35 +654,35 @@ const BehavioralViolations: React.FC = () => {
                       )}
 
                       {needs1919 && (
-                        <button className="w-full py-5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-2xl text-sm font-black flex items-center justify-center gap-3 border border-rose-200 transition-all shadow-sm">
+                        <button onClick={() => handleRecordViolation(15)} className="w-full py-5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-2xl text-sm font-black flex items-center justify-center gap-3 border border-rose-200 transition-all shadow-sm">
                           <span className="text-xl">🚨</span>
                           <span>نموذج إبلاغ 1919</span>
                         </button>
                       )}
 
                       {needsSecurity && (
-                        <button className="w-full py-5 bg-slate-800 hover:bg-slate-900 text-white rounded-2xl text-sm font-black flex items-center justify-center gap-3 border border-slate-700 transition-all shadow-sm">
+                        <button onClick={() => handleRecordViolation(14)} className="w-full py-5 bg-slate-800 hover:bg-slate-900 text-white rounded-2xl text-sm font-black flex items-center justify-center gap-3 border border-slate-700 transition-all shadow-sm">
                           <span className="text-xl">🚓</span>
                           <span>نموذج إبلاغ الجهات الأمنية</span>
                         </button>
                       )}
 
                       {needsAmbulance && (
-                        <button className="w-full py-5 bg-red-50 hover:bg-red-100 text-red-700 rounded-2xl text-sm font-black flex items-center justify-center gap-3 border border-red-200 transition-all shadow-sm">
+                        <button onClick={() => window.open('tel:997')} className="w-full py-5 bg-red-50 hover:bg-red-100 text-red-700 rounded-2xl text-sm font-black flex items-center justify-center gap-3 border border-red-200 transition-all shadow-sm">
                           <span className="text-xl">🚑</span>
                           <span>استدعاء الهلال الأحمر (997)</span>
                         </button>
                       )}
 
                       {needsCommittee && (
-                        <button className="w-full py-5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-2xl text-sm font-black flex items-center justify-center gap-3 border border-amber-200 transition-all shadow-sm">
+                        <button onClick={() => handleRecordViolation(11)} className="w-full py-5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-2xl text-sm font-black flex items-center justify-center gap-3 border border-amber-200 transition-all shadow-sm">
                           <span className="text-xl">👥</span>
                           <span>محضر اجتماع لجنة التوجيه</span>
                         </button>
                       )}
 
                       {needsOfficial && (
-                        <button className="w-full py-5 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-2xl text-sm font-black flex items-center justify-center gap-3 border border-purple-200 transition-all shadow-sm">
+                        <button onClick={() => handleRecordViolation(13)} className="w-full py-5 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-2xl text-sm font-black flex items-center justify-center gap-3 border border-purple-200 transition-all shadow-sm">
                           <span className="text-xl">📄</span>
                           <span>محضر الرفع الرسمي لإدارة التعليم</span>
                         </button>
@@ -697,7 +709,7 @@ const BehavioralViolations: React.FC = () => {
                       <span>تراجع</span>
                     </button>
                     <button
-                      onClick={handleRecordViolation}
+                      onClick={() => handleRecordViolation()}
                       disabled={submitting}
                       className={`flex-1 py-4 rounded-2xl font-black text-sm transition-all flex items-center justify-center gap-3 shadow-sm ${
                         submitting

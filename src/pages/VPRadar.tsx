@@ -1,6 +1,6 @@
 import { apiFetch } from '../utils/api';
 import React, { useState, useEffect, useMemo } from 'react';
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 import { useMessageLog } from '../context/MessageLogContext';
 import { CheckCircle2, XCircle, Clock, Save, UserCheck, AlertCircle, Printer, Filter, Calendar, MessageSquare, AlertTriangle, Search, Hourglass, Trash2, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -54,6 +54,22 @@ const VPRadar: React.FC = () => {
   const [resetting, setResetting] = useState(false);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
   const [bulkPresentConfig, setBulkPresentConfig] = useState<{grade: string, section: string} | null>(null);
+  const [absenceTemplate, setAbsenceTemplate] = useState("المكرم ولي أمر الطالب {اسم_الطالب}، نود إشعاركم بغياب ابنكم اليوم {التاريخ} عن {الحصة}. إدارة {اسم_المدرسة}.");
+  const [schoolName, setSchoolName] = useState('ثانوية أم القرى');
+
+  useEffect(() => {
+    apiFetch('/api/settings')
+      .then(res => res.json())
+      .then(data => {
+        if (data.absence_template) {
+          setAbsenceTemplate(data.absence_template);
+        }
+        if (data.school_name) {
+          setSchoolName(data.school_name);
+        }
+      })
+      .catch(console.error);
+  }, []);
 
   // Helper to get current period data
   const currentPeriodData = useMemo(() => {
@@ -500,23 +516,21 @@ const VPRadar: React.FC = () => {
 
   const sendWhatsAppMessage = async (phoneNumber: string, studentName: string) => {
     try {
-      const instanceId = localStorage.getItem('greenapi_instance_id');
-      const token = localStorage.getItem('greenapi_token');
-
-      if (!instanceId || !token) {
-        return { 
-          success: false, 
-          code: 'MISSING_WHATSAPP_CREDENTIALS', 
-          message: 'بيانات الربط مفقودة. يرجى إعداد خدمة الواتساب من شاشة إعدادات الرسائل.' 
-        };
-      }
+      const currentDate = new Date().toLocaleDateString('ar-SA');
+      const periodName = selectedPeriod ? `الحصة ${selectedPeriod}` : 'غير محدد';
+      
+      const finalMessage = absenceTemplate
+        .replace(/{اسم_الطالب}/g, studentName)
+        .replace(/{التاريخ}/g, currentDate)
+        .replace(/{الحصة}/g, periodName)
+        .replace(/{اسم_المدرسة}/g, schoolName);
 
       const response = await apiFetch('/api/whatsapp/send', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ phoneNumber, studentName, instanceId, token, period: selectedPeriod })
+        body: JSON.stringify({ phoneNumber, studentName, period: selectedPeriod, message: finalMessage })
       });
       
       const data = await response.json();
@@ -530,7 +544,7 @@ const VPRadar: React.FC = () => {
           recipient: studentName,
           recipientPhone: phoneNumber,
           messageType: '🛑 إشعار غياب',
-          messageText: `إشعار غياب للطالب ${studentName}`,
+          messageText: finalMessage,
           status: 'failed'
         });
         
@@ -541,7 +555,7 @@ const VPRadar: React.FC = () => {
         recipient: studentName,
         recipientPhone: phoneNumber,
         messageType: '🛑 إشعار غياب',
-        messageText: `إشعار غياب للطالب ${studentName}`,
+        messageText: finalMessage,
         status: 'success'
       });
 
@@ -659,23 +673,27 @@ const VPRadar: React.FC = () => {
       `}</style>
       
       {/* Print Views (Only visible when printing) */}
-      <div id="printable-report" className="hidden print:block w-full bg-white text-black">
+      <div id="printable-report" className="hidden print:block w-full bg-white text-black print-report font-sans" dir="rtl">
         {selectedReportType === 'excused_form' && selectedStudentForReport ? (
           <div className="p-4" dir="rtl">
-            <div className="flex justify-between items-start mb-8 border-b-2 border-black pb-4">
-              <div className="text-right font-bold leading-relaxed">
-                <p>المملكة العربية السعودية</p>
-                <p>وزارة التعليم</p>
-                <p>المنطقة: إدارة التعليم بمحافظة الخرج</p>
-                <p>المدرسة: ثانوية أم القرى</p>
+            <div className="flex justify-between items-start border-b-2 border-black pb-4 mb-8">
+              <div className="text-right space-y-1">
+                <p className="text-sm font-black">المملكة العربية السعودية</p>
+                <p className="text-sm font-black">وزارة التعليم</p>
+                <p className="text-sm font-black">الإدارة العامة للتعليم بمنطقة الرياض</p>
+                <p className="text-sm font-black">مدرسة ثانوية أم القرى</p>
               </div>
-              <div className="text-left font-bold leading-relaxed" dir="ltr">
-                <p>Kingdom of Saudi Arabia</p>
-                <p>Ministry of Education</p>
+              <div className="text-center">
+                <img src="https://upload.wikimedia.org/wikipedia/ar/thumb/a/a3/Ministry_of_Education_%28Saudi_Arabia%29_Logo.svg/1200px-Ministry_of_Education_%28Saudi_Arabia%29_Logo.svg.png" alt="شعار الوزارة" className="w-20 h-auto mx-auto grayscale opacity-80" />
+              </div>
+              <div className="text-right space-y-1 text-sm font-bold">
+                <p>الرقم: ....................</p>
+                <p>التاريخ: {new Date().toLocaleDateString('ar-SA')}</p>
+                <p>المرفقات: ....................</p>
               </div>
             </div>
 
-            <h1 className="text-center mb-8 report-title">نموذج إجراءات الغياب (بعذر / بدون عذر)</h1>
+            <h1 className="text-xl font-black text-center mb-8 underline underline-offset-8">نموذج إجراءات الغياب (بعذر / بدون عذر)</h1>
 
             <div className="mb-8 font-bold flex flex-wrap gap-8 bg-gray-50 p-4 border border-black rounded-lg print:bg-gray-50 print:border-black">
               <p>اسم الطالب: <span className="font-bold">{selectedStudentForReport.name}</span> | المرحلة: الثانوية | الصف: {selectedStudentForReport.grade} - {selectedStudentForReport.section}</p>
@@ -716,33 +734,48 @@ const VPRadar: React.FC = () => {
               </tbody>
             </table>
 
-            <div className="flex justify-between items-center mt-16 font-bold">
-              <p>مدير المدرسة: .......</p>
-              <p>التوقيع: .......</p>
-              <p>التاريخ: .......</p>
+            <div className="mt-16 print-grid grid-cols-3 gap-8 text-center page-break-inside-avoid">
+              <div className="space-y-8">
+                <p className="print-label">مدير المدرسة</p>
+                <div className="h-px bg-black w-3/4 mx-auto"></div>
+                <p className="text-sm font-bold">التوقيع: .................</p>
+              </div>
+              <div className="space-y-8">
+                <p className="print-label">توقيع الطالب</p>
+                <div className="h-px bg-black w-3/4 mx-auto"></div>
+                <p className="text-sm font-bold">التوقيع: .................</p>
+              </div>
+              <div className="space-y-8">
+                <p className="print-label">توقيع ولي الأمر</p>
+                <div className="h-px bg-black w-3/4 mx-auto"></div>
+                <p className="text-sm font-bold">التوقيع: .................</p>
+              </div>
             </div>
           </div>
         ) : (
           <div className="p-4" dir="rtl">
-            <div className="grid grid-cols-3 gap-4 mb-6 border-b-2 border-black pb-4">
-              <div className="text-right font-bold leading-relaxed">
-                <p>المملكة العربية السعودية</p>
-                <p>وزارة التعليم</p>
-                <p>إدارة التعليم بمحافظة الخرج</p>
+            <div className="flex justify-between items-start border-b-2 border-black pb-4 mb-8">
+              <div className="text-right space-y-1">
+                <p className="text-sm font-black">المملكة العربية السعودية</p>
+                <p className="text-sm font-black">وزارة التعليم</p>
+                <p className="text-sm font-black">الإدارة العامة للتعليم بمنطقة الرياض</p>
+                <p className="text-sm font-black">مدرسة ثانوية أم القرى</p>
               </div>
-              <div className="text-center flex flex-col items-center justify-center">
-                <h2 className="report-title underline underline-offset-4">
-                  {selectedReportType === 'daily' ? 'تقرير الغياب اليومي' :
-                   selectedReportType === 'warnings_3' ? 'تقرير إنذارات الغياب (3 أيام فأكثر)' :
-                   'تقرير إنذارات الغياب (5 أيام فأكثر)'}
-                </h2>
+              <div className="text-center">
+                <img src="https://upload.wikimedia.org/wikipedia/ar/thumb/a/a3/Ministry_of_Education_%28Saudi_Arabia%29_Logo.svg/1200px-Ministry_of_Education_%28Saudi_Arabia%29_Logo.svg.png" alt="شعار الوزارة" className="w-20 h-auto mx-auto grayscale opacity-80" />
               </div>
-              <div className="text-left font-bold leading-relaxed">
-                <p>المدرسة: ثانوية أم القرى بالخرج</p>
+              <div className="text-right space-y-1 text-sm font-bold">
+                <p>الرقم: {Math.floor(Math.random() * 10000)}</p>
                 <p>التاريخ: {date}</p>
-                <p>رقم التقرير: {Math.floor(Math.random() * 10000)}</p>
+                <p>المرفقات: ....................</p>
               </div>
             </div>
+
+            <h1 className="text-xl font-black text-center mb-8 underline underline-offset-8">
+              {selectedReportType === 'daily' ? 'تقرير الغياب اليومي' :
+               selectedReportType === 'warnings_3' ? 'تقرير إنذارات الغياب (3 أيام فأكثر)' :
+               'تقرير إنذارات الغياب (5 أيام فأكثر)'}
+            </h1>
 
             <table className="print-table mb-12">
               <thead>
@@ -767,14 +800,16 @@ const VPRadar: React.FC = () => {
               </tbody>
             </table>
 
-            <div className="flex justify-between items-center mt-16 font-bold">
-              <div className="text-right">
-                <p>وكيل شؤون الطلاب</p>
-                <p className="mt-2">الاسم: {user?.name || 'غير محدد'}</p>
+            <div className="mt-16 print-grid grid-cols-2 gap-8 text-center page-break-inside-avoid">
+              <div className="space-y-8">
+                <p className="print-label">وكيل شؤون الطلاب</p>
+                <div className="h-px bg-black w-3/4 mx-auto"></div>
+                <p className="text-sm font-bold">الاسم: {user?.name || 'غير محدد'}</p>
               </div>
-              <div className="text-left">
-                <p>مدير المدرسة</p>
-                <p className="mt-2">الاسم: {principalName}</p>
+              <div className="space-y-8">
+                <p className="print-label">مدير المدرسة</p>
+                <div className="h-px bg-black w-3/4 mx-auto"></div>
+                <p className="text-sm font-bold">الاسم: {principalName}</p>
               </div>
             </div>
           </div>
@@ -1045,7 +1080,7 @@ const VPRadar: React.FC = () => {
             return (
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6 text-sm text-slate-600 print:hidden">
                 <div className="flex items-center gap-2">
-                  <span>👤 تم التحضير بواسطة:</span>
+                  <span>������ تم التحضير بواسطة:</span>
                   <span className="font-bold text-slate-800">{c.teacher_name || 'غير محدد'}</span>
                 </div>
                 <div className="flex items-center gap-6">

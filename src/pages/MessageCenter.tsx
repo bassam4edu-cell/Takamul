@@ -1,14 +1,15 @@
 import { apiFetch } from '../utils/api';
 import React, { useState, useEffect } from 'react';
 import { useMessageLog } from '../context/MessageLogContext';
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 import { Search, RotateCcw, Send, Users, CheckCircle2, XCircle, Clock, MessageSquare, AlertCircle, Settings } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import MessageSettings from './MessageSettings';
+import SystemTemplates from './SystemTemplates';
 
 const MessageCenter: React.FC = () => {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'compose' | 'archive' | 'settings'>('compose');
+  const [activeTab, setActiveTab] = useState<'compose' | 'archive' | 'settings' | 'templates'>('compose');
   const { globalMessageLog, addLogEntry } = useMessageLog();
   
   // Compose State
@@ -69,21 +70,12 @@ const MessageCenter: React.FC = () => {
 
   const sendWhatsAppMessage = async (phoneNumber: string, text: string) => {
     try {
-      const instanceId = localStorage.getItem('greenapi_instance_id');
-      const token = localStorage.getItem('greenapi_token');
-
-      if (!instanceId || !token) {
-        return { success: false, error: 'MISSING_CREDENTIALS' };
-      }
-
       const response = await apiFetch('/api/whatsapp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           phoneNumber, 
-          message: text,
-          instanceId, 
-          token 
+          message: text
         })
       });
       
@@ -247,6 +239,19 @@ const MessageCenter: React.FC = () => {
           >
             إعدادات الرسائل
             {activeTab === 'settings' && (
+              <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-1 bg-primary rounded-t-full" />
+            )}
+          </button>
+        )}
+        {(user?.role === 'admin' || user?.role === 'principal') && (
+          <button
+            onClick={() => setActiveTab('templates')}
+            className={`pb-4 px-4 font-bold text-lg transition-colors relative ${
+              activeTab === 'templates' ? 'text-primary' : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            ⚙️ قوالب النظام
+            {activeTab === 'templates' && (
               <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-1 bg-primary rounded-t-full" />
             )}
           </button>
@@ -523,6 +528,12 @@ const MessageCenter: React.FC = () => {
       {activeTab === 'settings' && user?.role === 'admin' && (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
           <MessageSettings />
+        </motion.div>
+      )}
+
+      {activeTab === 'templates' && (user?.role === 'admin' || user?.role === 'principal') && (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+          <SystemTemplates />
         </motion.div>
       )}
     </div>

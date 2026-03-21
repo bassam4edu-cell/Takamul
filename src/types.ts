@@ -1,14 +1,22 @@
-export type Role = 'teacher' | 'vice_principal' | 'counselor' | 'admin' | 'principal' | 'super_admin';
+export type Role = 'teacher' | 'vice_principal' | 'counselor' | 'admin' | 'principal' | 'super_admin' | 'parent';
 
 export interface User {
   id: number;
   name: string;
-  email: string;
+  email?: string;
   role: Role;
   school_id?: number;
   schoolId?: number;
   assigned_grades?: string[];
   is_active?: boolean;
+  phone_number?: string;
+  whatsapp_enabled?: boolean;
+  student_id?: number;
+  national_id?: string;
+  grade?: string;
+  section?: string;
+  status?: string;
+  is_phone_verified?: boolean;
 }
 
 export interface Student {

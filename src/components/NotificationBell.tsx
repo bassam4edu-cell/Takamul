@@ -2,13 +2,14 @@ import { apiFetch } from '../utils/api';
 import React, { useState, useEffect, useRef } from 'react';
 import { Bell, Check, Clock, AlertCircle, ChevronLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface Notification {
-  id: number;
+  id: string;
+  title: string;
   message: string;
-  referral_id: number;
+  reference_id: number;
   is_read: boolean;
   created_at: string;
   sender_name: string;
@@ -36,8 +37,26 @@ const NotificationBell: React.FC = () => {
 
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 30000); // Poll every 30 seconds
-    return () => clearInterval(interval);
+    
+    if (!user) return;
+
+    // Real-time updates using Server-Sent Events (SSE)
+    // This achieves the exact same real-time behavior as Supabase channels
+    // but works natively with our existing Neon Postgres + Express backend
+    const eventSource = new EventSource(`/api/notifications/stream?userId=${user.id}`);
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const newNotification = JSON.parse(event.data);
+        setNotifications(prev => [newNotification, ...prev]);
+      } catch (err) {
+        console.error('Error parsing real-time notification', err);
+      }
+    };
+
+    return () => {
+      eventSource.close();
+    };
   }, [user]);
 
   useEffect(() => {
@@ -67,7 +86,9 @@ const NotificationBell: React.FC = () => {
       }
     }
     setIsOpen(false);
-    navigate(`/referral/${notification.referral_id}`);
+    if (notification.reference_id) {
+      navigate(`/referral/${notification.reference_id}`);
+    }
   };
 
   const markAllAsRead = async () => {
@@ -132,23 +153,26 @@ const NotificationBell: React.FC = () => {
                 </div>
               ) : (
                 <div className="divide-y divide-slate-50">
-                  {notifications.map((n) => (
+                  {notifications.slice(0, 5).map((n) => (
                     <button
                       key={n.id}
                       onClick={() => handleNotificationClick(n)}
-                      className={`w-full p-5 text-right flex gap-4 hover:bg-slate-50 transition-colors group relative ${!n.is_read ? 'bg-primary/5' : ''}`}
+                      className={`w-full p-5 text-right flex gap-4 hover:bg-slate-100 transition-colors group relative ${!n.is_read ? 'bg-slate-50' : 'bg-white'}`}
                     >
                       {!n.is_read && (
                         <div className="absolute right-0 top-0 bottom-0 w-1 bg-primary" />
                       )}
                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${!n.is_read ? 'bg-primary text-white' : 'bg-slate-100 text-slate-400'}`}>
-                        {n.message.includes('جديد') ? <AlertCircle size={18} /> : <Clock size={18} />}
+                        {n.title.includes('جديد') ? <AlertCircle size={18} /> : <Clock size={18} />}
                       </div>
                       <div className="flex-1 space-y-1">
                         <p className={`text-xs leading-relaxed ${!n.is_read ? 'font-black text-slate-900' : 'font-bold text-slate-500'}`}>
+                          {n.title}
+                        </p>
+                        <p className="text-[10px] text-slate-500 line-clamp-2">
                           {n.message}
                         </p>
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between pt-1">
                           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
                             {new Date(n.created_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}
                           </span>

@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ChevronRight, 
+  ChevronDown,
   Clock, 
   CheckCircle2, 
   AlertCircle, 
@@ -31,7 +32,7 @@ import {
   ArrowUpRight
 } from 'lucide-react';
 import { Referral, ReferralLog } from '../types';
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface Violation {
@@ -45,18 +46,46 @@ interface Violation {
   };
 }
 
+const getDegreeColor = (degree: number) => {
+  switch (degree) {
+    case 1: return 'border-emerald-200 bg-emerald-50/30 text-emerald-800';
+    case 2: return 'border-orange-200 bg-orange-50/30 text-orange-800';
+    case 3: return 'border-rose-200 bg-rose-50/30 text-rose-800';
+    case 4: return 'border-purple-200 bg-purple-50/30 text-purple-800';
+    case 5: return 'border-slate-800 bg-slate-50 text-slate-800';
+    case 6: return 'border-red-600 bg-red-50 text-red-800';
+    default: return 'border-slate-200 bg-slate-50 text-slate-800';
+  }
+};
+
+const getDegreeHeaderColor = (degree: number) => {
+  switch (degree) {
+    case 1: return 'bg-emerald-100/50 hover:bg-emerald-100';
+    case 2: return 'bg-orange-100/50 hover:bg-orange-100';
+    case 3: return 'bg-rose-100/50 hover:bg-rose-100';
+    case 4: return 'bg-purple-100/50 hover:bg-purple-100';
+    case 5: return 'bg-slate-200/50 hover:bg-slate-200';
+    case 6: return 'bg-red-200/50 hover:bg-red-200';
+    default: return 'bg-slate-100/50 hover:bg-slate-100';
+  }
+};
+
 const ReferralDetails: React.FC = () => {
   const { id } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
   
-  const [data, setData] = useState<{ referral: Referral, logs: ReferralLog[], studentReferralsCount: number } | null>(null);
+  const [data, setData] = useState<{ referral: Referral, logs: ReferralLog[], studentReferralsCount: number, principalName: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [violations, setViolations] = useState<Violation[]>([]);
   const [violationSearch, setViolationSearch] = useState('');
   const [selectedViolationId, setSelectedViolationId] = useState('');
   const [appliedActions, setAppliedActions] = useState<string[]>([]);
-  const [activeProcTab, setActiveProcTab] = useState<'administrative' | 'general'>('administrative');
+  const [applyViolation, setApplyViolation] = useState(false);
+  const [isViolationModalOpen, setIsViolationModalOpen] = useState(false);
+  const [tempSelectedViolationId, setTempSelectedViolationId] = useState('');
+  const [tempAppliedActions, setTempAppliedActions] = useState<string[]>([]);
+  const [openAccordion, setOpenAccordion] = useState<'administrative' | 'general' | null>('administrative');
   const [actionNotes, setActionNotes] = useState('');
   const [meetingDate, setMeetingDate] = useState('');
   const [meetingTime, setMeetingTime] = useState('');
@@ -184,6 +213,7 @@ const ReferralDetails: React.FC = () => {
           const d = await refRes.json().catch(() => null);
           if (d) {
             setData(d);
+            setApplyViolation(d.referral.type === 'behavior' || d.referral.type === 'attendance');
             setEditForm({
               type: d.referral.type,
               severity: d.referral.severity,
@@ -375,9 +405,13 @@ const ReferralDetails: React.FC = () => {
       return;
     }
 
-    // Validation for Vice Principal: Evidence is mandatory for forwarding or closing
-    if (user?.role === 'vice_principal' && (status === 'pending_counselor' || status === 'resolved')) {
-      if (!evidenceFile) {
+    // Validation for Vice Principal: Evidence is mandatory for closing, or forwarding if applying violation
+    if (user?.role === 'vice_principal') {
+      if (status === 'resolved' && !evidenceFile) {
+        alert('يجب رفع شاهد/دليل الإجراء (ملف توثيقي) قبل إتمام هذه العملية');
+        return;
+      }
+      if (status === 'pending_counselor' && applyViolation && !evidenceFile) {
         alert('يجب رفع شاهد/دليل الإجراء (ملف توثيقي) قبل إتمام هذه العملية');
         return;
       }
@@ -395,8 +429,8 @@ const ReferralDetails: React.FC = () => {
           status,
           evidence_file: evidenceFile || (user?.role === 'teacher' ? editForm.remedial_plan_file : null),
           evidence_text: user?.role === 'teacher' ? editForm.remedial_plan : null,
-          violation_id: selectedViolationId || null,
-          applied_remedial_actions: appliedActions
+          violation_id: applyViolation ? (selectedViolationId || null) : null,
+          applied_remedial_actions: applyViolation ? appliedActions : []
         }),
       });
 
@@ -457,95 +491,15 @@ const ReferralDetails: React.FC = () => {
     </div>
   );
 
-  const { referral, logs, studentReferralsCount } = data;
+  const { referral, logs, studentReferralsCount, principalName } = data;
   const isFirstReferral = studentReferralsCount === 1;
 
   const vpName = logs.find(l => l.user_role === 'vice_principal')?.user_name || '........................';
   const counselorName = logs.find(l => l.user_role === 'counselor')?.user_name || '........................';
-  const principalName = logs.find(l => l.user_role === 'principal' || l.user_role === 'admin')?.user_name || '........................';
+  const isCreatedByVP = logs.length > 0 && logs[logs.length - 1].user_role === 'vice_principal';
 
   return (
     <div className="max-w-6xl mx-auto space-y-10 pb-12">
-      <style dangerouslySetInnerHTML={{ __html: `
-        @media print {
-          .no-print, aside, header, button, .sticky, .no-print-area {
-            display: none !important;
-          }
-          body, main {
-            background: white !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            direction: rtl;
-            height: auto !important;
-            overflow: visible !important;
-          }
-          * {
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-          ::-webkit-scrollbar {
-            display: none !important;
-          }
-          .max-w-6xl {
-            max-width: 100% !important;
-            width: 100% !important;
-          }
-          .sts-card {
-            box-shadow: none !important;
-            border: none !important;
-            padding: 0 !important;
-          }
-          .print-report {
-            display: block !important;
-            padding: 5mm;
-            transform: scale(0.95);
-            transform-origin: top center;
-          }
-          .print-section {
-            margin-bottom: 15px;
-            border: 1px solid #000;
-            page-break-inside: avoid;
-          }
-          .print-section-header {
-            background-color: #f1f5f9 !important;
-            border-bottom: 1px solid #000;
-            padding: 6px 10px;
-            font-weight: bold;
-            font-size: 13px;
-          }
-          .print-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-          }
-          .print-cell {
-            padding: 6px 10px;
-            border-bottom: 1px solid #eee;
-            border-left: 1px solid #eee;
-            font-size: 11px;
-          }
-          .print-cell:last-child {
-            border-left: none;
-          }
-          .print-label {
-            font-weight: bold;
-            color: #475569;
-            margin-left: 6px;
-          }
-          .print-full-cell {
-            padding: 10px;
-            font-size: 11px;
-            line-height: 1.5;
-          }
-          @page {
-            size: A4 portrait;
-            margin: 0.5cm;
-          }
-        }
-        .print-report {
-          display: none;
-        }
-      `}} />
-
       {/* Official Print Report (Visible only on print) */}
       <div className="print-report font-sans">
         {/* Print Header - Text Only */}
@@ -565,7 +519,7 @@ const ReferralDetails: React.FC = () => {
 
         {/* Section 1: Student Data */}
         <div className="print-section">
-          <div className="print-section-header">القسم الأول: بيانات الطالب الأساسية</div>
+          <div className="print-section-header">بيانات الطالب الأساسية</div>
           <div className="print-grid">
             <div className="print-cell"><span className="print-label">اسم الطالب:</span> {referral.student_name}</div>
             <div className="print-cell"><span className="print-label">رقم الهوية:</span> {referral.student_national_id || 'غير مسجل'}</div>
@@ -577,49 +531,57 @@ const ReferralDetails: React.FC = () => {
         </div>
 
         {/* Section 2: Teacher Statement */}
-        <div className="print-section">
-          <div className="print-section-header">القسم الثاني: اجراءات المعلم</div>
-          <div className="print-grid">
-            <div className="print-cell"><span className="print-label">اسم المعلم:</span> {referral.teacher_name}</div>
-            <div className="print-cell"><span className="print-label">نوع المشكلة:</span> {
-              referral.type === 'behavior' ? 'سلوكية' : 
-              referral.type === 'academic' ? 'ضعف دراسي' : 
-              referral.type === 'attendance' ? 'غياب وتأخر' : 'زي مدرسي'
-            }</div>
+        {!isCreatedByVP && (
+          <div className="print-section">
+            <div className="print-section-header">اجراءات المعلم</div>
+            <div className="print-grid">
+              <div className="print-cell"><span className="print-label">اسم المعلم:</span> {referral.teacher_name}</div>
+              <div className="print-cell"><span className="print-label">نوع المشكلة:</span> {
+                referral.type === 'behavior' ? 'سلوكية' : 
+                referral.type === 'academic' ? 'ضعف دراسي' : 
+                referral.type === 'attendance' ? 'غياب وتأخر' : 'زي مدرسي'
+              }</div>
+            </div>
+            <div className="print-full-cell">
+              <p className="font-bold mb-1">وصف المشكلة والإجراءات المتخذة:</p>
+              <p>{referral.reason}</p>
+              {referral.remedial_plan && (
+                <div className="mt-3 p-2 bg-slate-50 border border-slate-200 rounded">
+                  <p className="font-bold mb-1 text-xs">الخطة العلاجية المسجلة:</p>
+                  <p className="text-xs">{referral.remedial_plan}</p>
+                </div>
+              )}
+            </div>
           </div>
-          <div className="print-full-cell">
-            <p className="font-bold mb-1">وصف المشكلة والإجراءات المتخذة:</p>
-            <p>{referral.reason}</p>
-            {referral.remedial_plan && (
-              <div className="mt-3 p-2 bg-slate-50 border border-slate-200 rounded">
-                <p className="font-bold mb-1 text-xs">الخطة العلاجية المسجلة:</p>
-                <p className="text-xs">{referral.remedial_plan}</p>
+        )}
+
+        {/* NEW Section: Resolution & Violations (if resolved or closed) */}
+        {['resolved', 'closed', 'pending_counselor', 'scheduled_meeting'].includes(referral.status) && (
+          <div className="print-section">
+            <div className="print-section-header">القرار الإداري وإجراءات الوكيل</div>
+            {referral.violation_name && (
+              <div className="print-grid">
+                <div className="print-cell"><span className="print-label">التصنيف النهائي للمخالفة:</span> {referral.violation_name}</div>
+                <div className="print-cell"><span className="print-label">الدرجة:</span> {referral.violation_degree}</div>
+                <div className="print-cell"><span className="print-label">النقاط المخصومة:</span> {referral.violation_points} نقطة</div>
+              </div>
+            )}
+            {referral.applied_remedial_actions && referral.applied_remedial_actions.length > 0 && (
+              <div className="print-full-cell border-t border-slate-200">
+                <p className="font-bold mb-1">الإجراءات المُنفذة:</p>
+                <ul className="list-disc list-inside text-xs pr-2">
+                  {referral.applied_remedial_actions.map((action, idx) => (
+                    <li key={idx}>{action}</li>
+                  ))}
+                </ul>
               </div>
             )}
           </div>
-        </div>
-
-        {/* Section 3: Vice Principal Actions */}
-        <div className="print-section">
-          <div className="print-section-header">القسم الثالث: اجراءات وكيل شؤوون الطلاب</div>
-          {logs.filter(l => l.user_role === 'vice_principal').length > 0 ? (
-            logs.filter(l => l.user_role === 'vice_principal').map((log, idx) => (
-              <div key={idx} className="border-b border-slate-200 last:border-0 p-3">
-                <div className="flex justify-between mb-1 text-[10px] font-bold text-slate-500">
-                  <span>الإجراء: {log.action}</span>
-                  <span>التاريخ: {new Date(log.created_at).toLocaleString('ar-SA')}</span>
-                </div>
-                <p className="text-xs leading-relaxed">{log.notes}</p>
-              </div>
-            ))
-          ) : (
-            <div className="p-3 text-xs text-slate-400 italic">لا توجد إجراءات مسجلة للوكيل بعد.</div>
-          )}
-        </div>
+        )}
 
         {/* Section 4: Counselor Intervention */}
         <div className="print-section">
-          <div className="print-section-header">القسم الرابع: اجراءات الموجه الطلابي</div>
+          <div className="print-section-header">اجراءات الموجه الطلابي</div>
           {logs.filter(l => l.user_role === 'counselor').length > 0 ? (
             logs.filter(l => l.user_role === 'counselor').map((log, idx) => (
               <div key={idx} className="border-b border-slate-200 last:border-0 p-3">
@@ -636,30 +598,28 @@ const ReferralDetails: React.FC = () => {
         </div>
 
         {/* Print Signatures - Dynamic */}
-        <div className="mt-12 grid grid-cols-4 gap-4 text-center">
-          <div className="space-y-6">
-            <p className="font-black text-xs underline underline-offset-4">المعلم</p>
-            <p className="text-[10px] font-bold">{referral.teacher_name}</p>
-            <div className="h-8"></div>
-            <p className="text-[10px]">التوقيع: ....................</p>
+        <div className={`mt-16 print-grid ${isCreatedByVP ? 'grid-cols-3' : 'grid-cols-4'} gap-8 text-center page-break-inside-avoid`}>
+          {!isCreatedByVP && (
+            <div className="space-y-8">
+              <p className="print-label">المعلم</p>
+              <div className="h-px bg-black w-3/4 mx-auto"></div>
+              <p className="text-sm font-bold">التوقيع: .................</p>
+            </div>
+          )}
+          <div className="space-y-8">
+            <p className="print-label">وكيل شؤون الطلاب</p>
+            <div className="h-px bg-black w-3/4 mx-auto"></div>
+            <p className="text-sm font-bold">التوقيع: .................</p>
           </div>
-          <div className="space-y-6">
-            <p className="font-black text-xs underline underline-offset-4">وكيل شؤون الطلاب</p>
-            <p className="text-[10px] font-bold">{vpName}</p>
-            <div className="h-8"></div>
-            <p className="text-[10px]">التوقيع: ....................</p>
+          <div className="space-y-8">
+            <p className="print-label">الموجه الطلابي</p>
+            <div className="h-px bg-black w-3/4 mx-auto"></div>
+            <p className="text-sm font-bold">التوقيع: .................</p>
           </div>
-          <div className="space-y-6">
-            <p className="font-black text-xs underline underline-offset-4">الموجه الطلابي</p>
-            <p className="text-[10px] font-bold">{counselorName}</p>
-            <div className="h-8"></div>
-            <p className="text-[10px]">التوقيع: ....................</p>
-          </div>
-          <div className="space-y-6">
-            <p className="font-black text-xs underline underline-offset-4">مدير المدرسة</p>
-            <p className="text-[10px] font-bold">{principalName}</p>
-            <div className="h-8"></div>
-            <p className="text-[10px]">التوقيع: ....................</p>
+          <div className="space-y-8">
+            <p className="print-label">مدير المدرسة</p>
+            <div className="h-px bg-black w-3/4 mx-auto"></div>
+            <p className="text-sm font-bold">التوقيع: .................</p>
           </div>
         </div>
 
@@ -667,7 +627,6 @@ const ReferralDetails: React.FC = () => {
           نظام تحويل الطلاب الذكي - ثانوية أم القرى
         </div>
       </div>
-
 
       <div className="no-print space-y-10">
         {/* First Referral Warning for VP */}
@@ -698,8 +657,12 @@ const ReferralDetails: React.FC = () => {
             <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">تفاصيل التحويل #{referral.id}</h1>
             <div className="flex flex-wrap items-center gap-3 text-[10px] md:text-sm text-slate-500 mt-1 font-bold">
               <span className="flex items-center gap-1.5"><Clock size={14} /> {new Date(referral.created_at).toLocaleString('ar-SA')}</span>
-              <span className="hidden md:block w-1 h-1 bg-slate-300 rounded-full" />
-              <span className="flex items-center gap-1.5"><User size={14} /> {referral.teacher_name}</span>
+              {!isCreatedByVP && (
+                <>
+                  <span className="hidden md:block w-1 h-1 bg-slate-300 rounded-full" />
+                  <span className="flex items-center gap-1.5"><User size={14} /> {referral.teacher_name}</span>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -862,19 +825,7 @@ const ReferralDetails: React.FC = () => {
                     <span className="text-rose-600 font-black">-{referral.violation_points} نقطة</span>
                   </div>
                   
-                  {referral.applied_remedial_actions && referral.applied_remedial_actions.length > 0 && (
-                    <div className="pt-4 border-t border-primary/10">
-                      <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest mb-3">الإجراءات العلاجية المنفذة من قبل المعلم:</p>
-                      <div className="flex flex-wrap gap-2">
-                        {referral.applied_remedial_actions.map((action, i) => (
-                          <span key={i} className="bg-white text-primary text-[10px] font-bold px-3 py-1.5 rounded-xl border border-primary/20 flex items-center gap-2">
-                            <CheckCircle2 size={12} />
-                            {action}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+
 
                   {/* System Recommendation for VP */}
                   {user?.role === 'vice_principal' && referral.status === 'pending_vp' && (
@@ -937,7 +888,7 @@ const ReferralDetails: React.FC = () => {
                   <div className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400">
                     <MessageSquare size={16} />
                   </div>
-                  <span>ملاحظات المعلم</span>
+                  <span>{isCreatedByVP ? 'الملاحظات' : 'ملاحظات المعلم'}</span>
                 </div>
                 {isEditing ? (
                   <textarea 
@@ -1089,6 +1040,54 @@ const ReferralDetails: React.FC = () => {
               </div>
             )}
           </div>
+
+          {/* Resolution Card */}
+          {['resolved', 'closed', 'pending_counselor', 'scheduled_meeting'].includes(referral.status) && (
+            <div className="bg-white border border-slate-200 rounded-[2rem] p-8 shadow-sm mb-8 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-2 h-full bg-slate-700" />
+              <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-3">
+                <ShieldAlert size={24} className="text-slate-700" />
+                <span>⚖️ القرار الإداري وإجراءات الوكيل</span>
+              </h3>
+              
+              <div className="space-y-6">
+                {referral.violation_name && (
+                  <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">التصنيف النهائي للمخالفة</p>
+                      <p className="text-base font-black text-slate-800">{referral.violation_name}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="bg-slate-200 text-slate-700 text-xs font-black px-3 py-1.5 rounded-xl">الدرجة {referral.violation_degree}</span>
+                      <span className="bg-rose-50 text-rose-600 text-xs font-black px-3 py-1.5 rounded-xl border border-rose-100">-{referral.violation_points} نقطة</span>
+                    </div>
+                  </div>
+                )}
+
+                {referral.applied_remedial_actions && referral.applied_remedial_actions.length > 0 && (
+                  <div>
+                    <p className="text-xs font-bold text-slate-500 mb-3">الإجراءات المُنفذة:</p>
+                    <ul className="space-y-3">
+                      {referral.applied_remedial_actions.map((action, idx) => (
+                        <li key={idx} className="flex items-start gap-3 text-sm font-bold text-slate-700">
+                          <div className="mt-0.5 text-emerald-500 bg-emerald-50 rounded-full p-0.5">
+                            <CheckCircle2 size={14} strokeWidth={3} />
+                          </div>
+                          <span className="leading-relaxed">{action}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <div className="pt-4 border-t border-slate-100">
+                  <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">
+                    {(referral.status === 'resolved' || referral.status === 'closed') ? 'تم اعتماد الإجراء وإغلاق المعاملة بواسطة:' : 'تم اتخاذ الإجراء بواسطة:'} <span className="text-slate-600">{logs.find(l => l.user_role === 'vice_principal')?.user_name || 'الوكيل'}</span> - في تاريخ: {logs.find(l => l.user_role === 'vice_principal')?.created_at ? new Date(logs.find(l => l.user_role === 'vice_principal')!.created_at).toLocaleString('ar-SA') : 'غير متوفر'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="sts-card p-10 space-y-10">
             <div className="flex items-center gap-4 text-slate-800 font-extrabold text-xl border-b border-slate-50 pb-6">
@@ -1255,242 +1254,60 @@ const ReferralDetails: React.FC = () => {
                 <>
                   <div className="space-y-4">
                     {user?.role === 'vice_principal' && !referral.violation_id && (
-                      <div className="bg-primary/5 border border-primary/10 p-6 rounded-3xl space-y-6 mb-6">
-                        <div className="flex items-center gap-3 text-primary font-black text-sm border-b border-primary/10 pb-4">
-                          <ShieldAlert size={18} />
-                          <span>تصنيف المخالفة (حسب اللائحة)</span>
-                        </div>
-                        
-                        <div className="space-y-4">
-                          <div className="relative">
-                            <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                            <input 
-                              type="text"
-                              placeholder="ابحث عن مخالفة لتصنيف الحالة..."
-                              value={violationSearch}
-                              onChange={(e) => setViolationSearch(e.target.value)}
-                              className="w-full bg-white border border-slate-200 rounded-2xl py-3 pr-11 pl-4 text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all font-bold"
-                            />
-                          </div>
-                          
-                          <select 
-                            value={selectedViolationId}
-                            onChange={(e) => {
-                              setSelectedViolationId(e.target.value);
-                              setAppliedActions([]);
+                      <div className="mb-6">
+                        {!applyViolation ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTempSelectedViolationId(selectedViolationId);
+                              setTempAppliedActions(appliedActions);
+                              setIsViolationModalOpen(true);
                             }}
-                            className="w-full bg-white border border-slate-200 rounded-2xl py-4 px-5 text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all font-bold text-slate-700"
+                            className="w-full py-4 px-6 border-2 border-slate-200 text-slate-700 font-bold rounded-2xl hover:border-slate-300 hover:bg-slate-50 transition-all flex items-center justify-center gap-3 shadow-sm"
                           >
-                            <option value="">-- اختر التصنيف الرسمي للمخالفة --</option>
-                            {filteredViolations.map(v => (
-                              <option key={v.id} value={v.id}>الدرجة {v.degree}: {v.violation_name} (-{v.deduction_points} نقاط)</option>
-                            ))}
-                          </select>
-
-                          {selectedViolationId && (
-                            <div className="bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-sm animate-in fade-in slide-in-from-top-2">
-                              <div className="flex border-b border-slate-50">
-                                <button
-                                  type="button"
-                                  onClick={() => setActiveProcTab('administrative')}
-                                  className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeProcTab === 'administrative' ? 'bg-primary text-white' : 'text-slate-400 hover:bg-slate-50'}`}
-                                >
-                                  الإجراءات النظامية
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setActiveProcTab('general')}
-                                  className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeProcTab === 'general' ? 'bg-primary text-white' : 'text-slate-400 hover:bg-slate-50'}`}
-                                >
-                                  إجراءات عامة
-                                </button>
+                            <ShieldAlert size={20} className="text-slate-500" />
+                            <span>⚖️ تطبيق إجراء من لائحة السلوك</span>
+                          </button>
+                        ) : (
+                          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm relative">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTempSelectedViolationId(selectedViolationId);
+                                setTempAppliedActions(appliedActions);
+                                setIsViolationModalOpen(true);
+                              }}
+                              className="absolute top-4 left-4 text-slate-500 hover:text-slate-700 flex items-center gap-1.5 text-xs font-bold bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 transition-colors"
+                            >
+                              <Edit2 size={14} />
+                              <span>تعديل الإجراء</span>
+                            </button>
+                            
+                            <div className="flex items-center gap-3 mb-4">
+                              <div className={`px-3 py-1 rounded-lg text-xs font-bold border ${getDegreeColor(violations.find(v => v.id === parseInt(selectedViolationId))?.degree || 1)}`}>
+                                الدرجة {violations.find(v => v.id === parseInt(selectedViolationId))?.degree}
                               </div>
-                              
-                              <div className="p-4 space-y-3 max-h-48 overflow-y-auto">
-                                {(activeProcTab === 'administrative' 
-                                  ? violations.find(v => v.id === parseInt(selectedViolationId))?.procedures.steps 
-                                  : violations.find(v => v.id === parseInt(selectedViolationId))?.procedures.general
-                                )?.map((proc, i) => {
-                                  const isRecommended = activeProcTab === 'administrative' && i === Math.min(violationOccurrence, (violations.find(v => v.id === parseInt(selectedViolationId))?.procedures.steps.length || 1) - 1);
-                                  return (
-                                    <label key={i} className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer relative overflow-hidden ${appliedActions.includes(proc) ? 'bg-primary/5 border-primary/20' : 'bg-slate-50/50 border-slate-100 hover:border-slate-200'}`}>
-                                      {isRecommended && (
-                                        <div className="absolute top-0 left-0 bg-primary text-white text-[7px] font-black px-2 py-0.5 rounded-br-lg uppercase tracking-widest">
-                                          موصى به
-                                        </div>
-                                      )}
-                                      <input 
-                                        type="checkbox"
-                                        checked={appliedActions.includes(proc)}
-                                        onChange={() => {
-                                          const current = [...appliedActions];
-                                          const idx = current.indexOf(proc);
-                                          if (idx > -1) current.splice(idx, 1);
-                                          else current.push(proc);
-                                          setAppliedActions(current);
-                                        }}
-                                        className="w-4 h-4 rounded text-primary focus:ring-primary mt-0.5"
-                                      />
-                                      <div className="flex-1">
-                                        <span className={`text-[10px] leading-relaxed font-bold ${appliedActions.includes(proc) ? 'text-primary' : 'text-slate-600'}`}>
-                                          {proc}
-                                        </span>
-                                        {isRecommended && (
-                                          <p className="text-[8px] text-primary font-black mt-0.5">يتناسب مع التكرار رقم {violationOccurrence + 1}</p>
-                                        )}
-
-                                        {/* Dynamic Action Box (Keyword Engine) */}
-                                        <AnimatePresence mode="wait">
-                                          {appliedActions.includes(proc) && (
-                                            <motion.div
-                                              initial={{ height: 0, opacity: 0 }}
-                                              animate={{ height: 'auto', opacity: 1 }}
-                                              exit={{ height: 0, opacity: 0 }}
-                                              className="overflow-hidden"
-                                            >
-                                              <div className="mt-6 p-6 bg-white rounded-[2rem] border border-slate-100 shadow-xl space-y-5 relative" onClick={(e) => e.stopPropagation()}>
-                                                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
-                                                
-                                                {(proc.includes('تعهد خطي') || proc.includes('تعهد')) && (
-                                                  <div className="flex flex-col gap-3">
-                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 px-2">
-                                                      <FileText size={12} className="text-primary" />
-                                                      <span>توثيق التعهد السلوكي</span>
-                                                    </p>
-                                                    <button className="w-full py-4 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-2xl text-xs font-black flex items-center justify-center gap-3 border border-slate-200 transition-all shadow-sm group">
-                                                      <span className="text-lg group-hover:scale-110 transition-transform">🖨️</span>
-                                                      <span>معاينة وطباعة التعهد السلوكي (1447هـ)</span>
-                                                    </button>
-                                                  </div>
-                                                )}
-
-                                                {(proc.includes('الموجه الطلابي') || proc.includes('لجنة التوجيه') || proc.includes('الموجه')) && (
-                                                  <div className="space-y-4">
-                                                    <div className="flex items-center justify-between px-2">
-                                                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                                        <Users size={14} className="text-primary" />
-                                                        <span>ملاحظات الوكيل للموجه الطلابي</span>
-                                                      </label>
-                                                      <span className="bg-primary/10 text-primary text-[8px] font-black px-2 py-0.5 rounded-full">إجراء إلزامي</span>
-                                                    </div>
-                                                    <textarea 
-                                                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-5 text-sm font-bold focus:ring-4 focus:ring-primary/10 outline-none transition-all shadow-sm min-h-[100px]"
-                                                      placeholder="اكتب مرئياتك أو أسباب التحويل للموجه هنا بالتفصيل..."
-                                                      value={actionNotes}
-                                                      onChange={(e) => setActionNotes(e.target.value)}
-                                                    />
-                                                    <div className="bg-primary/5 p-4 rounded-2xl border border-primary/10 flex items-center gap-3">
-                                                      <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-primary shadow-sm shrink-0">
-                                                        <Send size={20} />
-                                                      </div>
-                                                      <div className="flex-1">
-                                                        <p className="text-[10px] font-black text-primary">سيتم تحويل الحالة آلياً للموجه</p>
-                                                        <p className="text-[9px] text-slate-500 font-bold">عند حفظ المخالفة، ستنتقل لملف الموجه لاستكمال دراسة الحالة.</p>
-                                                      </div>
-                                                    </div>
-                                                  </div>
-                                                )}
-
-                                                {(proc.includes('ولي أمر') || proc.includes('ولي الأمر')) && (
-                                                  <div className="space-y-4">
-                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 px-2">
-                                                      <Users size={12} className="text-primary" />
-                                                      <span>التواصل مع ولي الأمر</span>
-                                                    </p>
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                      <button className="py-4 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-2xl text-xs font-black flex items-center justify-center gap-3 border border-slate-200 transition-all shadow-sm group">
-                                                        <span className="text-lg group-hover:scale-110 transition-transform">🖨️</span>
-                                                        <span>طباعة إشعار استدعاء</span>
-                                                      </button>
-                                                      <button className="py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-black flex items-center justify-center gap-3 transition-all shadow-lg shadow-emerald-600/20 group">
-                                                        <span className="text-lg group-hover:scale-110 transition-transform">📱</span>
-                                                        <span>إرسال رسالة SMS فورية</span>
-                                                      </button>
-                                                    </div>
-                                                  </div>
-                                                )}
-
-                                                {(proc.includes('مركز البلاغات') || proc.includes('1919')) && (
-                                                  <div className="p-6 bg-rose-600 rounded-[1.5rem] text-white space-y-4 shadow-xl shadow-rose-600/30">
-                                                    <div className="flex items-center gap-3 font-black text-xs uppercase tracking-widest">
-                                                      <AlertCircle size={20} className="animate-pulse" />
-                                                      <span>إجراء جسيم يتطلب الإبلاغ</span>
-                                                    </div>
-                                                    <button className="w-full py-4 bg-white text-rose-600 hover:bg-rose-50 rounded-2xl text-xs font-black flex items-center justify-center gap-3 transition-all shadow-lg">
-                                                      <span>🚨</span>
-                                                      <span>نموذج إبلاغ 1919</span>
-                                                    </button>
-                                                  </div>
-                                                )}
-
-                                                {proc.includes('الجهات الأمنية') && (
-                                                  <div className="p-6 bg-slate-800 rounded-[1.5rem] text-white space-y-4 shadow-xl shadow-slate-800/30">
-                                                    <div className="flex items-center gap-3 font-black text-xs uppercase tracking-widest">
-                                                      <AlertCircle size={20} className="animate-pulse" />
-                                                      <span>إجراء جسيم يتطلب تدخل أمني</span>
-                                                    </div>
-                                                    <button className="w-full py-4 bg-white text-slate-800 hover:bg-slate-50 rounded-2xl text-xs font-black flex items-center justify-center gap-3 transition-all shadow-lg">
-                                                      <span>🚓</span>
-                                                      <span>نموذج إبلاغ الجهات الأمنية</span>
-                                                    </button>
-                                                  </div>
-                                                )}
-
-                                                {(proc.includes('الهلال الأحمر') || proc.includes('مركز صحي')) && (
-                                                  <div className="p-6 bg-red-600 rounded-[1.5rem] text-white space-y-4 shadow-xl shadow-red-600/30">
-                                                    <div className="flex items-center gap-3 font-black text-xs uppercase tracking-widest">
-                                                      <AlertCircle size={20} className="animate-pulse" />
-                                                      <span>إجراء إسعافي</span>
-                                                    </div>
-                                                    <button className="w-full py-4 bg-white text-red-600 hover:bg-red-50 rounded-2xl text-xs font-black flex items-center justify-center gap-3 transition-all shadow-lg">
-                                                      <span>🚑</span>
-                                                      <span>استدعاء الهلال الأحمر (997)</span>
-                                                    </button>
-                                                  </div>
-                                                )}
-
-                                                {proc.includes('انعقاد لجنة التوجيه') && (
-                                                  <div className="p-6 bg-amber-500 rounded-[1.5rem] text-white space-y-4 shadow-xl shadow-amber-500/30">
-                                                    <div className="flex items-center gap-3 font-black text-xs uppercase tracking-widest">
-                                                      <AlertCircle size={20} className="animate-pulse" />
-                                                      <span>إجراء يتطلب اجتماع لجنة</span>
-                                                    </div>
-                                                    <button className="w-full py-4 bg-white text-amber-600 hover:bg-amber-50 rounded-2xl text-xs font-black flex items-center justify-center gap-3 transition-all shadow-lg">
-                                                      <span>👥</span>
-                                                      <span>محضر اجتماع لجنة التوجيه</span>
-                                                    </button>
-                                                  </div>
-                                                )}
-
-                                                {(proc.includes('إدارة التعليم') || proc.includes('مدير التعليم') || proc.includes('نقل')) && (
-                                                  <div className="p-6 bg-purple-600 rounded-[1.5rem] text-white space-y-4 shadow-xl shadow-purple-600/30">
-                                                    <div className="flex items-center gap-3 font-black text-xs uppercase tracking-widest">
-                                                      <AlertCircle size={20} className="animate-pulse" />
-                                                      <span>إجراء جسيم يتطلب الرفع الرسمي</span>
-                                                    </div>
-                                                    <p className="text-[10px] font-bold text-purple-100 leading-relaxed">
-                                                      هذا الإجراء يتطلب محضر اجتماع رسمي من لجنة التوجيه والطلاب موقع من مدير المدرسة للرفع لإدارة التعليم.
-                                                    </p>
-                                                    <button className="w-full py-4 bg-white text-purple-600 hover:bg-purple-50 rounded-2xl text-xs font-black flex items-center justify-center gap-3 transition-all shadow-lg">
-                                                      <span>📄</span>
-                                                      <span>تجهيز محضر الرفع الرسمي</span>
-                                                    </button>
-                                                  </div>
-                                                )}
-                                              </div>
-                                            </motion.div>
-                                          )}
-                                        </AnimatePresence>
-                                      </div>
-                                    </label>
-                                  );
-                                })}
-                              </div>
+                              <h4 className="font-bold text-slate-800 text-sm">
+                                {violations.find(v => v.id === parseInt(selectedViolationId))?.violation_name}
+                              </h4>
                             </div>
-                          )}
-                        </div>
+                            
+                            <div className="space-y-2">
+                              <p className="text-xs font-bold text-slate-500 mb-3">الإجراءات المحددة:</p>
+                              <ul className="space-y-2">
+                                {appliedActions.map((action, idx) => (
+                                  <li key={idx} className="flex items-start gap-2 text-sm text-slate-700">
+                                    <div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0"></div>
+                                    <span className="leading-relaxed">{action}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
+
 
                     <label className="text-[10px] font-extrabold text-slate-500 mr-1 uppercase tracking-widest">
                       {referral.status === 'scheduled_meeting' ? 'نتائج اللقاء مع ولي الأمر' : 'ملاحظات الإجراء'}
@@ -1510,7 +1327,7 @@ const ReferralDetails: React.FC = () => {
                       <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 mb-6">
                         <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
                           <Upload size={14} />
-                          {user?.role === 'vice_principal' ? 'شاهد/دليل الإجراء (إلزامي للتحويل أو الإغلاق)' : 'إرفاق مستند/مرفق إضافي (اختياري)'}
+                          {user?.role === 'vice_principal' ? (applyViolation ? 'شاهد/دليل الإجراء (إلزامي)' : 'شاهد/دليل الإجراء (إلزامي للإغلاق)') : 'إرفاق مستند/مرفق إضافي (اختياري)'}
                         </label>
                         <div className="relative border-2 border-dashed border-slate-300 rounded-xl p-4 bg-white hover:border-primary/50 transition-all text-center">
                           <input 
@@ -1533,32 +1350,34 @@ const ReferralDetails: React.FC = () => {
                       <div className="space-y-6">
                         <div className="flex flex-col gap-3">
                           <button
-                            onClick={() => handleAction('ارجاع التحويل للمعلم لاستكمال نواقص', 'returned_to_teacher')}
-                            disabled={submitting}
-                            className="w-full sts-button-accent flex items-center justify-center gap-3"
-                          >
-                            <RotateCcw size={20} />
-                            <span>إرجاع للمعلم (نواقص)</span>
-                          </button>
-                          
-                          <button
-                            onClick={() => {
-                              const needsCounselor = appliedActions.some(p => p.includes('الموجه') || p.includes('لجنة التوجيه'));
-                              handleAction(needsCounselor ? 'تحويل للموجه الطلابي' : 'إغلاق الحالة مباشرة', needsCounselor ? 'pending_counselor' : 'resolved');
-                            }}
+                            onClick={() => handleAction('تحويل للموجه الطلابي', 'pending_counselor')}
                             disabled={submitting}
                             className={`w-full py-4 text-white font-extrabold rounded-2xl transition-all flex items-center justify-center gap-3 shadow-lg ${
-                              appliedActions.some(p => p.includes('الموجه') || p.includes('لجنة التوجيه'))
-                                ? 'bg-primary hover:bg-primary/90 shadow-primary/20'
-                                : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20'
+                              !applyViolation 
+                                ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20' 
+                                : 'bg-blue-500 hover:bg-blue-600 shadow-blue-500/20'
                             }`}
                           >
-                            {appliedActions.some(p => p.includes('الموجه') || p.includes('لجنة التوجيه')) ? (
-                              <ArrowRightLeft size={20} />
-                            ) : (
-                              <CheckCircle2 size={20} />
-                            )}
-                            <span>{appliedActions.some(p => p.includes('الموجه') || p.includes('لجنة التوجيه')) ? 'حفظ وتحويل للموجه' : 'معالجة وإغلاق'}</span>
+                            <ArrowRightLeft size={20} />
+                            <span>🧭 إحالة للموجه الطلابي</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleAction('معالجة وإغلاق', 'resolved')}
+                            disabled={submitting}
+                            className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-2xl transition-all flex items-center justify-center gap-3 shadow-lg shadow-emerald-600/20"
+                          >
+                            <CheckCircle2 size={20} />
+                            <span>💾 حفظ ومعالجة وإغلاق</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleAction('ارجاع التحويل للمعلم لاستكمال نواقص', 'returned_to_teacher')}
+                            disabled={submitting}
+                            className="w-full py-4 bg-orange-100 hover:bg-orange-200 text-orange-700 font-extrabold rounded-2xl transition-all flex items-center justify-center gap-3"
+                          >
+                            <RotateCcw size={20} />
+                            <span>↩️ إرجاع للمعلم للقصور</span>
                           </button>
                         </div>
                       </div>
@@ -1856,6 +1675,181 @@ const ReferralDetails: React.FC = () => {
                 </button>
                 <button
                   onClick={() => setShowBonusModal(false)}
+                  className="w-full sm:w-auto px-6 py-3 bg-white text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-all border border-slate-200"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Violation Selection Modal */}
+        {isViolationModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsViolationModalOpen(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: "spring", duration: 0.5 }}
+              className="relative w-full max-w-3xl bg-white rounded-[2rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-primary/10 text-primary rounded-xl flex items-center justify-center">
+                    <ShieldAlert size={20} />
+                  </div>
+                  <h3 className="font-extrabold text-lg text-slate-800">اختيار المخالفة والإجراءات النظامية</h3>
+                </div>
+                <button
+                  onClick={() => setIsViolationModalOpen(false)}
+                  className="w-8 h-8 bg-white hover:bg-slate-100 text-slate-400 hover:text-slate-600 rounded-full flex items-center justify-center transition-colors shadow-sm"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="p-6 overflow-y-auto space-y-6 flex-1">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-700">تصنيف المخالفة</label>
+                  <select
+                    value={tempSelectedViolationId}
+                    onChange={(e) => {
+                      setTempSelectedViolationId(e.target.value);
+                      setTempAppliedActions([]);
+                    }}
+                    className="w-full bg-white border border-slate-200 rounded-2xl py-4 px-5 text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all font-bold text-slate-700"
+                  >
+                    <option value="">-- اختر التصنيف الرسمي للمخالفة --</option>
+                    {filteredViolations.map(v => (
+                      <option key={v.id} value={v.id}>الدرجة {v.degree}: {v.violation_name} (-{v.deduction_points} نقاط)</option>
+                    ))}
+                  </select>
+                </div>
+
+                {tempSelectedViolationId && (
+                  <div className="space-y-6 animate-in fade-in slide-in-from-top-2">
+                    {/* Administrative Procedures */}
+                    <div className="space-y-3">
+                      <h4 className="font-black text-sm text-slate-800 flex items-center gap-2">
+                        <FileText size={16} className="text-primary" />
+                        الإجراءات النظامية (حسب الدرجة {violations.find(v => v.id === parseInt(tempSelectedViolationId))?.degree})
+                      </h4>
+                      <div className="grid gap-3">
+                        {violations.find(v => v.id === parseInt(tempSelectedViolationId))?.procedures.steps.map((proc, i) => {
+                          const isRecommended = i === Math.min(violationOccurrence, (violations.find(v => v.id === parseInt(tempSelectedViolationId))?.procedures.steps.length || 1) - 1);
+                          return (
+                            <label key={i} className={`flex items-start gap-4 p-4 rounded-2xl border-2 transition-all cursor-pointer relative overflow-hidden group ${tempAppliedActions.includes(proc) ? 'bg-primary/5 border-primary' : 'bg-slate-50 border-slate-100 hover:border-slate-200 hover:bg-slate-100/50'}`}>
+                              {isRecommended && (
+                                <div className="absolute top-0 left-0 bg-primary text-white text-[8px] font-black px-3 py-1 rounded-br-xl uppercase tracking-widest shadow-sm">
+                                  موصى به
+                                </div>
+                              )}
+                              <div className="pt-1">
+                                <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors ${tempAppliedActions.includes(proc) ? 'bg-primary border-primary text-white' : 'border-slate-300 bg-white group-hover:border-primary/50'}`}>
+                                  {tempAppliedActions.includes(proc) && <CheckCircle2 size={14} strokeWidth={3} />}
+                                </div>
+                                <input
+                                  type="checkbox"
+                                  checked={tempAppliedActions.includes(proc)}
+                                  onChange={() => {
+                                    const current = [...tempAppliedActions];
+                                    const idx = current.indexOf(proc);
+                                    if (idx > -1) current.splice(idx, 1);
+                                    else current.push(proc);
+                                    setTempAppliedActions(current);
+                                  }}
+                                  className="sr-only"
+                                />
+                              </div>
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className={`text-xs font-black ${tempAppliedActions.includes(proc) ? 'text-primary' : 'text-slate-400'}`}>
+                                    إجراء {i + 1}
+                                  </span>
+                                  {isRecommended && (
+                                    <span className="text-[10px] text-primary/80 font-bold bg-primary/10 px-2 py-0.5 rounded-full">
+                                      يتناسب مع التكرار رقم {violationOccurrence + 1}
+                                    </span>
+                                  )}
+                                </div>
+                                <span className={`text-sm leading-relaxed font-bold block ${tempAppliedActions.includes(proc) ? 'text-slate-800' : 'text-slate-600'}`}>
+                                  {proc}
+                                </span>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* General Procedures */}
+                    <div className="space-y-3">
+                      <h4 className="font-black text-sm text-slate-800 flex items-center gap-2">
+                        <ShieldAlert size={16} className="text-slate-500" />
+                        إجراءات عامة مساندة
+                      </h4>
+                      <div className="grid gap-3">
+                        {violations.find(v => v.id === parseInt(tempSelectedViolationId))?.procedures.general
+                          .filter(proc => !proc.includes('الهلال الأحمر') && !proc.includes('الجهات الأمنية') && !proc.includes('1919') && !proc.includes('مركز البلاغات'))
+                          .map((proc, i) => (
+                          <label key={`gen-${i}`} className={`flex items-start gap-4 p-4 rounded-2xl border-2 transition-all cursor-pointer relative overflow-hidden group ${tempAppliedActions.includes(proc) ? 'bg-primary/5 border-primary' : 'bg-slate-50 border-slate-100 hover:border-slate-200 hover:bg-slate-100/50'}`}>
+                            <div className="pt-1">
+                              <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors ${tempAppliedActions.includes(proc) ? 'bg-primary border-primary text-white' : 'border-slate-300 bg-white group-hover:border-primary/50'}`}>
+                                {tempAppliedActions.includes(proc) && <CheckCircle2 size={14} strokeWidth={3} />}
+                              </div>
+                              <input
+                                type="checkbox"
+                                checked={tempAppliedActions.includes(proc)}
+                                onChange={() => {
+                                  const current = [...tempAppliedActions];
+                                  const idx = current.indexOf(proc);
+                                  if (idx > -1) current.splice(idx, 1);
+                                  else current.push(proc);
+                                  setTempAppliedActions(current);
+                                }}
+                                className="sr-only"
+                              />
+                            </div>
+                            <div className="flex-1">
+                              <span className={`text-sm leading-relaxed font-bold block ${tempAppliedActions.includes(proc) ? 'text-slate-800' : 'text-slate-600'}`}>
+                                {proc}
+                              </span>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-6 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row gap-3">
+                <button
+                  onClick={() => {
+                    setSelectedViolationId(tempSelectedViolationId);
+                    setAppliedActions(tempAppliedActions);
+                    if (tempSelectedViolationId) {
+                      setApplyViolation(true);
+                    } else {
+                      setApplyViolation(false);
+                    }
+                    setIsViolationModalOpen(false);
+                  }}
+                  className="w-full sm:flex-1 py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-primary/20"
+                >
+                  <CheckCircle2 size={18} />
+                  <span>اعتماد الإجراءات</span>
+                </button>
+                <button
+                  onClick={() => setIsViolationModalOpen(false)}
                   className="w-full sm:w-auto px-6 py-3 bg-white text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-all border border-slate-200"
                 >
                   إلغاء

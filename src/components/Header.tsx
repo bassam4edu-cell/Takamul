@@ -1,6 +1,6 @@
 import React from 'react';
 import { Search, User as UserIcon, Settings, HelpCircle, LogOut, Menu } from 'lucide-react';
-import { useAuth } from '../App';
+import { useAuth } from '../context/AuthContext';
 import NotificationBell from './NotificationBell';
 
 interface HeaderProps {
