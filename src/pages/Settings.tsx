@@ -205,7 +205,7 @@ const Settings: React.FC = () => {
 
       <div className="pt-8 border-t border-slate-200 flex items-center justify-between text-slate-400 text-[10px] font-bold">
         <div className="space-y-1">
-          <p>© 2026 نظام تحويل الطلاب - الإصدار 1.0.0</p>
+          <p>© 2026 بوابة تكامل - الإصدار 1.0.0</p>
           <p className="text-primary/60">برمجة: بسام غربي العنزي</p>
         </div>
         <div className="flex items-center gap-4">

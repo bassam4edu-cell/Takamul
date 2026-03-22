@@ -83,8 +83,8 @@ const ParentLogin: React.FC = () => {
             <div className="w-16 h-16 bg-primary/10 text-primary rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Shield size={32} />
             </div>
-            <h1 className="text-2xl font-black text-slate-800">بوابة ولي الأمر</h1>
-            <p className="text-slate-500 mt-2 text-sm">تسجيل الدخول لمتابعة سجل الطالب</p>
+            <h1 className="text-2xl font-black text-slate-800">تسجيل الدخول لبوابة تكامل</h1>
+            <p className="text-slate-500 mt-2 text-sm">بوابة ولي الأمر لمتابعة سجل الطالب</p>
           </div>
 
           {error && (

@@ -119,7 +119,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
         <Logo className="w-20 h-20" />
         <div className="text-center">
           <p className="text-xs font-extrabold text-primary mb-1">ثانوية أم القرى بالخرج</p>
-          <h1 className="font-extrabold text-primary text-xl leading-tight">نظام تحويل طالب</h1>
+          <h1 className="font-extrabold text-primary text-xl leading-tight">بوابة تكامل</h1>
           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Student Transfer System</p>
         </div>
       </div>

@@ -35,7 +35,24 @@ const Register: React.FC = () => {
   };
 
   const handleOtpChange = (index: number, value: string) => {
-    if (value.length > 1) return; // Only allow 1 char
+    // Handle paste or auto-fill
+    if (value.length > 1) {
+      const pastedData = value.replace(/\D/g, '').slice(0, 4);
+      if (pastedData) {
+        const newOtp = [...otp];
+        for (let i = 0; i < pastedData.length; i++) {
+          if (index + i < 4) {
+            newOtp[index + i] = pastedData[i];
+          }
+        }
+        setOtp(newOtp);
+        const nextIndex = Math.min(index + pastedData.length, 3);
+        const nextInput = document.getElementById(`otp-${nextIndex}`);
+        nextInput?.focus();
+      }
+      return;
+    }
+
     if (!/^\d*$/.test(value)) return; // Only allow digits
 
     const newOtp = [...otp];
@@ -177,7 +194,7 @@ const Register: React.FC = () => {
               <ShieldCheck size={32} />
             </div>
             <h2 className="text-2xl font-extrabold text-slate-900 mb-2">تسجيل موظف جديد</h2>
-            <p className="text-slate-500">منصة ثانوية أم القرى بالخرج</p>
+            <p className="text-slate-500">مرحباً بك في بوابة تكامل</p>
           </div>
 
           {error && (
@@ -332,7 +349,10 @@ const Register: React.FC = () => {
                       key={index}
                       id={`otp-${index}`}
                       type="text"
-                      maxLength={1}
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      autoComplete="one-time-code"
+                      maxLength={4}
                       value={digit}
                       onChange={(e) => handleOtpChange(index, e.target.value)}
                       onKeyDown={(e) => handleOtpKeyDown(index, e)}

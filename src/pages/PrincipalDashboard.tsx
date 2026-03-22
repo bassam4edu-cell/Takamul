@@ -145,7 +145,7 @@ const PrincipalDashboard: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">لوحة تحكم المدير</h1>
-          <p className="text-sm md:text-base text-slate-500 mt-1">نظرة شاملة على أداء نظام التحويل والإرشاد</p>
+          <p className="text-sm md:text-base text-slate-500 mt-1">نظرة شاملة على أداء بوابة تكامل</p>
         </div>
         <div className="flex items-center gap-3 no-print">
           <button 

@@ -185,11 +185,29 @@ const ForgotPasswordModal: React.FC<{ isOpen: boolean; onClose: () => void }> = 
                     key={index}
                     id={`f-otp-${index}`}
                     type="text"
-                    maxLength={1}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    autoComplete="one-time-code"
+                    maxLength={4}
                     value={digit}
                     onChange={(e) => {
                       const val = e.target.value;
-                      if (val.length > 1 || !/^\d*$/.test(val)) return;
+                      if (val.length > 1) {
+                        const pastedData = val.replace(/\D/g, '').slice(0, 4);
+                        if (pastedData) {
+                          const newOtp = [...otp];
+                          for (let i = 0; i < pastedData.length; i++) {
+                            if (index + i < 4) {
+                              newOtp[index + i] = pastedData[i];
+                            }
+                          }
+                          setOtp(newOtp);
+                          const nextIndex = Math.min(index + pastedData.length, 3);
+                          document.getElementById(`f-otp-${nextIndex}`)?.focus();
+                        }
+                        return;
+                      }
+                      if (!/^\d*$/.test(val)) return;
                       const newOtp = [...otp];
                       newOtp[index] = val;
                       setOtp(newOtp);
@@ -332,33 +350,32 @@ const Login: React.FC = () => {
   return (
     <div className="min-h-screen bg-white flex flex-col md:flex-row font-sans overflow-hidden">
       {/* Left Side: Brand & Logo */}
-      <div className="md:w-1/2 bg-gradient-to-br from-primary-dark via-primary to-primary-light flex items-center justify-center p-12 relative overflow-hidden">
-        {/* Decorative background patterns */}
-        <div className="absolute inset-0 opacity-10 pointer-events-none">
-          <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="white" strokeWidth="1"/>
-              </pattern>
-            </defs>
-            <rect width="100%" height="100%" fill="url(#grid)" />
-          </svg>
+      <div 
+        className="hidden lg:flex flex-col items-center justify-center w-1/2 relative text-white"
+        style={{
+          backgroundImage: "url('https://i.ibb.co/Q3DjYLxk/Gemini-Generated-Image-xq25icxq25icxq25.png')",
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+          backgroundColor: 'transparent' // إجبار إزالة أي لون خلفية
+        }}
+      >
+        {/* طبقة تظليل خفيفة (Overlay) لضمان وضوح الشعار والنص فوق الصورة */}
+        <div className="absolute inset-0 bg-black/40 z-0"></div>
+
+        {/* محتوى الشعار والنص (يجب أن يكون z-10 ليكون فوق التظليل) */}
+        <div className="relative z-10 flex flex-col items-center">
+          {/* ضع كود صورة الشعار (logo) هنا */}
+          <img 
+            src="https://i.ibb.co/ZzPTFG3y/222.png" 
+            alt="شعار بوابة تكامل" 
+            className="w-40 h-40 object-contain"
+            referrerPolicy="no-referrer"
+          />
+          
+          <h1 className="text-4xl font-bold mt-6 mb-2">بوابة تكامل</h1>
+          <p className="text-lg opacity-90">Takamul Gate</p>
         </div>
-        
-        <motion.div 
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ duration: 0.8, ease: "easeOut" }}
-          className="relative z-10 flex flex-col items-center text-center"
-        >
-          <h2 className="text-white font-extrabold text-2xl mb-8">ثانوية أم القرى بالخرج</h2>
-          <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-4">نظام تحويل طالب</h1>
-          <p className="text-white/80 text-lg md:text-xl font-medium tracking-wide">Student Transfer System</p>
-        </motion.div>
-        
-        {/* Abstract shapes */}
-        <div className="absolute -bottom-20 -left-20 w-80 h-80 bg-white/5 rounded-full blur-3xl"></div>
-        <div className="absolute -top-20 -right-20 w-80 h-80 bg-white/5 rounded-full blur-3xl"></div>
       </div>
 
       {/* Right Side: Login Form */}
@@ -372,13 +389,6 @@ const Login: React.FC = () => {
         </button>
         <div className="max-w-md w-full">
           <div className="mb-10 flex flex-col items-center text-center">
-            <img 
-              src="https://i.ibb.co/ZzPTFG3y/222.png" 
-              alt="شعار وزارة التعليم" 
-              className="w-40 h-40 mb-2 object-contain"
-              referrerPolicy="no-referrer"
-            />
-            <h3 className="text-primary font-extrabold text-xl mb-6">ثانوية أم القرى بالخرج</h3>
             <h2 className="text-3xl font-extrabold text-slate-900 mb-2">تسجيل دخول آمن</h2>
             <p className="text-slate-500">يرجى إدخال بياناتك للوصول إلى لوحة التحكم</p>
           </div>
@@ -462,7 +472,7 @@ const Login: React.FC = () => {
                 <button type="button" onClick={() => setIsForgotModalOpen(true)} className="text-xs font-bold text-slate-400 hover:text-primary transition-colors">نسيت كلمة المرور</button>
               </div>
               <div className="text-[10px] text-slate-400 space-y-1">
-                <p>© 2026 نظام تحويل الطلاب الذكي. جميع الحقوق محفوظة.</p>
+                <p>© 2026 بوابة تكامل. جميع الحقوق محفوظة.</p>
                 <p className="font-bold text-primary/60">برمجة: بسام غربي العنزي</p>
               </div>
             </div>

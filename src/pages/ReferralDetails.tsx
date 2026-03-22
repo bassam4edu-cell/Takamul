@@ -624,7 +624,7 @@ const ReferralDetails: React.FC = () => {
         </div>
 
         <div className="mt-8 text-center text-[8px] text-slate-400 border-t pt-2">
-          نظام تحويل الطلاب الذكي - ثانوية أم القرى
+          بوابة تكامل - ثانوية أم القرى
         </div>
       </div>
 
