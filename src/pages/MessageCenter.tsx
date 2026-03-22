@@ -1,8 +1,8 @@
 import { apiFetch } from '../utils/api';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useMessageLog } from '../context/MessageLogContext';
 import { useAuth } from '../context/AuthContext';
-import { Search, RotateCcw, Send, Users, CheckCircle2, XCircle, Clock, MessageSquare, AlertCircle, Settings } from 'lucide-react';
+import { Search, RotateCcw, Send, Users, CheckCircle2, XCircle, Clock, MessageSquare, AlertCircle, Settings, Save, User, Pencil, Trash2, Eye } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import MessageSettings from './MessageSettings';
 import SystemTemplates from './SystemTemplates';
@@ -10,10 +10,11 @@ import SystemTemplates from './SystemTemplates';
 const MessageCenter: React.FC = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'compose' | 'archive' | 'settings' | 'templates'>('compose');
-  const { globalMessageLog, addLogEntry } = useMessageLog();
+  const { globalMessageLog, addLogEntry, deleteLogEntry, deleteBatch } = useMessageLog();
   
   // Compose State
   const [targetType, setTargetType] = useState<'all' | 'grade' | 'section' | 'custom'>('all');
+  const [targetAudience, setTargetAudience] = useState<'parents' | 'teachers'>('parents');
   const [grade, setGrade] = useState('all');
   const [section, setSection] = useState('all');
   const [messageText, setMessageText] = useState('');
@@ -22,6 +23,31 @@ const MessageCenter: React.FC = () => {
   const [students, setStudents] = useState<any[]>([]);
   const [selectedStudents, setSelectedStudents] = useState<number[]>([]);
   
+  // Teachers Multi-Select State
+  const [teachersList] = useState([
+    { id: 1, name: 'أحمد محمد' },
+    { id: 2, name: 'سالم عبدالله' },
+    { id: 3, name: 'خالد سعيد' },
+    { id: 4, name: 'عمر فهد' },
+    { id: 5, name: 'ياسر علي' },
+    { id: 6, name: 'عبدالرحمن صالح' },
+  ]);
+  const [selectedTeachers, setSelectedTeachers] = useState<number[]>([]);
+  const [isTeacherDropdownOpen, setIsTeacherDropdownOpen] = useState(false);
+  const [teacherSearchTerm, setTeacherSearchTerm] = useState('');
+  
+  // Templates State
+  const [savedTemplates, setSavedTemplates] = useState([
+    { label: 'خروج مبكر', text: 'المكرم ولي أمر الطالب {اسم_الطالب}، نود إشعاركم بأنه تم السماح للطالب بالخروج المبكر هذا اليوم.' },
+    { label: 'دعوة مجلس آباء', text: 'المكرم ولي أمر الطالب {اسم_الطالب}، يسرنا دعوتكم لحضور مجلس الآباء والمعلمين يوم الخميس القادم.' },
+    { label: 'تنبيه تأخر', text: 'المكرم ولي أمر الطالب {اسم_الطالب}، نود إشعاركم بتأخر الطالب عن الطابور الصباحي هذا اليوم.' }
+  ]);
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [newTemplateName, setNewTemplateName] = useState('');
+  const [selectedTemplateLabel, setSelectedTemplateLabel] = useState('');
+  const [isEditingTemplate, setIsEditingTemplate] = useState(false);
+  const [showConfirmUpdateModal, setShowConfirmUpdateModal] = useState(false);
+  
   // Sending State
   const [isSending, setIsSending] = useState(false);
   const [progress, setProgress] = useState({ sent: 0, total: 0 });
@@ -29,6 +55,7 @@ const MessageCenter: React.FC = () => {
 
   // Archive State
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
 
   useEffect(() => {
     apiFetch('/api/attendance/grades')
@@ -58,14 +85,53 @@ const MessageCenter: React.FC = () => {
     }
   }, [targetType, grade, section]);
 
-  const templates = [
-    { label: 'خروج مبكر', text: 'المكرم ولي أمر الطالب {اسم_الطالب}، نود إشعاركم بأنه تم السماح للطالب بالخروج المبكر هذا اليوم.' },
-    { label: 'دعوة مجلس آباء', text: 'المكرم ولي أمر الطالب {اسم_الطالب}، يسرنا دعوتكم لحضور مجلس الآباء والمعلمين يوم الخميس القادم.' },
-    { label: 'تنبيه تأخر', text: 'المكرم ولي أمر الطالب {اسم_الطالب}، نود إشعاركم بتأخر الطالب عن الطابور الصباحي هذا اليوم.' }
-  ];
-
   const insertTemplate = (text: string) => {
     setMessageText(text);
+  };
+
+  const insertChip = (chip: string) => {
+    setMessageText(prev => prev + (prev.endsWith(' ') ? '' : ' ') + chip + ' ');
+  };
+
+  const handleSaveTemplate = () => {
+    if (!newTemplateName.trim()) return;
+    setSavedTemplates(prev => [...prev, { label: newTemplateName, text: messageText }]);
+    setNewTemplateName('');
+    setIsSaveModalOpen(false);
+  };
+
+  const confirmUpdateTemplate = () => {
+    if (!selectedTemplateLabel || !messageText.trim()) return;
+    
+    setSavedTemplates(prev => prev.map(t => 
+      t.label === selectedTemplateLabel ? { ...t, text: messageText } : t
+    ));
+    
+    setShowConfirmUpdateModal(false);
+    setIsEditingTemplate(false);
+  };
+
+  const commonChips = ['{اسم_المدرسة}', '{اليوم}', '{التاريخ}'];
+  const parentChips = ['{اسم_الطالب}', '{الصف}', '{الغياب}'];
+  const teacherChips = ['{اسم_المعلم}', '{المادة}', '{الحصة}'];
+  const activeChips = targetAudience === 'parents' ? [...commonChips, ...parentChips] : [...commonChips, ...teacherChips];
+
+  const getPreviewText = () => {
+    let text = messageText;
+    text = text.replace(/{اسم_المدرسة}/g, 'مدرسة تكامل الأهلية');
+    text = text.replace(/{اليوم}/g, 'الأحد');
+    text = text.replace(/{التاريخ}/g, '1445/08/15');
+    
+    if (targetAudience === 'parents') {
+      text = text.replace(/{اسم_الطالب}/g, 'خالد عبدالله');
+      text = text.replace(/{الصف}/g, 'الأول المتوسط');
+      text = text.replace(/{الغياب}/g, 'يومين');
+    } else {
+      text = text.replace(/{اسم_المعلم}/g, 'أحمد محمد');
+      text = text.replace(/{المادة}/g, 'الرياضيات');
+      text = text.replace(/{الحصة}/g, 'الثالثة');
+    }
+    return text;
   };
 
   const sendWhatsAppMessage = async (phoneNumber: string, text: string) => {
@@ -86,7 +152,7 @@ const MessageCenter: React.FC = () => {
         }
         throw new Error('Failed to send');
       }
-      return { success: true };
+      return { success: true, idMessage: data.data?.idMessage };
     } catch (error) {
       return { success: false, error: String(error) };
     }
@@ -122,6 +188,21 @@ const MessageCenter: React.FC = () => {
         return;
       }
 
+      const batchId = Math.random().toString(36).substring(2, 9);
+      const dateStr = new Date().toLocaleDateString('ar-SA', { weekday: 'long', day: 'numeric', month: 'long' });
+      const campaignName = selectedTemplateLabel ? `${selectedTemplateLabel} - ${dateStr}` : `حملة رسائل - ${dateStr}`;
+      
+      let targetAudienceStr = '';
+      if (targetAudience === 'parents') {
+        targetAudienceStr = 'أولياء أمور';
+        if (targetType === 'all') targetAudienceStr += ' - جميع الطلاب';
+        else if (targetType === 'grade') targetAudienceStr += ` - ${grade}`;
+        else if (targetType === 'section') targetAudienceStr += ` - ${grade} - ${section}`;
+        else if (targetType === 'custom') targetAudienceStr += ' - تخصيص';
+      } else {
+        targetAudienceStr = 'المعلمون';
+      }
+
       setProgress({ sent: 0, total: validStudents.length });
       let successCount = 0;
       let failCount = 0;
@@ -135,9 +216,13 @@ const MessageCenter: React.FC = () => {
         addLogEntry({
           recipient: student.name,
           recipientPhone: student.parent_phone,
-          messageType: '📢 إشعار عام',
+          messageType: 'إشعار عام',
           messageText: personalizedMessage,
-          status: result.success ? 'success' : 'failed'
+          status: result.success ? 'success' : 'failed',
+          batchId,
+          campaignName,
+          targetAudience: targetAudienceStr,
+          messageId: result.idMessage
         });
 
         if (result.success) {
@@ -176,7 +261,11 @@ const MessageCenter: React.FC = () => {
       recipientPhone: log.recipientPhone,
       messageType: log.messageType,
       messageText: log.messageText,
-      status: result.success ? 'success' : 'failed'
+      status: result.success ? 'success' : 'failed',
+      batchId: log.batchId,
+      campaignName: log.campaignName,
+      targetAudience: log.targetAudience,
+      messageId: result.idMessage
     });
     if (result.success) {
       alert('تم إعادة الإرسال بنجاح');
@@ -194,6 +283,69 @@ const MessageCenter: React.FC = () => {
     log.messageType.toLowerCase().includes(searchQuery.toLowerCase()) ||
     log.messageText.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const groupedLogs = useMemo(() => {
+    const groups: Record<string, any> = {};
+    filteredLogs.forEach(log => {
+      const bId = log.batchId || log.id;
+      if (!groups[bId]) {
+        groups[bId] = {
+          batchId: bId,
+          campaignName: log.campaignName || 'رسالة فردية / قديمة',
+          targetAudience: log.targetAudience || 'غير محدد',
+          timestamp: log.timestamp,
+          total: 0,
+          success: 0,
+          failed: 0,
+          logs: []
+        };
+      }
+      groups[bId].total++;
+      if (log.status === 'success') groups[bId].success++;
+      else groups[bId].failed++;
+      groups[bId].logs.push(log);
+    });
+    return Object.values(groups).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }, [filteredLogs]);
+
+  const handleDeleteMessage = async (log: any) => {
+    if (confirm('هل أنت متأكد من حذف هذه الرسالة من جهاز المستلم؟')) {
+      if (log.messageId) {
+        try {
+          await apiFetch('/api/whatsapp/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phoneNumber: log.recipientPhone, idMessage: log.messageId })
+          });
+        } catch (e) {
+          console.error('Failed to delete message from WhatsApp', e);
+        }
+      }
+      deleteLogEntry(log.id);
+    }
+  };
+
+  const handleDeleteBatch = async (batch: any) => {
+    if (confirm('هل أنت متأكد من حذف جميع رسائل هذه الحملة من أجهزة المستلمين؟')) {
+      for (const log of batch.logs) {
+        if (log.messageId) {
+          try {
+            await apiFetch('/api/whatsapp/delete', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ phoneNumber: log.recipientPhone, idMessage: log.messageId })
+            });
+          } catch (e) {
+            console.error('Failed to delete message from WhatsApp', e);
+          }
+        }
+      }
+      deleteBatch(batch.batchId);
+      if (selectedBatchId === batch.batchId) {
+        setSelectedBatchId(null);
+      }
+    }
+  };
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -250,7 +402,7 @@ const MessageCenter: React.FC = () => {
               activeTab === 'templates' ? 'text-primary' : 'text-slate-500 hover:text-slate-700'
             }`}
           >
-            ⚙️ قوالب النظام
+            قوالب النظام
             {activeTab === 'templates' && (
               <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-1 bg-primary rounded-t-full" />
             )}
@@ -264,14 +416,42 @@ const MessageCenter: React.FC = () => {
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
               <h2 className="text-xl font-bold text-slate-800 mb-4">صياغة الرسالة</h2>
               
-              <div className="mb-4 flex flex-wrap gap-2">
-                {templates.map(t => (
+              <div className="mb-4 flex gap-2">
+                <select 
+                  value={selectedTemplateLabel}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedTemplateLabel(val);
+                    setIsEditingTemplate(false);
+                    const template = savedTemplates.find(t => t.label === val);
+                    if (template) insertTemplate(template.text);
+                  }}
+                  className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-3 font-bold text-slate-700 focus:ring-2 focus:ring-primary/20 outline-none"
+                >
+                  <option value="">اختر قالباً محفوظاً...</option>
+                  {savedTemplates.map(t => (
+                    <option key={t.label} value={t.label}>{t.label}</option>
+                  ))}
+                </select>
+                {selectedTemplateLabel && !isEditingTemplate && (
                   <button
-                    key={t.label}
-                    onClick={() => insertTemplate(t.text)}
-                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-bold transition-colors"
+                    onClick={() => setIsEditingTemplate(true)}
+                    className="px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-colors flex items-center gap-2"
+                    title="تعديل القالب"
                   >
-                    {t.label}
+                    <Pencil size={18} />
+                  </button>
+                )}
+              </div>
+
+              <div className="mb-4 flex flex-wrap gap-2">
+                {activeChips.map(chip => (
+                  <button
+                    key={chip}
+                    onClick={() => insertChip(chip)}
+                    className="px-3 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg text-sm font-bold transition-colors"
+                  >
+                    {chip}
                   </button>
                 ))}
               </div>
@@ -279,13 +459,43 @@ const MessageCenter: React.FC = () => {
               <textarea
                 value={messageText}
                 onChange={(e) => setMessageText(e.target.value)}
-                placeholder="اكتب رسالتك هنا... يمكنك استخدام {اسم_الطالب} لإدراج اسم الطالب تلقائياً"
+                placeholder="اكتب رسالتك هنا..."
                 className="w-full h-48 p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
               />
-              <p className="text-sm text-slate-500 mt-2 flex items-center gap-1">
-                <AlertCircle size={16} />
-                سيتم استبدال {'{اسم_الطالب}'} بالاسم الفعلي لكل طالب عند الإرسال
-              </p>
+              <div className="flex items-center justify-between mt-2">
+                <p className="text-sm text-slate-500 flex items-center gap-1">
+                  <AlertCircle size={16} />
+                  سيتم استبدال المتغيرات بالبيانات الفعلية عند الإرسال
+                </p>
+                <div className="flex items-center gap-4">
+                  {isEditingTemplate ? (
+                    <>
+                      <button
+                        onClick={() => setIsEditingTemplate(false)}
+                        className="text-sm font-bold text-slate-500 hover:text-slate-700 transition-colors flex items-center gap-1"
+                      >
+                        <XCircle size={16} />
+                        إلغاء التعديل
+                      </button>
+                      <button
+                        onClick={() => setShowConfirmUpdateModal(true)}
+                        className="text-sm font-bold text-emerald-600 hover:text-emerald-700 transition-colors flex items-center gap-1"
+                      >
+                        <Save size={16} />
+                        حفظ
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => setIsSaveModalOpen(true)}
+                      className="text-sm font-bold text-primary hover:text-primary-dark transition-colors flex items-center gap-1"
+                    >
+                      <Save size={16} />
+                      حفظ كقالب جديد
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
 
             {isSending && (
@@ -322,69 +532,189 @@ const MessageCenter: React.FC = () => {
               </h2>
 
               <div className="space-y-4">
-                <select
-                  value={targetType}
-                  onChange={(e) => setTargetType(e.target.value as any)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-bold"
-                >
-                  <option value="all">جميع الطلاب</option>
-                  <option value="grade">حسب الصف</option>
-                  <option value="section">حسب الفصل</option>
-                  <option value="custom">تحديد مخصص</option>
-                </select>
-
-                {(targetType === 'grade' || targetType === 'section' || targetType === 'custom') && (
-                  <select
-                    value={grade}
-                    onChange={(e) => setGrade(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-bold"
+                <div className="flex bg-slate-100 p-1 rounded-xl">
+                  <button
+                    onClick={() => setTargetAudience('parents')}
+                    className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
+                      targetAudience === 'parents' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                    }`}
                   >
-                    <option value="all">اختر الصف</option>
-                    {grades.map(g => <option key={g} value={g}>{g}</option>)}
-                  </select>
-                )}
-
-                {(targetType === 'section' || targetType === 'custom') && grade !== 'all' && (
-                  <select
-                    value={section}
-                    onChange={(e) => setSection(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-bold"
+                    <Users size={16} />
+                    أولياء الأمور
+                  </button>
+                  <button
+                    onClick={() => setTargetAudience('teachers')}
+                    className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
+                      targetAudience === 'teachers' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                    }`}
                   >
-                    <option value="all">اختر الفصل</option>
-                    {sections.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                )}
+                    <User size={16} />
+                    المعلمون
+                  </button>
+                </div>
 
-                {targetType === 'custom' && grade !== 'all' && section !== 'all' && (
-                  <div className="max-h-60 overflow-y-auto border border-slate-200 rounded-xl p-2 space-y-1">
-                    {students.map(s => (
-                      <label key={s.id} className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-lg cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={selectedStudents.includes(s.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedStudents(prev => [...prev, s.id]);
-                            } else {
-                              setSelectedStudents(prev => prev.filter(id => id !== s.id));
-                            }
-                          }}
-                          className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary"
-                        />
-                        <span className="font-bold text-slate-700">{s.name}</span>
-                      </label>
-                    ))}
+                {targetAudience === 'parents' ? (
+                  <>
+                    <select
+                      value={targetType}
+                      onChange={(e) => setTargetType(e.target.value as any)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-bold"
+                    >
+                      <option value="all">جميع الطلاب</option>
+                      <option value="grade">حسب الصف</option>
+                      <option value="section">حسب الفصل</option>
+                      <option value="custom">تحديد مخصص</option>
+                    </select>
+
+                    {(targetType === 'grade' || targetType === 'section' || targetType === 'custom') && (
+                      <select
+                        value={grade}
+                        onChange={(e) => setGrade(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-bold"
+                      >
+                        <option value="all">اختر الصف</option>
+                        {grades.map(g => <option key={g} value={g}>{g}</option>)}
+                      </select>
+                    )}
+
+                    {(targetType === 'section' || targetType === 'custom') && grade !== 'all' && (
+                      <select
+                        value={section}
+                        onChange={(e) => setSection(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-bold"
+                      >
+                        <option value="all">اختر الفصل</option>
+                        {sections.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    )}
+
+                    {targetType === 'custom' && grade !== 'all' && section !== 'all' && (
+                      <div className="max-h-60 overflow-y-auto border border-slate-200 rounded-xl p-2 space-y-1">
+                        {students.map(s => (
+                          <label key={s.id} className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-lg cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedStudents.includes(s.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedStudents(prev => [...prev, s.id]);
+                                } else {
+                                  setSelectedStudents(prev => prev.filter(id => id !== s.id));
+                                }
+                              }}
+                              className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary"
+                            />
+                            <span className="font-bold text-slate-700">{s.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="relative">
+                    <div 
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-bold cursor-pointer flex justify-between items-center"
+                      onClick={() => setIsTeacherDropdownOpen(!isTeacherDropdownOpen)}
+                    >
+                      <span className="text-slate-700">
+                        {selectedTeachers.length === 0 
+                          ? 'اختر المعلمين...' 
+                          : `تم اختيار (${selectedTeachers.length}) معلمين`}
+                      </span>
+                      <span className="text-slate-400 text-xs">▼</span>
+                    </div>
+
+                    {isTeacherDropdownOpen && (
+                      <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden">
+                        <div className="p-3 border-b border-slate-100">
+                          <input 
+                            type="text" 
+                            placeholder="ابحث عن معلم..." 
+                            value={teacherSearchTerm}
+                            onChange={(e) => setTeacherSearchTerm(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                          />
+                        </div>
+                        
+                        <div className="max-h-48 overflow-y-auto p-2 space-y-1">
+                          <label className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-lg cursor-pointer border-b border-slate-100 mb-1">
+                            <input
+                              type="checkbox"
+                              checked={
+                                teachersList.filter(t => t.name.includes(teacherSearchTerm)).length > 0 &&
+                                teachersList.filter(t => t.name.includes(teacherSearchTerm)).every(t => selectedTeachers.includes(t.id))
+                              }
+                              onChange={(e) => {
+                                const filteredIds = teachersList.filter(t => t.name.includes(teacherSearchTerm)).map(t => t.id);
+                                if (e.target.checked) {
+                                  const newSelected = [...new Set([...selectedTeachers, ...filteredIds])];
+                                  setSelectedTeachers(newSelected);
+                                } else {
+                                  setSelectedTeachers(selectedTeachers.filter(id => !filteredIds.includes(id)));
+                                }
+                              }}
+                              className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary"
+                            />
+                            <span className="font-bold text-slate-800">تحديد الكل</span>
+                          </label>
+                          
+                          {teachersList.filter(t => t.name.includes(teacherSearchTerm)).map(t => (
+                            <label key={t.id} className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-lg cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={selectedTeachers.includes(t.id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedTeachers(prev => [...prev, t.id]);
+                                  } else {
+                                    setSelectedTeachers(prev => prev.filter(id => id !== t.id));
+                                  }
+                                }}
+                                className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary"
+                              />
+                              <span className="font-medium text-slate-700">{t.name}</span>
+                            </label>
+                          ))}
+                          
+                          {teachersList.filter(t => t.name.includes(teacherSearchTerm)).length === 0 && (
+                            <div className="p-4 text-center text-slate-500 text-sm">
+                              لا يوجد معلمين مطابقين للبحث
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
                 <button
                   onClick={handleSendCampaign}
-                  disabled={isSending || (targetType === 'custom' && selectedStudents.length === 0)}
+                  disabled={isSending || (targetAudience === 'parents' && targetType === 'custom' && selectedStudents.length === 0) || (targetAudience === 'teachers' && selectedTeachers.length === 0)}
                   className="w-full bg-primary hover:bg-primary/90 disabled:opacity-50 text-white font-black py-4 rounded-xl flex items-center justify-center gap-2 transition-all"
                 >
                   <Send size={20} />
                   إرسال الرسائل
                 </button>
+              </div>
+            </div>
+
+            {/* Live Preview Card */}
+            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+              <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
+                <MessageSquare className="w-5 h-5 text-emerald-500" />
+                المعاينة الحية
+              </h2>
+              <div className="bg-[#EFEAE2] rounded-2xl p-4 min-h-[200px] relative overflow-hidden">
+                {/* WhatsApp Chat Bubble */}
+                <div className="bg-white rounded-2xl rounded-tr-none p-3 shadow-sm max-w-[90%] relative">
+                  <p className="text-slate-800 text-sm whitespace-pre-wrap leading-relaxed">
+                    {getPreviewText() || 'اكتب رسالتك لمعاينتها هنا...'}
+                  </p>
+                  <div className="flex justify-end items-center gap-1 mt-1">
+                    <span className="text-[10px] text-slate-400">10:00 ص</span>
+                    <CheckCircle2 size={12} className="text-blue-500" />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -412,58 +742,62 @@ const MessageCenter: React.FC = () => {
             <table className="w-full text-right">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100">
-                  <th className="p-4 font-bold text-slate-600">الوقت والتاريخ</th>
-                  <th className="p-4 font-bold text-slate-600">النوع</th>
-                  <th className="p-4 font-bold text-slate-600">المستلم</th>
-                  <th className="p-4 font-bold text-slate-600">نص الرسالة</th>
-                  <th className="p-4 font-bold text-slate-600 text-center">الحالة</th>
+                  <th className="p-4 font-bold text-slate-600">اسم الحملة / الموضوع</th>
+                  <th className="p-4 font-bold text-slate-600">الفئة المستهدفة</th>
+                  <th className="p-4 font-bold text-slate-600 text-center">إحصائيات الإرسال</th>
+                  <th className="p-4 font-bold text-slate-600">وقت الانطلاق</th>
                   <th className="p-4 font-bold text-slate-600 text-center">إجراءات</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredLogs.map(log => (
-                  <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
+                {groupedLogs.map(batch => (
+                  <tr key={batch.batchId} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="p-4 font-bold text-slate-800">
+                      {batch.campaignName}
+                    </td>
+                    <td className="p-4 text-sm text-slate-600">
+                      {batch.targetAudience}
+                    </td>
+                    <td className="p-4 text-center">
+                      <div className="flex items-center justify-center gap-3 text-sm font-bold">
+                        <span className="text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg" title="تم الإرسال">
+                          {batch.success}
+                        </span>
+                        <span className="text-red-600 bg-red-50 px-2 py-1 rounded-lg" title="فشل">
+                          {batch.failed}
+                        </span>
+                        <span className="text-slate-600 bg-slate-100 px-2 py-1 rounded-lg" title="الإجمالي">
+                          {batch.total}
+                        </span>
+                      </div>
+                    </td>
                     <td className="p-4 text-sm font-medium text-slate-600 whitespace-nowrap">
-                      {new Date(log.timestamp).toLocaleString('ar-SA')}
-                    </td>
-                    <td className="p-4">
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">
-                        {log.messageType}
-                      </span>
-                    </td>
-                    <td className="p-4">
-                      <div className="font-bold text-slate-800">{log.recipient}</div>
-                      <div className="text-xs text-slate-500 font-mono mt-1">{log.recipientPhone}</div>
-                    </td>
-                    <td className="p-4 text-sm text-slate-600 max-w-xs truncate" title={log.messageText}>
-                      {log.messageText}
+                      {new Date(batch.timestamp).toLocaleString('ar-SA')}
                     </td>
                     <td className="p-4 text-center">
-                      {log.status === 'success' ? (
-                        <span className="inline-flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg text-xs font-bold">
-                          <CheckCircle2 size={14} /> ناجح
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-red-600 bg-red-50 px-2 py-1 rounded-lg text-xs font-bold">
-                          <XCircle size={14} /> فشل
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-4 text-center">
-                      <button
-                        onClick={() => handleResend(log)}
-                        className="p-2 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-                        title="إعادة إرسال"
-                      >
-                        <RotateCcw size={18} />
-                      </button>
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => setSelectedBatchId(batch.batchId)}
+                          className="p-2 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                          title="عرض التفاصيل"
+                        >
+                          <Eye size={18} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteBatch(batch)}
+                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="حذف الحملة من أجهزة المستلمين"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
-                {filteredLogs.length === 0 && (
+                {groupedLogs.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="p-8 text-center text-slate-500 font-medium">
-                      لا توجد رسائل مسجلة
+                    <td colSpan={5} className="p-8 text-center text-slate-500 font-medium">
+                      لا توجد حملات مسجلة
                     </td>
                   </tr>
                 )}
@@ -473,49 +807,44 @@ const MessageCenter: React.FC = () => {
 
           {/* Mobile Card View */}
           <div className="md:hidden flex flex-col divide-y divide-slate-100">
-            {filteredLogs.length === 0 ? (
+            {groupedLogs.length === 0 ? (
               <div className="p-8 text-center text-slate-500 font-medium">
-                لا توجد رسائل مسجلة
+                لا توجد حملات مسجلة
               </div>
             ) : (
-              filteredLogs.map(log => (
-                <div key={log.id} className="p-4 flex flex-col gap-3">
+              groupedLogs.map(batch => (
+                <div key={batch.batchId} className="p-4 flex flex-col gap-3">
                   <div className="flex justify-between items-start">
                     <div>
-                      <div className="font-bold text-slate-800 text-base">{log.recipient}</div>
-                      <div className="text-xs text-slate-500 font-mono mt-1">{log.recipientPhone}</div>
+                      <div className="font-bold text-slate-800 text-base">{batch.campaignName}</div>
+                      <div className="text-xs text-slate-500 mt-1">{batch.targetAudience}</div>
                     </div>
-                    {log.status === 'success' ? (
-                      <span className="inline-flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg text-xs font-bold">
-                        <CheckCircle2 size={14} /> ناجح
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-red-600 bg-red-50 px-2 py-1 rounded-lg text-xs font-bold">
-                        <XCircle size={14} /> فشل
-                      </span>
-                    )}
                   </div>
                   
                   <div className="flex items-center justify-between text-xs">
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-full font-bold bg-slate-100 text-slate-700">
-                      {log.messageType}
-                    </span>
+                    <div className="flex items-center gap-2 font-bold">
+                      <span className="text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg">نجاح: {batch.success}</span>
+                      <span className="text-red-600 bg-red-50 px-2 py-1 rounded-lg">فشل: {batch.failed}</span>
+                    </div>
                     <span className="text-slate-500 font-medium">
-                      {new Date(log.timestamp).toLocaleString('ar-SA')}
+                      {new Date(batch.timestamp).toLocaleString('ar-SA')}
                     </span>
                   </div>
 
-                  <div className="bg-slate-50 p-3 rounded-xl text-sm text-slate-600">
-                    {log.messageText}
-                  </div>
-
-                  <div className="pt-2 border-t border-slate-50">
+                  <div className="flex items-center justify-end gap-2 mt-2 pt-2 border-t border-slate-100">
                     <button
-                      onClick={() => handleResend(log)}
-                      className="w-full py-2 text-slate-600 hover:text-primary hover:bg-primary/10 rounded-xl transition-colors text-sm font-bold flex items-center justify-center gap-2 min-h-[44px]"
+                      onClick={() => setSelectedBatchId(batch.batchId)}
+                      className="flex-1 py-2 text-primary bg-primary/10 hover:bg-primary/20 rounded-lg font-bold transition-colors flex items-center justify-center gap-2"
                     >
-                      <RotateCcw size={16} />
-                      إعادة إرسال
+                      <Eye size={16} />
+                      التفاصيل
+                    </button>
+                    <button
+                      onClick={() => handleDeleteBatch(batch)}
+                      className="flex-1 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg font-bold transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Trash2 size={16} />
+                      حذف الحملة
                     </button>
                   </div>
                 </div>
@@ -536,6 +865,217 @@ const MessageCenter: React.FC = () => {
           <SystemTemplates />
         </motion.div>
       )}
+
+      {/* Save Template Modal */}
+      <AnimatePresence>
+        {selectedBatchId && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden"
+            >
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <div>
+                  <h3 className="text-xl font-bold text-slate-800">
+                    تفاصيل الحملة: {groupedLogs.find(g => g.batchId === selectedBatchId)?.campaignName}
+                  </h3>
+                  <p className="text-sm text-slate-500 mt-1">
+                    {groupedLogs.find(g => g.batchId === selectedBatchId)?.targetAudience}
+                  </p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={() => handleDeleteBatch(groupedLogs.find(g => g.batchId === selectedBatchId))}
+                    className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl font-bold transition-colors flex items-center gap-2"
+                  >
+                    <Trash2 size={18} />
+                    حذف الكل
+                  </button>
+                  <button
+                    onClick={() => setSelectedBatchId(null)}
+                    className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-full transition-colors"
+                  >
+                    <XCircle size={24} />
+                  </button>
+                </div>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto p-6">
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-right">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-100">
+                        <th className="p-4 font-bold text-slate-600">اسم المستلم</th>
+                        <th className="p-4 font-bold text-slate-600">رقم الجوال</th>
+                        <th className="p-4 font-bold text-slate-600 text-center">الحالة</th>
+                        <th className="p-4 font-bold text-slate-600 text-center">إجراءات</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {groupedLogs.find(g => g.batchId === selectedBatchId)?.logs.map((log: any) => (
+                        <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="p-4 font-bold text-slate-800">
+                            {log.recipient}
+                          </td>
+                          <td className="p-4 text-sm font-mono text-slate-600">
+                            {log.recipientPhone}
+                          </td>
+                          <td className="p-4 text-center">
+                            {log.status === 'success' ? (
+                              <span className="inline-flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg text-xs font-bold">
+                                <CheckCircle2 size={14} /> تم التسليم
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-red-600 bg-red-50 px-2 py-1 rounded-lg text-xs font-bold">
+                                <XCircle size={14} /> فشل
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-4 text-center">
+                            <button
+                              onClick={() => handleDeleteMessage(log)}
+                              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="حذف الرسالة من جهاز المستلم"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile View for Modal */}
+                <div className="md:hidden flex flex-col gap-4">
+                  {groupedLogs.find(g => g.batchId === selectedBatchId)?.logs.map((log: any) => (
+                    <div key={log.id} className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <div className="font-bold text-slate-800">{log.recipient}</div>
+                          <div className="text-sm font-mono text-slate-500">{log.recipientPhone}</div>
+                        </div>
+                        {log.status === 'success' ? (
+                          <span className="inline-flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg text-xs font-bold">
+                            <CheckCircle2 size={14} /> تم التسليم
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-red-600 bg-red-50 px-2 py-1 rounded-lg text-xs font-bold">
+                            <XCircle size={14} /> فشل
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex justify-end mt-3 pt-3 border-t border-slate-200">
+                        <button
+                          onClick={() => handleDeleteMessage(log)}
+                          className="text-sm font-bold text-red-600 flex items-center gap-1"
+                        >
+                          <Trash2 size={16} />
+                          حذف
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Save Template Modal */}
+      <AnimatePresence>
+        {isSaveModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl shadow-xl w-full max-w-md overflow-hidden"
+            >
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                <h3 className="text-xl font-bold text-slate-800">حفظ كقالب جديد</h3>
+                <button
+                  onClick={() => setIsSaveModalOpen(false)}
+                  className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
+                >
+                  <XCircle size={20} />
+                </button>
+              </div>
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">اسم القالب</label>
+                  <input
+                    type="text"
+                    value={newTemplateName}
+                    onChange={(e) => setNewTemplateName(e.target.value)}
+                    placeholder="مثال: دعوة مجلس آباء"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+                  />
+                </div>
+                <div className="flex gap-3 pt-4">
+                  <button
+                    onClick={() => setIsSaveModalOpen(false)}
+                    className="flex-1 px-4 py-3 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold transition-colors"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    onClick={handleSaveTemplate}
+                    disabled={!newTemplateName.trim()}
+                    className="flex-1 px-4 py-3 text-white bg-primary hover:bg-primary/90 disabled:opacity-50 rounded-xl font-bold transition-colors"
+                  >
+                    حفظ القالب
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Confirm Update Modal */}
+        {showConfirmUpdateModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl shadow-xl w-full max-w-md overflow-hidden"
+            >
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                <h3 className="text-xl font-bold text-slate-800">تأكيد التعديل</h3>
+                <button
+                  onClick={() => setShowConfirmUpdateModal(false)}
+                  className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
+                >
+                  <XCircle size={20} />
+                </button>
+              </div>
+              <div className="p-6 space-y-4">
+                <p className="text-slate-600 font-medium">
+                  هل أنت متأكد من حفظ التعديلات على قالب "{selectedTemplateLabel}"؟
+                </p>
+                <div className="flex gap-3 pt-4">
+                  <button
+                    onClick={() => setShowConfirmUpdateModal(false)}
+                    className="flex-1 px-4 py-3 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold transition-colors"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    onClick={confirmUpdateTemplate}
+                    className="flex-1 px-4 py-3 text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl font-bold transition-colors"
+                  >
+                    تأكيد الحفظ
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

@@ -124,7 +124,7 @@ const SystemTemplates: React.FC = () => {
                 animate={{ opacity: 1, x: 0 }}
                 className="text-emerald-600 font-bold text-sm flex items-center gap-1"
               >
-                تم الحفظ بنجاح ✓
+                تم الحفظ بنجاح 
               </motion.span>
             )}
           </div>

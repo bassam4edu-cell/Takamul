@@ -242,7 +242,7 @@ const Reports: React.FC = () => {
         </div>
 
         <div className="mt-10 text-center text-[10px] font-bold text-slate-400">
-          <p>تم استخراج هذا التقرير آلياً من بوابة تكامل - جميع الحقوق محفوظة © {new Date().getFullYear()}</p>
+          <p>تم استخراج هذا التقرير آلياً من بوابة تكامل - جميع الحقوق محفوظة  {new Date().getFullYear()}</p>
         </div>
       </div>
 

@@ -97,7 +97,7 @@ const ManagementDashboard: React.FC = () => {
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
             <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 mb-2">
-              مرحباً بك يا {user?.name} 👋
+              مرحباً بك يا {user?.name} 
             </h1>
             <p className="text-slate-500 font-bold">إليك ملخص نبض المدرسة لهذا اليوم.</p>
           </div>

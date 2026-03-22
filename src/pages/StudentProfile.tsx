@@ -156,7 +156,7 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly =
             }`}
           >
             <FileText size={18} />
-            <span>📝 تحويلات المعلمين</span>
+            <span> تحويلات المعلمين</span>
           </button>
           <button
             onClick={() => setActiveTab('behavior')}
@@ -165,7 +165,7 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly =
             }`}
           >
             <ShieldAlert size={18} />
-            <span>⚠️ المشكلات السلوكية</span>
+            <span>️ المشكلات السلوكية</span>
           </button>
           <button
             onClick={() => setActiveTab('attendance')}
@@ -174,7 +174,7 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly =
             }`}
           >
             <Clock size={18} />
-            <span>📅 الغياب والتأخر</span>
+            <span> الغياب والتأخر</span>
           </button>
         </div>
 

@@ -112,7 +112,7 @@ const Register: React.FC = () => {
           const responseData = await waResponse.json();
           
           if (!waResponse.ok || !responseData.success) {
-            setError("⚠️ تعذر إرسال كود التحقق: " + (responseData.message || "خطأ غير معروف"));
+            setError("️ تعذر إرسال كود التحقق: " + (responseData.message || "خطأ غير معروف"));
             console.error("WhatsApp API Error:", responseData);
             return; // أوقف العملية
           }
@@ -123,7 +123,7 @@ const Register: React.FC = () => {
           setCountdown(30);
           
         } catch (error: any) {
-          setError("🔌 خطأ في الاتصال بالخادم أثناء إرسال الرسالة: " + error.message);
+          setError(" خطأ في الاتصال بالخادم أثناء إرسال الرسالة: " + error.message);
           return;
         }
       } else {
@@ -169,55 +169,56 @@ const Register: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background decorations */}
-      <div className="absolute top-0 left-0 w-full h-96 bg-primary/10 -skew-y-6 transform origin-top-left -z-10" />
-      <div className="absolute bottom-0 right-0 w-96 h-96 bg-secondary/10 rounded-full blur-3xl -z-10" />
+    <div className="min-h-screen w-full bg-white flex flex-col justify-center px-6 py-8 md:bg-gray-50 md:py-12 relative overflow-hidden">
+      {/* Background decorations - hidden on mobile for cleaner look */}
+      <div className="hidden md:block absolute top-0 left-0 w-full h-96 bg-primary/10 -skew-y-6 transform origin-top-left -z-10" />
+      <div className="hidden md:block absolute bottom-0 right-0 w-96 h-96 bg-secondary/10 rounded-full blur-3xl -z-10" />
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md"
+        className="w-full md:max-w-md md:mx-auto md:bg-white md:rounded-2xl md:shadow-xl md:p-10 relative z-10"
       >
-        <div className="bg-white rounded-[2rem] shadow-xl p-8 border border-slate-100 relative overflow-hidden">
+        <div className="flex justify-end mb-8">
           <button 
             onClick={() => navigate('/login')}
-            className="absolute top-6 left-6 text-slate-400 hover:text-primary transition-colors flex items-center gap-1 text-sm font-bold z-10"
+            className="text-slate-400 hover:text-primary transition-colors flex items-center gap-1 text-sm font-bold"
           >
             <span>رجوع</span>
             <ArrowRight size={16} className="rotate-180" />
           </button>
-          <div className="absolute top-0 right-0 w-2 h-full bg-primary" />
-          
-          <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-primary/10 text-primary rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <ShieldCheck size={32} />
-            </div>
-            <h2 className="text-2xl font-extrabold text-slate-900 mb-2">تسجيل موظف جديد</h2>
-            <p className="text-slate-500">مرحباً بك في بوابة تكامل</p>
+        </div>
+        <div className="hidden md:block absolute top-0 right-0 w-2 h-full bg-primary" />
+        
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 bg-primary/10 text-primary rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <ShieldCheck size={32} />
           </div>
+          <h2 className="text-2xl font-extrabold text-slate-900 mb-2">تسجيل موظف جديد</h2>
+          <p className="text-slate-500">مرحباً بك في بوابة تكامل</p>
+        </div>
 
-          {error && (
-            <motion.div 
-              initial={{ opacity: 0, y: -10 }} 
-              animate={{ opacity: 1, y: 0 }} 
-              className="mb-6 p-4 bg-red-50 text-red-700 rounded-xl flex items-center gap-3 border border-red-100"
+        {error && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }} 
+            animate={{ opacity: 1, y: 0 }} 
+            className="mb-6 p-4 bg-red-50 text-red-700 rounded-xl flex items-center gap-3 border border-red-100"
+          >
+            <XCircle size={20} className="shrink-0" />
+            <p className="text-sm font-medium">{error}</p>
+          </motion.div>
+        )}
+
+        <AnimatePresence mode="wait">
+          {step === 'form' && (
+            <motion.form 
+              key="form"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              onSubmit={handleRegister} 
+              className="space-y-5"
             >
-              <XCircle size={20} className="shrink-0" />
-              <p className="text-sm font-medium">{error}</p>
-            </motion.div>
-          )}
-
-          <AnimatePresence mode="wait">
-            {step === 'form' && (
-              <motion.form 
-                key="form"
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 20 }}
-                onSubmit={handleRegister} 
-                className="space-y-4"
-              >
                 <div className="relative group">
                   <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
                     <User size={20} />
@@ -313,7 +314,7 @@ const Register: React.FC = () => {
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full bg-primary hover:bg-primary-dark text-white py-3.5 rounded-xl font-bold text-lg transition-all shadow-lg shadow-primary/30 flex items-center justify-center gap-2 mt-6 disabled:opacity-70 disabled:cursor-not-allowed"
+                  className="w-full bg-primary hover:bg-primary-dark text-white py-3 rounded-xl font-bold text-lg transition-all shadow-lg shadow-primary/30 flex items-center justify-center gap-2 mt-6 disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                   {isLoading ? <Loader2 className="animate-spin" size={24} /> : 'تسجيل'}
                 </button>
@@ -365,7 +366,7 @@ const Register: React.FC = () => {
                 <button
                   type="submit"
                   disabled={isLoading || otp.join('').length !== 4}
-                  className="w-full bg-primary hover:bg-primary-dark text-white py-3.5 rounded-xl font-bold text-lg transition-all shadow-lg shadow-primary/30 flex items-center justify-center gap-2 mt-6 disabled:opacity-70 disabled:cursor-not-allowed"
+                  className="w-full bg-primary hover:bg-primary-dark text-white py-3 rounded-xl font-bold text-lg transition-all shadow-lg shadow-primary/30 flex items-center justify-center gap-2 mt-6 disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                   {isLoading ? <Loader2 className="animate-spin" size={24} /> : 'تأكيد الكود'}
                 </button>
@@ -406,7 +407,6 @@ const Register: React.FC = () => {
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
       </motion.div>
     </div>
   );

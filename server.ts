@@ -381,6 +381,62 @@ async function startServer() {
   app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
   // API Routes
+  app.get("/api/seed-test-users", async (req, res) => {
+    try {
+      const users = [
+        { name: 'معلم تجربة', email: 'teacher@test.com', password: '123', role: 'teacher', is_active: true, is_phone_verified: true, status: 'ACTIVE', national_id: '1000000001' },
+        { name: 'وكيل تجربة', email: 'vp@test.com', password: '123', role: 'vice_principal', is_active: true, is_phone_verified: true, status: 'ACTIVE', national_id: '1000000002' },
+        { name: 'موجه تجربة', email: 'counselor@test.com', password: '123', role: 'counselor', is_active: true, is_phone_verified: true, status: 'ACTIVE', national_id: '1000000003' },
+        { name: 'مدير تجربة', email: 'principal@test.com', password: '123', role: 'principal', is_active: true, is_phone_verified: true, status: 'ACTIVE', national_id: '1000000004' },
+        { name: 'ولي أمر تجربة', email: 'parent@test.com', password: '123', role: 'parent', is_active: true, is_phone_verified: true, status: 'ACTIVE', national_id: '1000000005', phone_number: '0500000000' }
+      ];
+
+      for (const user of users) {
+        const existing = await sql`SELECT id FROM users WHERE email = ${user.email}`;
+        if (existing.length === 0) {
+          await sql`
+            INSERT INTO users (name, email, password, role, is_active, is_phone_verified, status, national_id, phone_number)
+            VALUES (${user.name}, ${user.email}, ${user.password}, ${user.role}, ${user.is_active}, ${user.is_phone_verified}, ${user.status}, ${user.national_id}, ${user.phone_number || null})
+          `;
+        } else {
+          await sql`
+            UPDATE users 
+            SET password = ${user.password}, role = ${user.role}, is_active = ${user.is_active}, is_phone_verified = ${user.is_phone_verified}, status = ${user.status}, phone_number = ${user.phone_number || null}
+            WHERE email = ${user.email}
+          `;
+        }
+      }
+
+      // Add a test student for parent login
+      const testStudent = {
+        name: 'طالب تجربة',
+        national_id: '1000000005',
+        grade: 'الأول المتوسط',
+        section: 'أ',
+        parent_phone: '0500000000'
+      };
+
+      const existingStudent = await sql`SELECT id FROM students WHERE national_id = ${testStudent.national_id}`;
+      if (existingStudent.length === 0) {
+        await sql`
+          INSERT INTO students (name, national_id, grade, section, parent_phone)
+          VALUES (${testStudent.name}, ${testStudent.national_id}, ${testStudent.grade}, ${testStudent.section}, ${testStudent.parent_phone})
+        `;
+      } else {
+        await sql`
+          UPDATE students
+          SET name = ${testStudent.name}, grade = ${testStudent.grade}, section = ${testStudent.section}, parent_phone = ${testStudent.parent_phone}
+          WHERE national_id = ${testStudent.national_id}
+        `;
+      }
+
+      res.json({ success: true, message: 'تم إنشاء حسابات التجربة بنجاح' });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ success: false, message: 'حدث خطأ أثناء إنشاء الحسابات' });
+    }
+  });
+
   app.get("/api/settings", async (req, res) => {
     try {
       const settings = await sql`SELECT key, value FROM system_settings`;
@@ -470,6 +526,54 @@ async function startServer() {
     } catch (error: any) {
       console.error("[WHATSAPP] Error:", error);
       res.status(500).json({ success: false, message: error.message || "Failed to send WhatsApp message" });
+    }
+  });
+
+  app.post("/api/whatsapp/delete", async (req, res) => {
+    let { phoneNumber, idMessage } = req.body;
+    
+    try {
+      const settings = await sql`SELECT key, value FROM system_settings WHERE key IN ('whatsapp_instance_id', 'whatsapp_token')`;
+      const settingsMap = settings.reduce((acc: any, row: any) => {
+        acc[row.key] = row.value;
+        return acc;
+      }, {});
+      
+      const instanceId = settingsMap.whatsapp_instance_id;
+      const token = settingsMap.whatsapp_token;
+      
+      if (!instanceId || !token) {
+        return res.status(400).json({ success: false, code: 'MISSING_WHATSAPP_CREDENTIALS', message: "لم يتم ربط بوابة الواتساب." });
+      }
+
+      let cleanPhone = phoneNumber.replace(/[\s+]/g, '');
+      if (cleanPhone.startsWith('00')) {
+        cleanPhone = cleanPhone.substring(2);
+      } else if (cleanPhone.startsWith('0')) {
+        cleanPhone = '966' + cleanPhone.substring(1);
+      }
+      const chatId = `${cleanPhone}@c.us`;
+
+      const response = await fetch(`https://api.green-api.com/waInstance${instanceId}/deleteMessage/${token}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          chatId: chatId,
+          idMessage: idMessage
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Green API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      res.json({ success: true, data });
+    } catch (error: any) {
+      console.error("[WHATSAPP DELETE] Error:", error);
+      res.status(500).json({ success: false, message: error.message || "Failed to delete WhatsApp message" });
     }
   });
 
@@ -668,7 +772,7 @@ async function startServer() {
         if (!user.is_phone_verified) {
           const result = await sql`
             UPDATE users 
-            SET name = ${name}, phone_number = ${phone_number}, password = ${password}, role = ${role}, otp_code = ${otp_code}
+            SET name = ${name}, phone_number = ${phone_number}, password = ${password}, role = ${role}, otp_code = ${otp_code}, status = 'PENDING', is_active = FALSE
             WHERE id = ${user.id}
             RETURNING id, name, email
           `;

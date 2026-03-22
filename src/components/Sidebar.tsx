@@ -46,9 +46,15 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
       roles: ['teacher']
     },
     { 
-      title: '📝 تحضير الحصة', 
+      title: 'التحضير اليومي', 
       path: '/dashboard/attendance/teacher', 
       icon: Users,
+      roles: ['teacher']
+    },
+    { 
+      title: 'كشف المتابعة الذكي', 
+      path: '/dashboard/class-tracker', 
+      icon: ClipboardList,
       roles: ['teacher']
     },
     { 
@@ -73,6 +79,12 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
       title: 'إدارة التحويلات', 
       path: '/dashboard/admin-referrals', 
       icon: ClipboardList,
+      roles: ['admin']
+    },
+    { 
+      title: 'سجل العمليات', 
+      path: '/dashboard/audit-logs', 
+      icon: ShieldCheck,
       roles: ['admin']
     },
     { 
@@ -120,7 +132,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
         <div className="text-center">
           <p className="text-xs font-extrabold text-primary mb-1">ثانوية أم القرى بالخرج</p>
           <h1 className="font-extrabold text-primary text-xl leading-tight">بوابة تكامل</h1>
-          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Student Transfer System</p>
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">بوابة تكامل</p>
         </div>
       </div>
 

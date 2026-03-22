@@ -67,7 +67,7 @@ const AdminSettings: React.FC = () => {
           <Smartphone size={24} />
         </div>
         <div>
-          <h2 className="text-xl font-extrabold text-slate-800">📱 إعدادات إشعارات الواتساب</h2>
+          <h2 className="text-xl font-extrabold text-slate-800"> إعدادات إشعارات الواتساب</h2>
           <p className="text-sm text-slate-500 font-bold mt-1">تفعيل أو تعطيل إرسال إشعارات الواتساب للمستخدمين، أو الاكتفاء بإشعارات النظام.</p>
         </div>
       </div>

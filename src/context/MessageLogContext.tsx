@@ -8,12 +8,18 @@ export interface MessageLogEntry {
   messageType: string;
   messageText: string;
   status: 'success' | 'failed';
+  batchId?: string;
+  campaignName?: string;
+  targetAudience?: string;
+  messageId?: string;
 }
 
 interface MessageLogContextType {
   globalMessageLog: MessageLogEntry[];
   addLogEntry: (entry: Omit<MessageLogEntry, 'id' | 'timestamp'>) => void;
   clearLog: () => void;
+  deleteLogEntry: (id: string) => void;
+  deleteBatch: (batchId: string) => void;
 }
 
 const MessageLogContext = createContext<MessageLogContextType | undefined>(undefined);
@@ -48,8 +54,16 @@ export const MessageLogProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setGlobalMessageLog([]);
   };
 
+  const deleteLogEntry = (id: string) => {
+    setGlobalMessageLog(prev => prev.filter(log => log.id !== id));
+  };
+
+  const deleteBatch = (batchId: string) => {
+    setGlobalMessageLog(prev => prev.filter(log => log.batchId !== batchId && log.id !== batchId));
+  };
+
   return (
-    <MessageLogContext.Provider value={{ globalMessageLog, addLogEntry, clearLog }}>
+    <MessageLogContext.Provider value={{ globalMessageLog, addLogEntry, clearLog, deleteLogEntry, deleteBatch }}>
       {children}
     </MessageLogContext.Provider>
   );

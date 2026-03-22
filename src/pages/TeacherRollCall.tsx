@@ -1,7 +1,7 @@
 import { apiFetch } from '../utils/api';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { CheckCircle2, XCircle, Clock, Save, Lock, Users, AlertCircle } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, Save, Lock, Users, AlertCircle, AlertTriangle } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const TeacherRollCall: React.FC = () => {
@@ -23,6 +23,34 @@ const TeacherRollCall: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+
+  const [radarConfig, setRadarConfig] = useState<{type: 'all' | 'specific', active_period?: number} | null>(null);
+
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const localConfig = localStorage.getItem('radar_config');
+      if (localConfig) {
+        try {
+          const parsed = JSON.parse(localConfig);
+          setRadarConfig(parsed);
+          if (parsed.type === 'specific' && parsed.active_period) {
+            setPeriod(String(parsed.active_period));
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      } else {
+        setRadarConfig(null);
+      }
+    };
+
+    // Initial load
+    handleStorageChange();
+
+    // Listen for changes
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
 
   useEffect(() => {
     const fetchClasses = async () => {
@@ -144,10 +172,32 @@ const TeacherRollCall: React.FC = () => {
           <Users size={24} />
         </div>
         <div>
-          <h1 className="text-2xl font-black text-slate-800">تحضير الحصة</h1>
+          <h1 className="text-2xl font-black text-slate-800">التحضير اليومي</h1>
           <p className="text-slate-500 font-bold text-sm">تسجيل الحضور والغياب اليومي</p>
         </div>
       </div>
+
+      {radarConfig ? (
+        <div className="bg-amber-50 border border-amber-200 rounded-3xl p-4 flex items-start gap-3 shadow-sm">
+          <AlertTriangle className="text-amber-500 shrink-0 mt-0.5" size={24} />
+          <div>
+            <h3 className="text-amber-800 font-black text-sm">⚠️ يتم التحكم في خيارات التحضير بواسطة رادار الإدارة</h3>
+            {radarConfig.type === 'specific' ? (
+              <p className="text-amber-700 text-xs mt-1 font-bold">تم قفل التحضير على الحصة {radarConfig.active_period} فقط.</p>
+            ) : (
+              <p className="text-amber-700 text-xs mt-1 font-bold">يمكنك اختيار الحصة التي ترغب في تحضيرها.</p>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="bg-red-50 border border-red-200 rounded-3xl p-4 flex items-start gap-3 shadow-sm">
+          <Lock className="text-red-500 shrink-0 mt-0.5" size={24} />
+          <div>
+            <h3 className="text-red-800 font-black text-sm">رادار التحضير مغلق</h3>
+            <p className="text-red-700 text-xs mt-1 font-bold">لا يمكنك إرسال التحضير حالياً. يرجى الانتظار حتى يتم تفعيل الرادار من قبل الإدارة.</p>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -182,15 +232,31 @@ const TeacherRollCall: React.FC = () => {
 
           <div className="col-span-1">
             <label className="block text-xs font-black text-slate-500 mb-2 uppercase tracking-wider">الحصة</label>
-            <select
-              value={period}
-              onChange={(e) => setPeriod(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none min-h-[44px]"
-            >
-              {[1, 2, 3, 4, 5, 6, 7, 8].map(p => (
-                <option key={p} value={p}>الحصة {p}</option>
-              ))}
-            </select>
+            {radarConfig?.type === 'specific' ? (
+              <div className="relative">
+                <select
+                  disabled
+                  value={radarConfig.active_period}
+                  className="w-full bg-slate-100 border border-slate-200 rounded-2xl py-3 px-4 text-sm font-bold text-slate-500 cursor-not-allowed outline-none min-h-[44px] appearance-none"
+                >
+                  <option value={radarConfig.active_period}>الحصة {radarConfig.active_period}</option>
+                </select>
+                <div className="absolute top-1/2 left-4 -translate-y-1/2 text-slate-400">
+                  <Lock size={16} />
+                </div>
+              </div>
+            ) : (
+              <select
+                value={period}
+                onChange={(e) => setPeriod(e.target.value)}
+                disabled={!radarConfig}
+                className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {[1, 2, 3, 4, 5, 6, 7, 8].map(p => (
+                  <option key={p} value={p}>الحصة {p}</option>
+                ))}
+              </select>
+            )}
           </div>
         </div>
       </div>
@@ -299,8 +365,9 @@ const TeacherRollCall: React.FC = () => {
             >
               <button
                 onClick={handleSubmit}
-                disabled={submitting}
+                disabled={submitting || !radarConfig}
                 className={`w-full min-h-[56px] rounded-2xl font-extrabold flex items-center justify-center gap-2 transition-all shadow-sm ${
+                  !radarConfig ? 'bg-slate-100 text-slate-400 cursor-not-allowed' :
                   success 
                     ? 'bg-emerald-500 text-white shadow-emerald-500/20' 
                     : 'bg-primary text-white hover:bg-primary/90 shadow-primary/20'
@@ -311,7 +378,7 @@ const TeacherRollCall: React.FC = () => {
                 ) : success ? (
                   <>
                     <CheckCircle2 size={20} />
-                    <span>تم إرسال تحضير الحصة {period} بنجاح</span>
+                    <span>تم إرسال التحضير اليومي للحصة {period} بنجاح</span>
                   </>
                 ) : (
                   <>

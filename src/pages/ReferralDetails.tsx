@@ -364,33 +364,33 @@ const ReferralDetails: React.FC = () => {
     const actionsStr = actions.join(' ');
 
     if (actionsStr.includes('تعهد خطي') || actionsStr.includes('تعهد')) {
-      templates.push({ id: 1, name: 'تعهد سلوكي', icon: '📄' });
+      templates.push({ id: 1, name: 'تعهد سلوكي', icon: '' });
     }
     if (actionsStr.includes('ولي أمر') || actionsStr.includes('ولي الأمر')) {
-      templates.push({ id: 2, name: 'إشعار ولي أمر بمشكلة', icon: '📄' });
+      templates.push({ id: 2, name: 'إشعار ولي أمر بمشكلة', icon: '' });
     }
     if (actionsStr.includes('دعوة ولي أمر') || actionsStr.includes('موعد جلسة')) {
-      templates.push({ id: 5, name: 'خطاب دعوة ولي أمر', icon: '📄' });
+      templates.push({ id: 5, name: 'خطاب دعوة ولي أمر', icon: '' });
     }
     if (actionsStr.includes('الموجه الطلابي') || actionsStr.includes('لجنة التوجيه') || actionsStr.includes('الموجه')) {
-      templates.push({ id: 10, name: 'إحالة طالب', icon: '📄' });
-      templates.push({ id: 12, name: 'خطة تعديل سلوك', icon: '📄' });
+      templates.push({ id: 10, name: 'إحالة طالب', icon: '' });
+      templates.push({ id: 12, name: 'خطة تعديل سلوك', icon: '' });
     }
     if (actionsStr.includes('غياب')) {
-      templates.push({ id: 4, name: 'تعهد الحضور', icon: '📄' });
-      templates.push({ id: 16, name: 'إجراءات الغياب', icon: '📄' });
+      templates.push({ id: 4, name: 'تعهد الحضور', icon: '' });
+      templates.push({ id: 16, name: 'إجراءات الغياب', icon: '' });
     }
     if (actionsStr.includes('مركز البلاغات') || actionsStr.includes('1919')) {
-      templates.push({ id: 15, name: 'نموذج إبلاغ 1919', icon: '📄' });
+      templates.push({ id: 15, name: 'نموذج إبلاغ 1919', icon: '' });
     }
     if (actionsStr.includes('الجهات الأمنية')) {
-      templates.push({ id: 14, name: 'نموذج إبلاغ جهات أمنية', icon: '📄' });
+      templates.push({ id: 14, name: 'نموذج إبلاغ جهات أمنية', icon: '' });
     }
     if (actionsStr.includes('انعقاد لجنة التوجيه')) {
-      templates.push({ id: 11, name: 'محضر اجتماع لجنة التوجيه', icon: '📄' });
+      templates.push({ id: 11, name: 'محضر اجتماع لجنة التوجيه', icon: '' });
     }
     if (actionsStr.includes('إدارة التعليم') || actionsStr.includes('مدير التعليم') || actionsStr.includes('نقل')) {
-      templates.push({ id: 13, name: 'محضر الرفع الرسمي', icon: '📄' });
+      templates.push({ id: 13, name: 'محضر الرفع الرسمي', icon: '' });
     }
 
     // Deduplicate
@@ -1047,7 +1047,7 @@ const ReferralDetails: React.FC = () => {
               <div className="absolute top-0 right-0 w-2 h-full bg-slate-700" />
               <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-3">
                 <ShieldAlert size={24} className="text-slate-700" />
-                <span>⚖️ القرار الإداري وإجراءات الوكيل</span>
+                <span>️ القرار الإداري وإجراءات الوكيل</span>
               </h3>
               
               <div className="space-y-6">
@@ -1266,7 +1266,7 @@ const ReferralDetails: React.FC = () => {
                             className="w-full py-4 px-6 border-2 border-slate-200 text-slate-700 font-bold rounded-2xl hover:border-slate-300 hover:bg-slate-50 transition-all flex items-center justify-center gap-3 shadow-sm"
                           >
                             <ShieldAlert size={20} className="text-slate-500" />
-                            <span>⚖️ تطبيق إجراء من لائحة السلوك</span>
+                            <span>️ تطبيق إجراء من لائحة السلوك</span>
                           </button>
                         ) : (
                           <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm relative">
@@ -1359,7 +1359,7 @@ const ReferralDetails: React.FC = () => {
                             }`}
                           >
                             <ArrowRightLeft size={20} />
-                            <span>🧭 إحالة للموجه الطلابي</span>
+                            <span> إحالة للموجه الطلابي</span>
                           </button>
 
                           <button
@@ -1368,7 +1368,7 @@ const ReferralDetails: React.FC = () => {
                             className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-2xl transition-all flex items-center justify-center gap-3 shadow-lg shadow-emerald-600/20"
                           >
                             <CheckCircle2 size={20} />
-                            <span>💾 حفظ ومعالجة وإغلاق</span>
+                            <span> حفظ ومعالجة وإغلاق</span>
                           </button>
 
                           <button

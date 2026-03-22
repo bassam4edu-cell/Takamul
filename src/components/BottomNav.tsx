@@ -41,7 +41,7 @@ const BottomNav: React.FC = () => {
       roles: ['admin']
     },
     { 
-      title: '📝 تحضير', 
+      title: ' تحضير', 
       path: '/dashboard/attendance/teacher', 
       icon: Users,
       roles: ['teacher']

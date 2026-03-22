@@ -34,6 +34,8 @@ const DailyAbsenceReport = lazy(() => import('./pages/DailyAbsenceReport'));
 const ParentLogin = lazy(() => import('./pages/ParentLogin'));
 const ParentPortal = lazy(() => import('./pages/ParentPortal'));
 const Register = lazy(() => import('./pages/Register'));
+const AuditLogs = lazy(() => import('./pages/AuditLogs'));
+const SmartTracker = lazy(() => import('./pages/SmartTracker'));
 
 
 
@@ -107,6 +109,11 @@ const App: React.FC = () => {
                   <TeacherRollCall />
                 </ProtectedRoute>
               } />
+              <Route path="class-tracker" element={
+                <ProtectedRoute allowedRoles={['teacher']}>
+                  <SmartTracker />
+                </ProtectedRoute>
+              } />
               <Route path="attendance/radar" element={
                 <ProtectedRoute allowedRoles={['vice_principal', 'principal']}>
                   <VPRadar />
@@ -133,6 +140,11 @@ const App: React.FC = () => {
               <Route path="admin-referrals" element={
                 <ProtectedRoute allowedRoles={['admin']}>
                   <AdminReferrals />
+                </ProtectedRoute>
+              } />
+              <Route path="audit-logs" element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AuditLogs />
                 </ProtectedRoute>
               } />
               <Route path="message-center" element={

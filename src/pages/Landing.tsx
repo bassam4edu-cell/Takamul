@@ -119,7 +119,7 @@ const Landing: React.FC = () => {
 
       {/* Footer */}
       <footer className="absolute bottom-8 w-full text-center text-slate-400 text-xs font-bold z-10">
-        <p>© 2026 ثانوية أم القرى بالخرج - جميع الحقوق محفوظة</p>
+        <p> 2026 ثانوية أم القرى بالخرج - جميع الحقوق محفوظة</p>
         <p className="text-[10px] mt-1 opacity-70">برمجة: بسام العنزي</p>
       </footer>
     </div>

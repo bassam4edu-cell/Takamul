@@ -53,13 +53,13 @@ const ForgotPasswordModal: React.FC<{ isOpen: boolean; onClose: () => void }> = 
           });
           const waData = await waResponse.json();
           if (!waResponse.ok || !waData.success) {
-            setError("⚠️ تعذر إرسال كود التحقق. يرجى التأكد من ربط الواتساب.");
+            setError("️ تعذر إرسال كود التحقق. يرجى التأكد من ربط الواتساب.");
             setLoading(false);
             return;
           }
           setStep('otp');
         } catch (err) {
-          setError("🔌 خطأ في الاتصال بالخادم أثناء إرسال الرسالة.");
+          setError(" خطأ في الاتصال بالخادم أثناء إرسال الرسالة.");
         }
       } else {
         setError(data.message || 'لم يتم العثور على حساب');
@@ -287,9 +287,27 @@ const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
   
+  // OTP State
+  const [step, setStep] = useState<1 | 2>(1);
+  const [otp, setOtp] = useState(['', '', '', '']);
+  const [countdown, setCountdown] = useState(60);
+  const [tempUser, setTempUser] = useState<any>(null);
+  
   const { user, login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (step === 2 && countdown > 0) {
+      timer = setInterval(() => {
+        setCountdown((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [step, countdown]);
 
   useEffect(() => {
     if ((location.state as any)?.openForgotModal) {
@@ -329,14 +347,22 @@ const Login: React.FC = () => {
       if (data.success) {
         // Simulate a slight delay for smooth UX
         await new Promise(resolve => setTimeout(resolve, 1000));
-        login(data.user);
         
-        // Smart Routing based on role
-        let from = (location.state as any)?.from?.pathname;
-        if (!from || from === '/') {
-          from = '/dashboard';
+        if (data.user.role === 'admin' || data.user.email.endsWith('@test.com')) {
+          // تخطي التحقق الثنائي (OTP) للمدير وحسابات التجربة
+          login(data.user);
+          let from = (location.state as any)?.from?.pathname;
+          if (!from || from === '/') {
+            from = '/dashboard';
+          }
+          navigate(from, { replace: true });
+        } else {
+          // الانتقال للخطوة الثانية (OTP) لباقي المستخدمين
+          setTempUser(data.user);
+          setStep(2);
+          setCountdown(60);
+          setOtp(['', '', '', '']);
         }
-        navigate(from, { replace: true });
       } else {
         setError(data.message || 'بيانات الدخول غير صحيحة');
       }
@@ -345,6 +371,61 @@ const Login: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleOtpChange = (index: number, value: string) => {
+    if (value.length > 1) value = value.slice(-1);
+    if (!/^\d*$/.test(value)) return;
+
+    const newOtp = [...otp];
+    newOtp[index] = value;
+    setOtp(newOtp);
+
+    if (value && index < 3) {
+      const nextInput = document.getElementById(`otp-${index + 1}`);
+      nextInput?.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !otp[index] && index > 0) {
+      const prevInput = document.getElementById(`otp-${index - 1}`);
+      prevInput?.focus();
+    }
+  };
+
+  const handleVerifyOTP = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const code = otp.join('');
+    if (code.length !== 4) {
+      setError('يرجى إدخال رمز التحقق كاملاً');
+      return;
+    }
+    
+    setLoading(true);
+    setError('');
+    
+    // محاكاة التحقق (Mock Logic)
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    if (code === '1234') {
+      login(tempUser);
+      let from = (location.state as any)?.from?.pathname;
+      if (!from || from === '/') {
+        from = '/dashboard';
+      }
+      navigate(from, { replace: true });
+    } else {
+      setError('رمز التحقق غير صحيح');
+    }
+    setLoading(false);
+  };
+
+  const handleResendOTP = async () => {
+    setCountdown(60);
+    setOtp(['', '', '', '']);
+    setError('');
+    // محاكاة إعادة الإرسال
   };
 
   return (
@@ -379,18 +460,29 @@ const Login: React.FC = () => {
       </div>
 
       {/* Right Side: Login Form */}
-      <div className="md:w-1/2 flex items-center justify-center p-8 md:p-16 bg-bg-light relative">
-        <button 
-          onClick={() => navigate('/')}
-          className="absolute top-6 left-6 text-slate-400 hover:text-primary transition-colors flex items-center gap-1 text-sm font-bold z-10"
-        >
-          <span>الرئيسية</span>
-          <ArrowRight size={16} className="rotate-180" />
-        </button>
-        <div className="max-w-md w-full">
+      <div className="min-h-screen w-full bg-white flex flex-col justify-center px-6 py-8 md:w-1/2 md:min-h-0 md:bg-gray-50 md:py-12 relative">
+        <div className="w-full md:max-w-md md:mx-auto md:bg-white md:rounded-2xl md:shadow-xl md:p-10">
+          <div className="flex justify-end mb-8">
+            <button 
+              onClick={() => navigate('/')}
+              className="text-slate-400 hover:text-primary transition-colors flex items-center gap-1 text-sm font-bold"
+            >
+              <span>الرئيسية</span>
+              <ArrowRight size={16} className="rotate-180" />
+            </button>
+          </div>
           <div className="mb-10 flex flex-col items-center text-center">
-            <h2 className="text-3xl font-extrabold text-slate-900 mb-2">تسجيل دخول آمن</h2>
-            <p className="text-slate-500">يرجى إدخال بياناتك للوصول إلى لوحة التحكم</p>
+            {step === 1 ? (
+              <>
+                <h2 className="text-3xl font-extrabold text-slate-900 mb-2">تسجيل دخول آمن</h2>
+                <p className="text-slate-500">يرجى إدخال بياناتك للوصول إلى لوحة التحكم</p>
+              </>
+            ) : (
+              <>
+                <h2 className="text-3xl font-extrabold text-slate-900 mb-2">التحقق الأمني</h2>
+                <p className="text-slate-500">تم إرسال رمز تحقق (OTP) إلى رقم جوالك المسجل عبر الواتساب</p>
+              </>
+            )}
           </div>
 
           <motion.div 
@@ -398,62 +490,118 @@ const Login: React.FC = () => {
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.3 }}
           >
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="space-y-4">
-                <div className="relative group">
-                  <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
-                    <Mail size={20} />
+            {step === 1 ? (
+              <form onSubmit={handleSubmit} className="space-y-5">
+                <div className="space-y-5">
+                  <div className="relative group">
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
+                      <Mail size={20} />
+                    </div>
+                    <input
+                      type="email"
+                      placeholder="البريد الإلكتروني"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="sts-input pr-12 w-full"
+                      required
+                    />
                   </div>
-                  <input
-                    type="email"
-                    placeholder="البريد الإلكتروني"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="sts-input pr-12"
-                    required
-                  />
+
+                  <div className="relative group">
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
+                      <Lock size={20} />
+                    </div>
+                    <input
+                      type="password"
+                      placeholder="كلمة المرور"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="sts-input pr-12 w-full"
+                      required
+                    />
+                  </div>
                 </div>
 
-                <div className="relative group">
-                  <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
-                    <Lock size={20} />
-                  </div>
-                  <input
-                    type="password"
-                    placeholder="كلمة المرور"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="sts-input pr-12"
-                    required
-                  />
-                </div>
-              </div>
-
-              {error && (
-                <motion.p 
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="text-red-500 text-sm text-center bg-red-50 py-3 rounded-xl border border-red-100 font-medium"
-                >
-                  {error}
-                </motion.p>
-              )}
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full sts-button-accent flex items-center justify-center gap-2 group disabled:opacity-70"
-              >
-                {loading ? (
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                ) : (
-                  <>
-                    <span>دخول النظام</span>
-                    <ChevronRight size={20} className="group-hover:translate-x-[-4px] transition-transform" />
-                  </>
+                {error && (
+                  <motion.p 
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className="text-red-500 text-sm text-center bg-red-50 py-3 rounded-xl border border-red-100 font-medium"
+                  >
+                    {error}
+                  </motion.p>
                 )}
-              </button>
-            </form>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3 text-lg sts-button-accent flex items-center justify-center gap-2 group disabled:opacity-70"
+                >
+                  {loading ? (
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  ) : (
+                    <>
+                      <span>دخول النظام</span>
+                      <ChevronRight size={20} className="group-hover:translate-x-[-4px] transition-transform" />
+                    </>
+                  )}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleVerifyOTP} className="space-y-6 text-center">
+                <div className="flex justify-center gap-3 dir-ltr">
+                  {otp.map((digit, index) => (
+                    <input
+                      key={index}
+                      id={`otp-${index}`}
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      autoComplete="one-time-code"
+                      maxLength={1}
+                      value={digit}
+                      onChange={(e) => handleOtpChange(index, e.target.value)}
+                      onKeyDown={(e) => handleOtpKeyDown(index, e)}
+                      className="w-12 h-12 text-center text-2xl font-bold bg-slate-50 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-[#004D40] focus:ring-2 focus:ring-[#004D40]/20 transition-all"
+                      autoFocus={index === 0}
+                    />
+                  ))}
+                </div>
+
+                {error && (
+                  <motion.p 
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className="text-red-500 text-sm text-center bg-red-50 py-3 rounded-xl border border-red-100 font-medium"
+                  >
+                    {error}
+                  </motion.p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={loading || otp.join('').length !== 4}
+                  className="w-full py-3 text-lg sts-button-accent flex items-center justify-center gap-2 group disabled:opacity-70"
+                >
+                  {loading ? (
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  ) : (
+                    <span>تأكيد الرمز</span>
+                  )}
+                </button>
+
+                <div className="mt-4">
+                  <button
+                    type="button"
+                    onClick={handleResendOTP}
+                    disabled={countdown > 0 || loading}
+                    className="text-[#004D40] font-medium hover:underline disabled:text-slate-400 disabled:no-underline transition-colors"
+                  >
+                    {countdown > 0 ? `يمكنك طلب رمز جديد بعد 00:${countdown.toString().padStart(2, '0')}` : 'إعادة إرسال الرمز'}
+                  </button>
+                </div>
+              </form>
+            )}
 
             <div className="mt-12 pt-8 border-t border-slate-100 text-center space-y-4">
               <div className="flex flex-col gap-4 items-center">
@@ -472,7 +620,7 @@ const Login: React.FC = () => {
                 <button type="button" onClick={() => setIsForgotModalOpen(true)} className="text-xs font-bold text-slate-400 hover:text-primary transition-colors">نسيت كلمة المرور</button>
               </div>
               <div className="text-[10px] text-slate-400 space-y-1">
-                <p>© 2026 بوابة تكامل. جميع الحقوق محفوظة.</p>
+                <p> 2026 بوابة تكامل. جميع الحقوق محفوظة.</p>
                 <p className="font-bold text-primary/60">برمجة: بسام غربي العنزي</p>
               </div>
             </div>

@@ -28,7 +28,7 @@ const Logo: React.FC<LogoProps> = ({ className = "w-12 h-12", showText = false, 
         <div className="flex flex-col items-center text-center">
           <span className={`text-sm font-extrabold leading-none mb-1 ${light ? 'text-white' : 'text-primary'}`}>ثانوية أم القرى بالخرج</span>
           <span className={`text-xl font-extrabold leading-none ${light ? 'text-white' : 'text-primary'}`}>بوابة تكامل</span>
-          <span className={`text-[10px] font-medium tracking-wider uppercase ${light ? 'text-white/80' : 'text-slate-500'}`}>Student Transfer System</span>
+          <span className={`text-[10px] font-medium tracking-wider uppercase ${light ? 'text-white/80' : 'text-slate-500'}`}>بوابة تكامل</span>
         </div>
       )}
     </div>

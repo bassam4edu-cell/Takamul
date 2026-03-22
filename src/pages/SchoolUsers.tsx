@@ -863,7 +863,7 @@ const SchoolUsers: React.FC = React.memo(() => {
                         <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
                           isSelected ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-300'
                         }`}>
-                          {isSelected && <span className="text-xs">✓</span>}
+                          {isSelected && <span className="text-xs"></span>}
                         </div>
                       </button>
                     );
