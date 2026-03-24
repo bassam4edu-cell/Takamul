@@ -670,7 +670,7 @@ const AdminDashboard: React.FC = () => {
           className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'users' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
         >
           <UserCog size={18} />
-          إدارة المستخدمين
+          إدارة الإسناد والمواد
         </button>
         <button 
           onClick={() => setActiveTab('students')} 

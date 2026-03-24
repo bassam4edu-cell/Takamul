@@ -196,6 +196,59 @@ async function initDb() {
       // Ignore if column already exists or other error
     }
 
+    // Smart Tracker Tables
+    await sql`
+      CREATE TABLE IF NOT EXISTS smart_tracker_sessions (
+        id SERIAL PRIMARY KEY,
+        teacher_id INTEGER REFERENCES users(id),
+        grade TEXT,
+        section TEXT,
+        subject TEXT,
+        date DATE DEFAULT CURRENT_DATE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(teacher_id, grade, section, subject, date)
+      )
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS smart_tracker_tasks (
+        id TEXT PRIMARY KEY,
+        session_id INTEGER REFERENCES smart_tracker_sessions(id) ON DELETE CASCADE,
+        category TEXT,
+        name TEXT,
+        max_grade INTEGER,
+        type TEXT
+      )
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS smart_tracker_student_states (
+        id SERIAL PRIMARY KEY,
+        session_id INTEGER REFERENCES smart_tracker_sessions(id) ON DELETE CASCADE,
+        student_id INTEGER REFERENCES students(id),
+        attendance TEXT,
+        behavior_chips JSONB DEFAULT '[]'::jsonb,
+        UNIQUE(session_id, student_id)
+      )
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS smart_tracker_student_grades (
+        id SERIAL PRIMARY KEY,
+        student_state_id INTEGER REFERENCES smart_tracker_student_states(id) ON DELETE CASCADE,
+        task_id TEXT REFERENCES smart_tracker_tasks(id) ON DELETE CASCADE,
+        grade NUMERIC,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(student_state_id, task_id)
+      )
+    `;
+
+    try {
+      await sql`ALTER TABLE smart_tracker_student_grades ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`;
+    } catch (e) {
+      // Ignore if column already exists
+    }
+
     // Seed data if empty
     const usersCount = await sql`SELECT COUNT(*) as count FROM users`;
     if (parseInt(usersCount[0].count) === 0) {
@@ -749,8 +802,12 @@ async function startServer() {
       const gradesResult = await sql`SELECT grade FROM user_grades WHERE user_id = ${user.id}`;
       const grades = gradesResult.map((g: any) => g.grade);
       
+      // Generate OTP
+      const otp_code = Math.floor(1000 + Math.random() * 9000).toString();
+      await sql`UPDATE users SET otp_code = ${otp_code} WHERE id = ${user.id}`;
+
       console.log(`[LOGIN] Success for: ${email}, Role: ${user.role}`);
-      res.json({ success: true, user: { ...user, assigned_grades: grades } });
+      res.json({ success: true, user: { ...user, assigned_grades: grades }, otp_code });
     } catch (err) {
       console.error("[LOGIN] Error:", err);
       res.status(500).json({ success: false, message: "حدث خطأ في السيرفر" });
@@ -829,6 +886,34 @@ async function startServer() {
       res.json({ success: true, message: "تم توثيق الجوال بنجاح! حسابك الآن بانتظار اعتماد إدارة المدرسة للبدء بالعمل." });
     } catch (err) {
       console.error("[VERIFY OTP] Error:", err);
+      res.status(500).json({ success: false, message: "حدث خطأ أثناء التحقق" });
+    }
+  });
+
+  app.post("/api/verify-login-otp", async (req, res) => {
+    const { email, otp_code } = req.body;
+    
+    try {
+      const users = await sql`SELECT * FROM users WHERE email = ${email}`;
+      const user = users[0];
+
+      if (!user) {
+        return res.status(404).json({ success: false, message: "المستخدم غير موجود" });
+      }
+
+      if (user.otp_code !== otp_code) {
+        return res.status(400).json({ success: false, message: "كود التحقق غير صحيح" });
+      }
+
+      await sql`
+        UPDATE users 
+        SET otp_code = NULL 
+        WHERE id = ${user.id}
+      `;
+
+      res.json({ success: true, message: "تم التحقق بنجاح" });
+    } catch (err) {
+      console.error("[VERIFY LOGIN OTP] Error:", err);
       res.status(500).json({ success: false, message: "حدث خطأ أثناء التحقق" });
     }
   });
@@ -1177,9 +1262,13 @@ async function startServer() {
 
   app.get("/api/students", async (req, res) => {
     const userId = req.query.userId as string;
+    const grade = req.query.grade as string;
+    const section = req.query.section as string;
     let students;
 
-    if (userId) {
+    if (grade && section) {
+      students = await sql`SELECT * FROM students WHERE grade = ${grade} AND section = ${section}`;
+    } else if (userId) {
       const gradesResult = await sql`SELECT grade FROM user_grades WHERE user_id = ${userId}`;
       const grades = gradesResult.map((g: any) => g.grade);
       if (grades.length > 0) {
@@ -3000,6 +3089,148 @@ async function startServer() {
     } catch (err) {
       console.error("Export error:", err);
       res.status(500).json({ error: "فشل تصدير البيانات" });
+    }
+  });
+
+  // --- Smart Tracker Endpoints ---
+  app.get("/api/tracker/history", async (req, res) => {
+    const { teacher_id, grade, section, subject } = req.query;
+    try {
+      const history = await sql`
+        SELECT 
+          t.id as task_id,
+          t.name as task_name,
+          t.category,
+          t.max_grade,
+          t.type,
+          s.id as session_id,
+          s.date as session_date
+        FROM smart_tracker_tasks t
+        JOIN smart_tracker_sessions s ON t.session_id = s.id
+        WHERE s.teacher_id = ${teacher_id} 
+          AND s.grade = ${grade} 
+          AND s.section = ${section} 
+          AND s.subject = ${subject}
+        ORDER BY s.date DESC, t.id DESC
+      `;
+      res.json(history);
+    } catch (err) {
+      console.error("[GET TRACKER HISTORY] Error:", err);
+      res.status(500).json({ error: "Failed to fetch tracker history" });
+    }
+  });
+
+  app.get("/api/tracker/session", async (req, res) => {
+    const { teacher_id, grade, section, subject, date } = req.query;
+    try {
+      const sessions = await sql`
+        SELECT * FROM smart_tracker_sessions
+        WHERE teacher_id = ${teacher_id} AND grade = ${grade} AND section = ${section} AND subject = ${subject} AND date = ${date}
+      `;
+      if (sessions.length === 0) {
+        return res.json(null);
+      }
+      const session = sessions[0];
+      
+      const tasks = await sql`SELECT * FROM smart_tracker_tasks WHERE session_id = ${session.id}`;
+      const studentStates = await sql`SELECT * FROM smart_tracker_student_states WHERE session_id = ${session.id}`;
+      
+      const statesWithGrades = await Promise.all(studentStates.map(async (state: any) => {
+        const grades = await sql`SELECT * FROM smart_tracker_student_grades WHERE student_state_id = ${state.id}`;
+        return { ...state, grades };
+      }));
+
+      res.json({ session, tasks, studentStates: statesWithGrades });
+    } catch (err) {
+      console.error("[GET TRACKER SESSION] Error:", err);
+      res.status(500).json({ error: "Failed to fetch tracker session" });
+    }
+  });
+
+  app.post("/api/tracker/session", async (req, res) => {
+    const { teacher_id, grade, section, subject, date, tasks, studentsState } = req.body;
+    try {
+      // Upsert session
+      const sessions = await sql`
+        INSERT INTO smart_tracker_sessions (teacher_id, grade, section, subject, date)
+        VALUES (${teacher_id}, ${grade}, ${section}, ${subject}, ${date})
+        ON CONFLICT (teacher_id, grade, section, subject, date) 
+        DO UPDATE SET created_at = CURRENT_TIMESTAMP
+        RETURNING id
+      `;
+      const sessionId = sessions[0].id;
+
+      // Get all task IDs from the request
+      const taskIds: string[] = [];
+      for (const category in tasks) {
+        for (const task of tasks[category]) {
+          taskIds.push(task.id);
+        }
+      }
+
+      // Delete tasks that are NOT in the request
+      if (taskIds.length > 0) {
+        await sql`DELETE FROM smart_tracker_tasks WHERE session_id = ${sessionId} AND id != ALL(${taskIds})`;
+      } else {
+        await sql`DELETE FROM smart_tracker_tasks WHERE session_id = ${sessionId}`;
+      }
+
+      // Upsert tasks
+      for (const category in tasks) {
+        for (const task of tasks[category]) {
+          await sql`
+            INSERT INTO smart_tracker_tasks (id, session_id, category, name, max_grade, type)
+            VALUES (${task.id}, ${sessionId}, ${category}, ${task.name}, ${task.maxGrade}, ${task.type})
+            ON CONFLICT (id) DO UPDATE SET
+              category = EXCLUDED.category,
+              name = EXCLUDED.name,
+              max_grade = EXCLUDED.max_grade,
+              type = EXCLUDED.type
+          `;
+        }
+      }
+
+      // Insert student states and grades
+      for (const studentIdStr in studentsState) {
+        const studentId = parseInt(studentIdStr);
+        const state = studentsState[studentId];
+        
+        const states = await sql`
+          INSERT INTO smart_tracker_student_states (session_id, student_id, attendance, behavior_chips)
+          VALUES (${sessionId}, ${studentId}, ${state.attendance}, ${JSON.stringify(state.behaviorChips)})
+          ON CONFLICT (session_id, student_id) DO UPDATE SET
+            attendance = EXCLUDED.attendance,
+            behavior_chips = EXCLUDED.behavior_chips
+          RETURNING id
+        `;
+        const stateId = states[0].id;
+
+        // Get all task IDs for this student's grades
+        const gradeTaskIds = Object.keys(state.grades).filter(taskId => state.grades[taskId] !== '');
+
+        // Delete grades that are NOT in the request
+        if (gradeTaskIds.length > 0) {
+          await sql`DELETE FROM smart_tracker_student_grades WHERE student_state_id = ${stateId} AND task_id != ALL(${gradeTaskIds})`;
+        } else {
+          await sql`DELETE FROM smart_tracker_student_grades WHERE student_state_id = ${stateId}`;
+        }
+
+        for (const taskId of gradeTaskIds) {
+          const gradeVal = state.grades[taskId];
+          await sql`
+            INSERT INTO smart_tracker_student_grades (student_state_id, task_id, grade, updated_at)
+            VALUES (${stateId}, ${taskId}, ${gradeVal}, CURRENT_TIMESTAMP)
+            ON CONFLICT (student_state_id, task_id) DO UPDATE SET
+              grade = EXCLUDED.grade,
+              updated_at = CURRENT_TIMESTAMP
+          `;
+        }
+      }
+
+      res.json({ success: true, sessionId });
+    } catch (err) {
+      console.error("[SAVE TRACKER SESSION] Error:", err);
+      res.status(500).json({ error: "Failed to save tracker session" });
     }
   });
 

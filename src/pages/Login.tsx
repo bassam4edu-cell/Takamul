@@ -358,15 +358,39 @@ const Login: React.FC = () => {
           navigate(from, { replace: true });
         } else {
           // الانتقال للخطوة الثانية (OTP) لباقي المستخدمين
-          setTempUser(data.user);
-          setStep(2);
-          setCountdown(60);
-          setOtp(['', '', '', '']);
+          try {
+            const otpMessage = `مرحباً بك في منصة المدرسة.\nكود التحقق الخاص بك هو: *${data.otp_code}*\nيرجى إدخاله لإكمال تسجيل الدخول.`;
+            
+            const waResponse = await apiFetch('/api/whatsapp/send', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                phoneNumber: data.user.phone_number,
+                message: otpMessage
+              })
+            });
+            
+            const responseData = await waResponse.json();
+            
+            if (!waResponse.ok || !responseData.success) {
+              console.log("Error sending OTP:", responseData.message);
+              throw new Error("فشل إرسال رمز التحقق. يرجى المحاولة مرة أخرى.");
+            }
+            
+            setTempUser(data.user);
+            setStep(2);
+            setCountdown(60);
+            setOtp(['', '', '', '']);
+          } catch (otpError: any) {
+            console.log("Error sending OTP:", otpError.message);
+            throw new Error("فشل إرسال رمز التحقق. يرجى المحاولة مرة أخرى.");
+          }
         }
       } else {
         setError(data.message || 'بيانات الدخول غير صحيحة');
       }
     } catch (err: any) {
+      console.log("Login Error:", err.message);
       setError(err.message || 'حدث خطأ في الاتصال بالسيرفر');
     } finally {
       setLoading(false);
@@ -405,27 +429,80 @@ const Login: React.FC = () => {
     setLoading(true);
     setError('');
     
-    // محاكاة التحقق (Mock Logic)
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    if (code === '1234') {
+    try {
+      const response = await apiFetch('/api/verify-login-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: tempUser.email,
+          otp_code: code
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        console.log("OTP Verification Error:", data.message);
+        throw new Error(data.message || "رمز التحقق غير صحيح أو منتهي الصلاحية");
+      }
+
+      // If successful, log the user in
       login(tempUser);
       let from = (location.state as any)?.from?.pathname;
       if (!from || from === '/') {
         from = '/dashboard';
       }
       navigate(from, { replace: true });
-    } else {
-      setError('رمز التحقق غير صحيح');
+
+    } catch (err: any) {
+       console.log("Verification Exception:", err.message);
+       setError(err.message || 'حدث خطأ أثناء التحقق');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleResendOTP = async () => {
-    setCountdown(60);
-    setOtp(['', '', '', '']);
     setError('');
-    // محاكاة إعادة الإرسال
+    setLoading(true);
+    try {
+      const response = await apiFetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        const otpMessage = `مرحباً بك في منصة المدرسة.\nكود التحقق الخاص بك هو: *${data.otp_code}*\nيرجى إدخاله لإكمال تسجيل الدخول.`;
+        
+        const waResponse = await apiFetch('/api/whatsapp/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phoneNumber: data.user.phone_number,
+            message: otpMessage
+          })
+        });
+        
+        const responseData = await waResponse.json();
+        
+        if (!waResponse.ok || !responseData.success) {
+          throw new Error("فشل إرسال رمز التحقق. يرجى المحاولة مرة أخرى.");
+        }
+        
+        setCountdown(60);
+        setOtp(['', '', '', '']);
+      } else {
+        throw new Error(data.message || 'فشل إعادة الإرسال');
+      }
+    } catch (err: any) {
+      console.log("Resend OTP Error:", err.message);
+      setError(err.message || 'حدث خطأ أثناء إعادة الإرسال');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

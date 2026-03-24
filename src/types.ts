@@ -57,6 +57,25 @@ export interface Referral {
   applied_remedial_actions?: string[];
 }
 
+export interface Subject {
+  id: number;
+  name: string;
+  school_id: number;
+}
+
+export interface Class {
+  id: number;
+  name: string;
+  school_id: number;
+}
+
+export interface TeacherAssignment {
+  id: number;
+  teacher_id: number;
+  subject_id: number;
+  class_id: string | number;
+}
+
 export interface ReferralLog {
   id: number;
   referral_id: number;

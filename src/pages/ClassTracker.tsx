@@ -52,17 +52,18 @@ const ClassTracker: React.FC = () => {
   const { user } = useAuth();
   const isReadOnly = user?.role !== 'teacher';
 
-  const [grade, setGrade] = useState('أولى ثانوي');
-  const [section, setSection] = useState('أ');
+  const [grade, setGrade] = useState('');
+  const [section, setSection] = useState('');
   const [subject, setSubject] = useState('رياضيات');
   const [period, setPeriod] = useState<number>(1);
   
-  const [studentsState, setStudentsState] = useState<Record<number, StudentState>>(
-    mockStudents.reduce((acc, student) => ({
-      ...acc,
-      [student.id]: { attendance: 'present', participation: false, homework: false, negativeNote: false }
-    }), {})
-  );
+  const [availableGrades, setAvailableGrades] = useState<string[]>([]);
+  const [availableSections, setAvailableSections] = useState<string[]>([]);
+  
+  const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const [studentsState, setStudentsState] = useState<Record<number, StudentState>>({});
 
   const [highlightedStudent, setHighlightedStudent] = useState<number | null>(null);
   const [selectedStudentForModal, setSelectedStudentForModal] = useState<Student | null>(null);
@@ -105,15 +106,14 @@ const ClassTracker: React.FC = () => {
   };
 
   const pickRandomStudent = () => {
-    if (isReadOnly) return;
+    if (isReadOnly || students.length === 0) return;
     let counter = 0;
     const interval = setInterval(() => {
-      const randomIndex = Math.floor(Math.random() * mockStudents.length);
-      setHighlightedStudent(mockStudents[randomIndex].id);
+      const randomIndex = Math.floor(Math.random() * students.length);
+      setHighlightedStudent(students[randomIndex].id);
       counter++;
       if (counter > 10) {
         clearInterval(interval);
-        // Keep the final selection highlighted for a bit longer
         setTimeout(() => setHighlightedStudent(null), 3000);
       }
     }, 100);
@@ -152,17 +152,17 @@ const ClassTracker: React.FC = () => {
               value={grade} onChange={(e) => setGrade(e.target.value)}
               className="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-primary focus:border-primary block p-2.5 font-bold"
             >
-              <option value="أولى ثانوي">أولى ثانوي</option>
-              <option value="ثاني ثانوي">ثاني ثانوي</option>
-              <option value="ثالث ثانوي">ثالث ثانوي</option>
+              {availableGrades.map(g => (
+                <option key={g} value={g}>{g}</option>
+              ))}
             </select>
             <select 
               value={section} onChange={(e) => setSection(e.target.value)}
               className="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-primary focus:border-primary block p-2.5 font-bold"
             >
-              <option value="أ">أ</option>
-              <option value="ب">ب</option>
-              <option value="ج">ج</option>
+              {availableSections.map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
             </select>
             <select 
               value={subject} onChange={(e) => setSubject(e.target.value)}
@@ -217,38 +217,42 @@ const ClassTracker: React.FC = () => {
 
       {/* Students Grid */}
       <div className="space-y-3">
-        {mockStudents.map((student) => {
-          const state = studentsState[student.id];
-          const isHighlighted = highlightedStudent === student.id;
+        {loading ? (
+          <div className="text-center py-12 text-slate-500">جاري تحميل الطلاب...</div>
+        ) : (
+          students.map((student) => {
+            const state = studentsState[student.id];
+            if (!state) return null;
+            const isHighlighted = highlightedStudent === student.id;
 
-          return (
-            <motion.div 
-              key={student.id}
-              initial={false}
-              animate={{
-                scale: isHighlighted ? 1.02 : 1,
-                boxShadow: isHighlighted ? '0 10px 25px -5px rgba(99, 102, 241, 0.4)' : '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
-                borderColor: isHighlighted ? '#6366f1' : '#f1f5f9'
-              }}
-              className={`bg-white rounded-xl border p-3 md:p-4 flex flex-col md:flex-row items-center gap-4 transition-all duration-200 ${isHighlighted ? 'ring-2 ring-indigo-500 ring-offset-2 z-10 relative' : ''}`}
-            >
-              {/* Identity (Right) */}
-              <div 
-                className="flex items-center gap-3 w-full md:w-1/3 cursor-pointer group"
-                onClick={() => openStudentModal(student)}
+            return (
+              <motion.div 
+                key={student.id}
+                initial={false}
+                animate={{
+                  scale: isHighlighted ? 1.02 : 1,
+                  boxShadow: isHighlighted ? '0 10px 25px -5px rgba(99, 102, 241, 0.4)' : '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+                  borderColor: isHighlighted ? '#6366f1' : '#f1f5f9'
+                }}
+                className={`bg-white rounded-xl border p-3 md:p-4 flex flex-col md:flex-row items-center gap-4 transition-all duration-200 ${isHighlighted ? 'ring-2 ring-indigo-500 ring-offset-2 z-10 relative' : ''}`}
               >
-                <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500 shrink-0">
-                  {student.rollNumber}
-                </div>
-                <img src={student.avatar} alt={student.name} className="w-12 h-12 rounded-full shadow-sm" />
-                <div>
-                  <h3 className="font-bold text-slate-800 group-hover:text-primary transition-colors">{student.name}</h3>
-                  <div className="flex items-center gap-1 mt-0.5">
-                    <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                    <span className="text-xs font-bold text-slate-500">{student.points} نقطة</span>
+                {/* Identity (Right) */}
+                <div 
+                  className="flex items-center gap-3 w-full md:w-1/3 cursor-pointer group"
+                  onClick={() => openStudentModal(student)}
+                >
+                  <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500 shrink-0">
+                    {student.id}
+                  </div>
+                  <img src={student.avatar} alt={student.name} className="w-12 h-12 rounded-full shadow-sm" />
+                  <div>
+                    <h3 className="font-bold text-slate-800 group-hover:text-primary transition-colors">{student.name}</h3>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                      <span className="text-xs font-bold text-slate-500">100 نقطة</span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
               {/* Attendance (Center) */}
               <div className="flex items-center justify-center w-full md:w-1/3 bg-slate-50 p-1.5 rounded-xl">
@@ -329,8 +333,9 @@ const ClassTracker: React.FC = () => {
                 </button>
               </div>
             </motion.div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
 
       {/* Student Details Modal */}
