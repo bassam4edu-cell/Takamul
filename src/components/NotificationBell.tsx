@@ -4,6 +4,7 @@ import { Bell, Check, Clock, AlertCircle, ChevronLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
+import { formatHijriDateTime } from '../utils/dateUtils';
 
 interface Notification {
   id: string;
@@ -174,7 +175,7 @@ const NotificationBell: React.FC = () => {
                         </p>
                         <div className="flex items-center justify-between pt-1">
                           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-                            {new Date(n.created_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}
+                            {formatHijriDateTime(n.created_at).split(' - ')[1]}
                           </span>
                           <ChevronLeft size={12} className="text-slate-300 group-hover:text-primary group-hover:translate-x-[-2px] transition-all" />
                         </div>

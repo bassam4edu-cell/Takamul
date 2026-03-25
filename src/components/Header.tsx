@@ -1,7 +1,8 @@
 import React from 'react';
-import { Search, User as UserIcon, Settings, HelpCircle, LogOut, Menu } from 'lucide-react';
+import { Search, User as UserIcon, Settings, HelpCircle, LogOut, Menu, Calendar } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from './NotificationBell';
+import { formatHijriDate } from '../utils/dateUtils';
 
 interface HeaderProps {
   onMenuClick?: () => void;
@@ -37,6 +38,10 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
             className="w-10 h-10 object-contain rounded-lg"
             referrerPolicy="no-referrer"
           />
+        </div>
+        <div className="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-xl border border-slate-100 text-slate-600 shrink-0">
+          <Calendar size={18} className="text-primary" />
+          <span className="text-sm font-bold">{formatHijriDate(new Date())}</span>
         </div>
         <div className="relative w-full group hidden md:block">
           <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors" size={20} />

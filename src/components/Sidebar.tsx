@@ -88,6 +88,12 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
       roles: ['admin']
     },
     { 
+      title: 'إعدادات المدرسة', 
+      path: '/dashboard/school-settings', 
+      icon: Settings2,
+      roles: ['admin', 'principal']
+    },
+    { 
       title: 'مركز الرسائل', 
       path: '/dashboard/message-center', 
       icon: MessageSquare,

@@ -4,6 +4,7 @@ import { Printer, ArrowRight, ChevronRight, ChevronLeft, MessageCircle } from 'l
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useMessageLog } from '../context/MessageLogContext';
+import { formatHijriDate } from '../utils/dateUtils';
 
 const DailyAbsenceReport: React.FC = React.memo(() => {
   const { user } = useAuth();
@@ -74,7 +75,7 @@ const DailyAbsenceReport: React.FC = React.memo(() => {
 
   const sendWhatsAppMessage = async (phoneNumber: string, studentName: string, period: number) => {
     try {
-      const currentDate = new Date().toLocaleDateString('ar-SA');
+      const currentDate = formatHijriDate(new Date());
       const periodName = period ? `الحصة ${period}` : 'غير محدد';
       
       const finalMessage = absenceTemplate
@@ -147,8 +148,7 @@ const DailyAbsenceReport: React.FC = React.memo(() => {
   const searchParams = new URLSearchParams(location.search);
   const selectedDateStr = searchParams.get('date') || new Date().toISOString().split('T')[0];
   const reportDate = new Date(selectedDateStr);
-  const dayName = reportDate.toLocaleDateString('ar-SA', { weekday: 'long' });
-  const dateStr = reportDate.toLocaleDateString('ar-SA');
+  const dateStr = formatHijriDate(reportDate);
 
   const totalPages = useMemo(() => Math.ceil(data.length / itemsPerPage) || 1, [data.length, itemsPerPage]);
   const paginatedData = useMemo(() => data.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage), [data, currentPage, itemsPerPage]);
@@ -282,7 +282,6 @@ const DailyAbsenceReport: React.FC = React.memo(() => {
             {new URLSearchParams(location.search).get('grade') && ` - ${new URLSearchParams(location.search).get('grade')} / ${new URLSearchParams(location.search).get('section')}`}
           </h1>
           <div className="flex justify-center gap-8 mt-4 text-slate-700 font-bold">
-            <p>اليوم: {dayName}</p>
             <p>التاريخ: {dateStr}</p>
           </div>
         </div>

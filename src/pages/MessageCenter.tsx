@@ -6,6 +6,7 @@ import { Search, RotateCcw, Send, Users, CheckCircle2, XCircle, Clock, MessageSq
 import { motion, AnimatePresence } from 'framer-motion';
 import MessageSettings from './MessageSettings';
 import SystemTemplates from './SystemTemplates';
+import { formatHijriDate, formatHijriDateTime } from '../utils/dateUtils';
 
 const MessageCenter: React.FC = () => {
   const { user } = useAuth();
@@ -189,7 +190,7 @@ const MessageCenter: React.FC = () => {
       }
 
       const batchId = Math.random().toString(36).substring(2, 9);
-      const dateStr = new Date().toLocaleDateString('ar-SA', { weekday: 'long', day: 'numeric', month: 'long' });
+      const dateStr = formatHijriDate(new Date());
       const campaignName = selectedTemplateLabel ? `${selectedTemplateLabel} - ${dateStr}` : `حملة رسائل - ${dateStr}`;
       
       let targetAudienceStr = '';
@@ -772,7 +773,7 @@ const MessageCenter: React.FC = () => {
                       </div>
                     </td>
                     <td className="p-4 text-sm font-medium text-slate-600 whitespace-nowrap">
-                      {new Date(batch.timestamp).toLocaleString('ar-SA')}
+                      {formatHijriDateTime(batch.timestamp)}
                     </td>
                     <td className="p-4 text-center">
                       <div className="flex items-center justify-center gap-2">
@@ -827,7 +828,7 @@ const MessageCenter: React.FC = () => {
                       <span className="text-red-600 bg-red-50 px-2 py-1 rounded-lg">فشل: {batch.failed}</span>
                     </div>
                     <span className="text-slate-500 font-medium">
-                      {new Date(batch.timestamp).toLocaleString('ar-SA')}
+                      {formatHijriDateTime(batch.timestamp)}
                     </span>
                   </div>
 

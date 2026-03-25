@@ -16,6 +16,7 @@ import {
   Lock
 } from 'lucide-react';
 import { apiFetch } from '../utils/api';
+import { formatHijriDate } from '../utils/dateUtils';
 
 interface Student {
   id: number;
@@ -71,12 +72,7 @@ const ClassTracker: React.FC = () => {
   const [selectedChips, setSelectedChips] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
-  const todayDate = new Date().toLocaleDateString('ar-SA', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
+  const todayDate = formatHijriDate(new Date());
 
   const handleAttendanceChange = (studentId: number, status: 'present' | 'late' | 'absent') => {
     if (isReadOnly) return;

@@ -21,7 +21,6 @@ const Register: React.FC = () => {
   
   const [formData, setFormData] = useState({
     name: '',
-    national_id: '',
     phone_number: '',
     email: '',
     password: '',
@@ -228,21 +227,6 @@ const Register: React.FC = () => {
                     name="name"
                     placeholder="الاسم الرباعي"
                     value={formData.name}
-                    onChange={handleInputChange}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pr-12 pl-4 text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-                    required
-                  />
-                </div>
-
-                <div className="relative group">
-                  <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
-                    <CreditCard size={20} />
-                  </div>
-                  <input
-                    type="text"
-                    name="national_id"
-                    placeholder="رقم الهوية"
-                    value={formData.national_id}
                     onChange={handleInputChange}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pr-12 pl-4 text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
                     required

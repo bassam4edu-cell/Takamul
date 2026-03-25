@@ -12,6 +12,8 @@ import {
   XCircle
 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { formatHijriDate } from '../utils/dateUtils';
+import HijriDatePicker from '../components/HijriDatePicker';
 
 interface School {
   id: number;
@@ -149,7 +151,7 @@ const SuperAdminDashboard: React.FC = () => {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <span className="text-xs font-bold text-slate-400 block mb-1">تاريخ انتهاء الاشتراك</span>
-                        <span className="text-slate-500" dir="ltr">{new Date(s.subscription_end_date).toLocaleDateString('en-GB')}</span>
+                        <span className="text-slate-500" dir="ltr">{formatHijriDate(s.subscription_end_date)}</span>
                       </div>
                       <div>
                         <span className="text-xs font-bold text-slate-400 block mb-1">حالة الحساب</span>
@@ -199,7 +201,7 @@ const SuperAdminDashboard: React.FC = () => {
                         <td className="px-6 py-4 font-mono text-slate-500">#{s.id}</td>
                         <td className="px-6 py-4 font-bold text-slate-800">{s.name}</td>
                         <td className="px-6 py-4 text-slate-500" dir="ltr">
-                          {new Date(s.subscription_end_date).toLocaleDateString('en-GB')}
+                          {formatHijriDate(s.subscription_end_date)}
                         </td>
                         <td className="px-6 py-4">
                           <span className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 w-fit ${
@@ -269,14 +271,17 @@ const SuperAdminDashboard: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1">تاريخ انتهاء الاشتراك</label>
-                <input
-                  type="date"
-                  required
-                  value={newSchoolForm.subscription_end_date}
-                  onChange={e => setNewSchoolForm({...newSchoolForm, subscription_end_date: e.target.value})}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
-                  dir="ltr"
-                />
+                <div className="flex flex-col gap-1">
+                  <HijriDatePicker
+                    value={newSchoolForm.subscription_end_date}
+                    onChange={date => setNewSchoolForm({...newSchoolForm, subscription_end_date: date})}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+                    required
+                  />
+                  {newSchoolForm.subscription_end_date && (
+                    <span className="text-xs font-bold text-indigo-600 px-1">{formatHijriDate(newSchoolForm.subscription_end_date)}</span>
+                  )}
+                </div>
               </div>
               <div className="pt-4 flex gap-3">
                 <button type="submit" className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl font-bold transition-colors">

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Student, StudentState, TaskCategory, Task } from '../pages/SmartTracker';
+import { useSchoolSettings } from '../context/SchoolContext';
 
 interface PrintableTrackerProps {
   students: Student[];
@@ -8,6 +9,8 @@ interface PrintableTrackerProps {
 }
 
 export const PrintableTracker: React.FC<PrintableTrackerProps> = ({ students, studentsState, tasks }) => {
+  const { settings } = useSchoolSettings();
+
   const getCategoryTotal = (studentId: number, category: TaskCategory) => {
     return tasks[category].reduce((sum, t) => sum + (Number(studentsState[studentId].grades[t.id]) || 0), 0);
   };
@@ -28,8 +31,7 @@ export const PrintableTracker: React.FC<PrintableTrackerProps> = ({ students, st
         <div className="text-sm font-bold leading-relaxed">
           <p>المملكة العربية السعودية</p>
           <p>وزارة التعليم</p>
-          <p>إدارة التعليم بـ [الرياض]</p>
-          <p>مدرسة [الابتدائية الأولى]</p>
+          <p>{settings.schoolName ? `مدرسة ${settings.schoolName}` : 'مدرسة ....................'}</p>
         </div>
 
         <div className="flex flex-col items-center justify-center mt-4">

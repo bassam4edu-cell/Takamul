@@ -448,11 +448,25 @@ const Login: React.FC = () => {
 
       // If successful, log the user in
       login(tempUser);
-      let from = (location.state as any)?.from?.pathname;
-      if (!from || from === '/') {
-        from = '/dashboard';
+      
+      if (tempUser.role === 'parent') {
+        try {
+          if (!tempUser.student_id) {
+            console.log("OTP Valid, but Parent role routing failed: No student linked");
+            // Still navigate, ParentPortal will show the message
+          }
+          navigate('/parent-portal', { replace: true });
+        } catch (e) {
+          console.log("OTP Valid, but Parent role routing failed");
+          setError("جاري ربط حسابك ببيانات أبنائك");
+        }
+      } else {
+        let from = (location.state as any)?.from?.pathname;
+        if (!from || from === '/') {
+          from = '/dashboard';
+        }
+        navigate(from, { replace: true });
       }
-      navigate(from, { replace: true });
 
     } catch (err: any) {
        console.log("Verification Exception:", err.message);

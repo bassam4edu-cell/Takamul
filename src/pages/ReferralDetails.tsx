@@ -34,6 +34,8 @@ import {
 import { Referral, ReferralLog } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
+import { formatHijriDate, formatHijriDateTime } from '../utils/dateUtils';
+import HijriDatePicker from '../components/HijriDatePicker';
 
 interface Violation {
   id: number;
@@ -513,7 +515,7 @@ const ReferralDetails: React.FC = () => {
           <div className="text-left space-y-1">
             <h1 className="text-xl font-black mb-1">تقرير حالة طالب تفصيلي</h1>
             <p className="text-xs font-bold text-slate-700">رقم الحالة: #{referral.id}</p>
-            <p className="text-xs font-bold text-slate-700">تاريخ الطباعة: {new Date().toLocaleDateString('ar-SA')}</p>
+            <p className="text-xs font-bold text-slate-700">تاريخ الطباعة: {formatHijriDate(new Date())}</p>
           </div>
         </div>
 
@@ -526,7 +528,7 @@ const ReferralDetails: React.FC = () => {
             <div className="print-cell"><span className="print-label">رقم الحالة:</span> #{referral.id}</div>
             <div className="print-cell"><span className="print-label">الصف الدراسي:</span> {referral.student_grade}</div>
             <div className="print-cell"><span className="print-label">الفصل:</span> {referral.student_section}</div>
-            <div className="print-cell"><span className="print-label">تاريخ التحويل:</span> {new Date(referral.created_at).toLocaleDateString('ar-SA')}</div>
+            <div className="print-cell"><span className="print-label">تاريخ التحويل:</span> {formatHijriDate(referral.created_at)}</div>
           </div>
         </div>
 
@@ -587,7 +589,7 @@ const ReferralDetails: React.FC = () => {
               <div key={idx} className="border-b border-slate-200 last:border-0 p-3">
                 <div className="flex justify-between mb-1 text-[10px] font-bold text-slate-500">
                   <span>الإجراء: {log.action}</span>
-                  <span>التاريخ: {new Date(log.created_at).toLocaleString('ar-SA')}</span>
+                  <span>التاريخ: {formatHijriDateTime(log.created_at)}</span>
                 </div>
                 <p className="text-xs leading-relaxed">{log.notes}</p>
               </div>
@@ -656,7 +658,7 @@ const ReferralDetails: React.FC = () => {
           <div>
             <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">تفاصيل التحويل #{referral.id}</h1>
             <div className="flex flex-wrap items-center gap-3 text-[10px] md:text-sm text-slate-500 mt-1 font-bold">
-              <span className="flex items-center gap-1.5"><Clock size={14} /> {new Date(referral.created_at).toLocaleString('ar-SA')}</span>
+              <span className="flex items-center gap-1.5"><Clock size={14} /> {formatHijriDateTime(referral.created_at)}</span>
               {!isCreatedByVP && (
                 <>
                   <span className="hidden md:block w-1 h-1 bg-slate-300 rounded-full" />
@@ -1082,7 +1084,7 @@ const ReferralDetails: React.FC = () => {
 
                 <div className="pt-4 border-t border-slate-100">
                   <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">
-                    {(referral.status === 'resolved' || referral.status === 'closed') ? 'تم اعتماد الإجراء وإغلاق المعاملة بواسطة:' : 'تم اتخاذ الإجراء بواسطة:'} <span className="text-slate-600">{logs.find(l => l.user_role === 'vice_principal')?.user_name || 'الوكيل'}</span> - في تاريخ: {logs.find(l => l.user_role === 'vice_principal')?.created_at ? new Date(logs.find(l => l.user_role === 'vice_principal')!.created_at).toLocaleString('ar-SA') : 'غير متوفر'}
+                    {(referral.status === 'resolved' || referral.status === 'closed') ? 'تم اعتماد الإجراء وإغلاق المعاملة بواسطة:' : 'تم اتخاذ الإجراء بواسطة:'} <span className="text-slate-600">{logs.find(l => l.user_role === 'vice_principal')?.user_name || 'الوكيل'}</span> - في تاريخ: {logs.find(l => l.user_role === 'vice_principal')?.created_at ? formatHijriDateTime(logs.find(l => l.user_role === 'vice_principal')!.created_at) : 'غير متوفر'}
                   </p>
                 </div>
               </div>
@@ -1124,7 +1126,7 @@ const ReferralDetails: React.FC = () => {
                         </div>
                         <div className="flex items-center gap-2 text-[10px] text-slate-400 font-extrabold uppercase tracking-widest bg-white px-3 py-1 rounded-lg border border-slate-100">
                           <Clock size={12} />
-                          {new Date(log.created_at).toLocaleString('ar-SA')}
+                          {formatHijriDateTime(log.created_at)}
                         </div>
                       </div>
                       <div className="space-y-2">
@@ -1207,12 +1209,14 @@ const ReferralDetails: React.FC = () => {
                   <div className="grid grid-cols-1 gap-6">
                     <div className="space-y-3">
                       <label className="text-[10px] font-extrabold text-slate-500 mr-1 uppercase tracking-widest">تاريخ الجلسة</label>
-                      <input 
-                        type="date" 
-                        value={meetingDate}
-                        onChange={(e) => setMeetingDate(e.target.value)}
-                        className="sts-input"
-                      />
+                      <div className="flex flex-col gap-1">
+                        <HijriDatePicker
+                          value={meetingDate}
+                          onChange={setMeetingDate}
+                          className="sts-input w-full"
+                        />
+                        <span className="text-[10px] font-bold text-primary px-2">{formatHijriDate(meetingDate)}</span>
+                      </div>
                     </div>
                     <div className="space-y-3">
                       <label className="text-[10px] font-extrabold text-slate-500 mr-1 uppercase tracking-widest">الوقت</label>

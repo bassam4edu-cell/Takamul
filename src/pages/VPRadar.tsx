@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import { useMessageLog } from '../context/MessageLogContext';
 import { CheckCircle2, XCircle, Clock, Save, UserCheck, AlertCircle, Printer, Filter, Calendar, MessageSquare, AlertTriangle, Search, Hourglass, Trash2, Info, Unlock, Lock, Zap, PowerOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { formatHijriDate, formatHijriDateTime } from '../utils/dateUtils';
+import HijriDatePicker from '../components/HijriDatePicker';
 
 interface AttendanceRecord {
   studentId: number;
@@ -596,7 +598,7 @@ const VPRadar: React.FC = () => {
 
   const sendWhatsAppMessage = async (phoneNumber: string, studentName: string) => {
     try {
-      const currentDate = new Date().toLocaleDateString('ar-SA');
+      const currentDate = formatHijriDate(new Date());
       const periodName = selectedPeriod ? `الحصة ${selectedPeriod}` : 'غير محدد';
       
       const finalMessage = absenceTemplate
@@ -866,7 +868,7 @@ const VPRadar: React.FC = () => {
               </div>
               <div className="text-right space-y-1 text-sm font-bold">
                 <p>الرقم: ....................</p>
-                <p>التاريخ: {new Date().toLocaleDateString('ar-SA')}</p>
+                <p>التاريخ: {formatHijriDate(new Date())}</p>
                 <p>المرفقات: ....................</p>
               </div>
             </div>
@@ -1115,7 +1117,7 @@ const VPRadar: React.FC = () => {
                         {/* Tooltip */}
                         {isCompleted && (
                           <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max bg-gray-800 text-white text-xs rounded-lg py-2 px-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-xl text-center">
-                            <span> المعلم: {c.teacher_name || 'غير محدد'} |  الحصة: {c.period ? ['الأولى', 'الثانية', 'الثالثة', 'الرابعة', 'الخامسة', 'السادسة', 'السابعة', 'الثامنة'][c.period - 1] || c.period : 'غير محدد'} |  الوقت: {c.timestamp ? new Date(c.timestamp).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) : 'غير محدد'}</span>
+                            <span> المعلم: {c.teacher_name || 'غير محدد'} |  الحصة: {c.period ? ['الأولى', 'الثانية', 'الثالثة', 'الرابعة', 'الخامسة', 'السادسة', 'السابعة', 'الثامنة'][c.period - 1] || c.period : 'غير محدد'} |  الوقت: {c.timestamp ? formatHijriDateTime(c.timestamp).split(' - ')[1] : 'غير محدد'}</span>
                             <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-800"></div>
                           </div>
                         )}
@@ -1147,14 +1149,16 @@ const VPRadar: React.FC = () => {
             <h3>الفلاتر:</h3>
           </div>
           <div className="flex-1 grid grid-cols-1 md:grid-cols-5 gap-4 w-full">
-            <div className="relative">
-              <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 pr-12 pl-4 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none min-h-[44px]"
-              />
+            <div className="relative flex flex-col gap-1">
+              <div className="relative">
+                <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 z-10" size={18} />
+                <HijriDatePicker
+                  value={date}
+                  onChange={setDate}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 pr-12 pl-4 text-sm font-bold focus:ring-2 focus:ring-primary/20 outline-none min-h-[44px]"
+                />
+              </div>
+              <span className="text-[10px] font-bold text-primary px-2">{formatHijriDate(date)}</span>
             </div>
             <select
               value={selectedPeriod}
@@ -1276,7 +1280,7 @@ const VPRadar: React.FC = () => {
                      الحصة: <span className="font-bold text-slate-800">{c.period ? ['الأولى', 'الثانية', 'الثالثة', 'الرابعة', 'الخامسة', 'السادسة', 'السابعة', 'الثامنة'][c.period - 1] || c.period : 'غير محدد'}</span>
                   </div>
                   <div>
-                    ⏰ وقت الإدخال: <span className="font-bold text-slate-800">{c.timestamp ? new Date(c.timestamp).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) : 'غير محدد'}</span>
+                    ⏰ وقت الإدخال: <span className="font-bold text-slate-800">{c.timestamp ? formatHijriDateTime(c.timestamp).split(' - ')[1] : 'غير محدد'}</span>
                   </div>
                 </div>
               </div>

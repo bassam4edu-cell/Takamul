@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { formatHijriDate, formatHijriDateTime } from '../utils/dateUtils';
 
 interface Notification {
   id: string;
@@ -178,7 +179,7 @@ const Notifications: React.FC = () => {
                       {notification.title}
                     </p>
                     <span className="text-[10px] md:text-xs text-slate-400 font-bold whitespace-nowrap">
-                      {new Date(notification.created_at).toLocaleDateString('ar-SA')}
+                      {formatHijriDate(notification.created_at)}
                     </span>
                   </div>
                   <p className="text-xs text-slate-500">
@@ -190,7 +191,7 @@ const Notifications: React.FC = () => {
                     <span className="w-1 h-1 bg-slate-200 rounded-full" />
                     <span className="text-slate-400 flex items-center gap-1">
                       <Clock size={12} />
-                      {new Date(notification.created_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}
+                      {formatHijriDateTime(notification.created_at).split(' - ')[1]}
                     </span>
                   </div>
                 </div>

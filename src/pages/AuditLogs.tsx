@@ -1,69 +1,20 @@
 import React, { useState } from 'react';
 import { Search, Download, Filter, Calendar, ChevronRight, ChevronLeft, ShieldAlert } from 'lucide-react';
 import { motion } from 'framer-motion';
-
-// Mock Data
-const mockLogs = [
-  {
-    id: 1,
-    date: '22-03-2026',
-    time: '08:15 ص',
-    userName: 'فهد العتيبي',
-    userRole: 'وكيل شؤون الطلاب',
-    actionType: 'إضافة',
-    details: 'تم إرسال رسائل غياب واتساب لعدد 45 طالب متغيب',
-    ip: '192.168.1.45'
-  },
-  {
-    id: 2,
-    date: '22-03-2026',
-    time: '09:30 ص',
-    userName: 'أحمد محمد',
-    userRole: 'معلم',
-    actionType: 'تعديل',
-    details: 'تم تعديل درجة الطالب خالد عبدالله في مادة الرياضيات من 15 إلى 20',
-    ip: '192.168.1.112'
-  },
-  {
-    id: 3,
-    date: '21-03-2026',
-    time: '11:45 ص',
-    userName: 'سالم عبدالله',
-    userRole: 'موجه طلابي',
-    actionType: 'حذف',
-    details: 'تم حذف مخالفة سلوكية (تأخر صباحي) للطالب عمر فهد',
-    ip: '192.168.1.88'
-  },
-  {
-    id: 4,
-    date: '21-03-2026',
-    time: '07:00 ص',
-    userName: 'النظام الآلي',
-    userRole: 'نظام',
-    actionType: 'نظام',
-    details: 'تم استيراد بيانات الحضور والانصراف من نظام نور بنجاح',
-    ip: '127.0.0.1'
-  },
-  {
-    id: 5,
-    date: '20-03-2026',
-    time: '01:20 م',
-    userName: 'سعد الدوسري',
-    userRole: 'مدير النظام',
-    actionType: 'إضافة',
-    details: 'تسجيل دخول ناجح للوحة تحكم الإدارة',
-    ip: '192.168.1.10'
-  }
-];
+import { useAuditLog } from '../context/AuditLogContext';
+import { formatHijriDateTime } from '../utils/dateUtils';
 
 const getBadgeStyles = (type: string) => {
   switch (type) {
+    case 'ADD_TASK':
     case 'إضافة':
       return 'bg-green-100 text-green-800';
+    case 'UPDATE_GRADE':
     case 'تعديل':
       return 'bg-blue-100 text-blue-800';
     case 'حذف':
       return 'bg-red-100 text-red-800';
+    case 'ATTENDANCE':
     case 'نظام':
       return 'bg-purple-100 text-purple-800';
     default:
@@ -71,10 +22,30 @@ const getBadgeStyles = (type: string) => {
   }
 };
 
+const getActionLabel = (type: string) => {
+  switch (type) {
+    case 'ADD_TASK': return 'إضافة مهمة';
+    case 'UPDATE_GRADE': return 'تعديل درجة';
+    case 'ATTENDANCE': return 'تسجيل حضور';
+    default: return type;
+  }
+};
+
 const AuditLogs: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [dateFilter, setDateFilter] = useState('اليوم');
   const [actionFilter, setActionFilter] = useState('الكل');
+  const { auditLog } = useAuditLog();
+
+  const filteredLogs = auditLog.filter(log => {
+    const matchesSearch = log.details.includes(searchTerm) || 
+                          (log.userName && log.userName.includes(searchTerm)) || 
+                          getActionLabel(log.actionType).includes(searchTerm);
+    
+    const matchesAction = actionFilter === 'الكل' || getActionLabel(log.actionType) === actionFilter;
+    
+    return matchesSearch && matchesAction;
+  });
 
   return (
     <motion.div
@@ -134,10 +105,9 @@ const AuditLogs: React.FC = () => {
               className="w-full pl-4 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm font-medium appearance-none"
             >
               <option value="الكل">الكل</option>
-              <option value="إضافة">إضافة</option>
-              <option value="تعديل">تعديل</option>
-              <option value="حذف">حذف</option>
-              <option value="نظام">نظام</option>
+              <option value="إضافة مهمة">إضافة مهمة</option>
+              <option value="تعديل درجة">تعديل درجة</option>
+              <option value="تسجيل حضور">تسجيل حضور</option>
             </select>
           </div>
         </div>
@@ -157,51 +127,62 @@ const AuditLogs: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {mockLogs.map((log) => (
-                <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
-                  <td className="px-6 py-4">
-                    <div className="font-bold text-slate-800">{log.date}</div>
-                    <div className="text-xs text-slate-500 mt-0.5">{log.time}</div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="font-bold text-slate-800">{log.userName}</div>
-                    <div className="text-xs text-slate-500 mt-0.5">{log.userRole}</div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${getBadgeStyles(log.actionType)}`}>
-                      {log.actionType}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <p className="text-sm text-slate-600 max-w-md leading-relaxed">
-                      {log.details}
-                    </p>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="text-xs font-mono text-slate-500 bg-slate-100 px-2 py-1 rounded">
-                      {log.ip}
-                    </span>
+              {filteredLogs.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-12 text-center text-slate-500 font-medium">
+                    لا توجد عمليات مسجلة حتى الآن
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filteredLogs.map((log) => {
+                  return (
+                    <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="font-bold text-slate-800">{formatHijriDateTime(log.timestamp)}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="font-bold text-slate-800">{log.userName}</div>
+                        <div className="text-xs text-slate-500 mt-0.5">{log.userRole}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${getBadgeStyles(log.actionType)}`}>
+                          {getActionLabel(log.actionType)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <p className="text-sm text-slate-600 max-w-md leading-relaxed">
+                          {log.details}
+                        </p>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-xs font-mono text-slate-500 bg-slate-100 px-2 py-1 rounded">
+                          {log.ip}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
 
         {/* Pagination */}
-        <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
-          <span className="text-sm text-slate-500 font-medium">
-            عرض 1 إلى 5 من أصل 245 عملية
-          </span>
-          <div className="flex items-center gap-2">
-            <button className="p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-white hover:text-primary disabled:opacity-50 transition-colors">
-              <ChevronRight className="w-4 h-4" />
-            </button>
-            <button className="p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-white hover:text-primary transition-colors">
-              <ChevronLeft className="w-4 h-4" />
-            </button>
+        {filteredLogs.length > 0 && (
+          <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <span className="text-sm text-slate-500 font-medium">
+              عرض 1 إلى {filteredLogs.length} من أصل {filteredLogs.length} عملية
+            </span>
+            <div className="flex items-center gap-2">
+              <button className="p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-white hover:text-primary disabled:opacity-50 transition-colors" disabled>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+              <button className="p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-white hover:text-primary disabled:opacity-50 transition-colors" disabled>
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </motion.div>
   );

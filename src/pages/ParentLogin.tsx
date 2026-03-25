@@ -70,7 +70,7 @@ const ParentLogin: React.FC = () => {
           login(data.user);
           let from = (location.state as any)?.from?.pathname;
           if (!from || from === '/') {
-            from = '/dashboard';
+            from = data.user.role === 'parent' ? '/parent-portal' : '/dashboard';
           }
           navigate(from, { replace: true });
         } else {
@@ -122,16 +122,44 @@ const ParentLogin: React.FC = () => {
     setIsLoading(true);
     setError('');
     
-    // محاكاة التحقق (Mock Logic)
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    if (code === '1234') {
-      login(tempUser);
-      navigate('/parent-portal');
-    } else {
-      setError('رمز التحقق غير صحيح');
+    try {
+      const response = await apiFetch('/api/verify-login-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone_number: tempUser.parent_phone, // Use parent_phone for parent login
+          otp_code: code
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        console.log("OTP Valid, but Parent role routing failed? No, OTP is invalid");
+        throw new Error(data.message || "رمز التحقق غير صحيح أو منتهي الصلاحية");
+      }
+
+      // If successful, log the user in
+      const finalUser = { ...tempUser, ...(data.user || {}), student_id: tempUser.student_id || data.user?.student_id };
+      login(finalUser);
+      
+      try {
+        if (!finalUser.student_id) {
+          console.log("OTP Valid, but Parent role routing failed: No student linked");
+          // Still navigate, ParentPortal will show the message
+        }
+        navigate('/parent-portal', { replace: true });
+      } catch (e) {
+        console.log("OTP Valid, but Parent role routing failed");
+        setError("جاري ربط حسابك ببيانات أبنائك");
+      }
+
+    } catch (err: any) {
+      console.log("Verification Exception:", err.message);
+      setError(err.message || 'حدث خطأ أثناء التحقق');
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   const handleResendOTP = async () => {

@@ -19,6 +19,8 @@ import { Referral } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 import * as XLSX from 'xlsx';
+import { formatHijriDate } from '../utils/dateUtils';
+import HijriDatePicker from '../components/HijriDatePicker';
 
 const ManagementReferrals: React.FC = () => {
   const { user } = useAuth();
@@ -188,7 +190,7 @@ const ManagementReferrals: React.FC = () => {
             <div className="hidden sm:block h-6 w-px bg-slate-100" />
             <div className="hidden sm:flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-wider">
               <Calendar size={18} />
-              <span>{new Date().toLocaleDateString('ar-SA', { month: 'long', year: 'numeric' })}</span>
+              <span>{formatHijriDate(new Date()).split('،')[1]?.trim() || formatHijriDate(new Date())}</span>
             </div>
           </div>
           <div className="relative w-full md:w-64">
@@ -257,7 +259,7 @@ const ManagementReferrals: React.FC = () => {
                   <div className="flex items-center justify-between md:justify-end gap-4 md:gap-6 border-t md:border-t-0 pt-3 md:pt-0 border-slate-100/50">
                     <div className="text-right">
                       <p className="text-[8px] md:text-[10px] text-slate-400 mb-0.5 md:mb-1 font-extrabold uppercase tracking-widest">تاريخ التحويل</p>
-                      <p className="text-xs md:text-sm font-extrabold text-slate-700">{new Date(referral.created_at).toLocaleDateString('ar-SA')}</p>
+                      <p className="text-xs md:text-sm font-extrabold text-slate-700">{formatHijriDate(referral.created_at)}</p>
                     </div>
                     <div className="w-9 h-9 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-white border border-slate-100 flex items-center justify-center text-slate-300 group-hover:bg-primary group-hover:text-white group-hover:border-primary group-hover:rotate-12 transition-all shadow-sm shrink-0">
                       <ChevronLeft size={18} className="md:w-6 md:h-6" />
@@ -290,21 +292,25 @@ const ManagementReferrals: React.FC = () => {
               <div className="space-y-6">
                 <div className="space-y-2">
                   <label className="text-xs font-black text-slate-500 mr-1 uppercase tracking-widest">من تاريخ</label>
-                  <input 
-                    type="date" 
-                    value={exportDates.start}
-                    onChange={(e) => setExportDates({...exportDates, start: e.target.value})}
-                    className="sts-input"
-                  />
+                  <div className="flex flex-col gap-1">
+                    <HijriDatePicker
+                      value={exportDates.start}
+                      onChange={(date) => setExportDates({...exportDates, start: date})}
+                      className="sts-input w-full"
+                    />
+                    <span className="text-[10px] font-bold text-primary px-2">{formatHijriDate(exportDates.start)}</span>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <label className="text-xs font-black text-slate-500 mr-1 uppercase tracking-widest">إلى تاريخ</label>
-                  <input 
-                    type="date" 
-                    value={exportDates.end}
-                    onChange={(e) => setExportDates({...exportDates, end: e.target.value})}
-                    className="sts-input"
-                  />
+                  <div className="flex flex-col gap-1">
+                    <HijriDatePicker
+                      value={exportDates.end}
+                      onChange={(date) => setExportDates({...exportDates, end: date})}
+                      className="sts-input w-full"
+                    />
+                    <span className="text-[10px] font-bold text-primary px-2">{formatHijriDate(exportDates.end)}</span>
+                  </div>
                 </div>
 
                 <div className="pt-4">

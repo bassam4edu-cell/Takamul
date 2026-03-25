@@ -3,12 +3,14 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Referral } from '../types';
 import { Printer, ArrowRight } from 'lucide-react';
+import { useSchoolSettings } from '../context/SchoolContext';
 
 const PrintTemplate: React.FC = () => {
   const { templateId, referralId } = useParams();
   const navigate = useNavigate();
   const [referral, setReferral] = useState<Referral | null>(null);
   const [loading, setLoading] = useState(true);
+  const { settings } = useSchoolSettings();
 
   useEffect(() => {
     const fetchReferral = async () => {
@@ -79,8 +81,7 @@ const PrintTemplate: React.FC = () => {
         <div className="text-right space-y-1">
           <p className="text-sm font-black">المملكة العربية السعودية</p>
           <p className="text-sm font-black">وزارة التعليم</p>
-          <p className="text-sm font-black">الإدارة العامة للتعليم بمنطقة الرياض</p>
-          <p className="text-sm font-black">مدرسة ثانوية أم القرى</p>
+          <p className="text-sm font-black">{settings.schoolName ? `مدرسة ${settings.schoolName}` : 'مدرسة ....................'}</p>
         </div>
         <div className="text-center">
           <img src="https://upload.wikimedia.org/wikipedia/ar/thumb/a/a3/Ministry_of_Education_%28Saudi_Arabia%29_Logo.svg/1200px-Ministry_of_Education_%28Saudi_Arabia%29_Logo.svg.png" alt="شعار الوزارة" className="w-20 h-auto mx-auto grayscale opacity-80" />

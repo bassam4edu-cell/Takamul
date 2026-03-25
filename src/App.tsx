@@ -3,8 +3,10 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import { User } from './types';
 import Layout from './components/Layout';
 import { MessageLogProvider } from './context/MessageLogContext';
+import { AuditLogProvider } from './context/AuditLogContext';
 import LoadingSpinner from './components/LoadingSpinner';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { SchoolProvider } from './context/SchoolContext';
 
 export { useAuth };
 
@@ -36,6 +38,7 @@ const ParentPortal = lazy(() => import('./pages/ParentPortal'));
 const Register = lazy(() => import('./pages/Register'));
 const AuditLogs = lazy(() => import('./pages/AuditLogs'));
 const SmartTracker = lazy(() => import('./pages/SmartTracker'));
+const SchoolSettings = lazy(() => import('./pages/SchoolSettings'));
 
 
 
@@ -61,9 +64,11 @@ const App: React.FC = () => {
   return (
     <AuthProvider>
       <MessageLogProvider>
-        <Router>
-          <Suspense fallback={<LoadingSpinner />}>
-            <Routes>
+        <AuditLogProvider>
+          <SchoolProvider>
+            <Router>
+              <Suspense fallback={<LoadingSpinner />}>
+                <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
@@ -147,6 +152,11 @@ const App: React.FC = () => {
                   <AuditLogs />
                 </ProtectedRoute>
               } />
+              <Route path="school-settings" element={
+                <ProtectedRoute allowedRoles={['admin', 'principal']}>
+                  <SchoolSettings />
+                </ProtectedRoute>
+              } />
               <Route path="message-center" element={
                 <ProtectedRoute allowedRoles={['admin', 'principal', 'management', 'vice_principal']}>
                   <MessageCenter />
@@ -158,7 +168,9 @@ const App: React.FC = () => {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           </Suspense>
-        </Router>
+          </Router>
+          </SchoolProvider>
+        </AuditLogProvider>
       </MessageLogProvider>
     </AuthProvider>
   );

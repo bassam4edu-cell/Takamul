@@ -62,7 +62,19 @@ const ParentPortal: React.FC = () => {
           </motion.div>
 
           {/* Comprehensive Record (Read-Only) */}
-          <StudentProfile studentId={user.student_id} isReadOnly={true} />
+          {user.student_id ? (
+            <StudentProfile studentId={user.student_id} isReadOnly={true} />
+          ) : (
+            <div className="bg-white rounded-2xl p-8 text-center shadow-sm border border-slate-200 mt-8">
+              <div className="w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+              </div>
+              <h2 className="text-xl font-bold text-slate-800 mb-2">جاري ربط حسابك ببيانات أبنائك</h2>
+              <p className="text-slate-500">
+                تم تسجيل دخولك بنجاح. يرجى الانتظار حتى تقوم إدارة المدرسة بربط حسابك بملفات أبنائك.
+              </p>
+            </div>
+          )}
         </div>
       </main>
     </div>

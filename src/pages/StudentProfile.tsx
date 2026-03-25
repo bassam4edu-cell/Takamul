@@ -11,6 +11,7 @@ import {
   Clock
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { formatHijriDate } from '../utils/dateUtils';
 
 interface Student {
   id: number;
@@ -99,8 +100,7 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly =
   };
 
   const getDayName = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('ar-SA', { weekday: 'long' });
+    return formatHijriDate(dateString).split('،')[0];
   };
 
   return (
@@ -209,7 +209,7 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly =
                               onClick={() => !isReadOnly && navigate(`/dashboard/referral/${referral.id}`)}
                               className={`border-b border-slate-50 last:border-0 transition-colors ${!isReadOnly ? 'hover:bg-slate-50 cursor-pointer' : ''}`}
                             >
-                              <td className="p-4">{new Date(referral.created_at).toLocaleDateString('ar-SA')}</td>
+                              <td className="p-4">{formatHijriDate(referral.created_at)}</td>
                               <td className="p-4">{referral.teacher_name}</td>
                               <td className="p-4 max-w-xs truncate">{referral.reason}</td>
                               <td className="p-4">
@@ -241,7 +241,7 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly =
                           </div>
                           <p className="text-xs text-slate-600 font-bold line-clamp-2">{referral.reason}</p>
                           <div className="text-[10px] text-slate-400 font-bold">
-                            {new Date(referral.created_at).toLocaleDateString('ar-SA')}
+                            {formatHijriDate(referral.created_at)}
                           </div>
                         </div>
                       ))}
@@ -276,7 +276,7 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly =
                         <tbody className="text-sm font-bold text-slate-700">
                           {behaviorRecords.map(record => (
                             <tr key={record.id} className="border-b border-slate-50 last:border-0">
-                              <td className="p-4">{new Date(record.created_at).toLocaleDateString('ar-SA')}</td>
+                              <td className="p-4">{formatHijriDate(record.created_at)}</td>
                               <td className="p-4">{record.violation_name}</td>
                               <td className="p-4">
                                 <span className={`px-3 py-1 rounded-full text-xs ${
@@ -315,7 +315,7 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly =
                             {record.remedial_plan || getStatusText(record.status)}
                           </p>
                           <div className="text-[10px] text-slate-400 font-bold">
-                            {new Date(record.created_at).toLocaleDateString('ar-SA')}
+                            {formatHijriDate(record.created_at)}
                           </div>
                         </div>
                       ))}
@@ -367,7 +367,7 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly =
                             return (
                               <tr key={record.id} className="border-b border-slate-50 last:border-0">
                                 <td className="p-4">{getDayName(record.date)}</td>
-                                <td className="p-4">{new Date(record.date).toLocaleDateString('ar-SA')}</td>
+                                <td className="p-4">{formatHijriDate(record.date)}</td>
                                 <td className={`p-4 font-black ${statusColor}`}>
                                   {statusText}
                                 </td>
@@ -409,7 +409,7 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly =
                               </div>
                               <div>
                                 <p className="text-sm font-bold text-slate-800">{getDayName(record.date)}</p>
-                                <p className="text-[10px] text-slate-400 font-bold">{new Date(record.date).toLocaleDateString('ar-SA')}</p>
+                                <p className="text-[10px] text-slate-400 font-bold">{formatHijriDate(record.date)}</p>
                               </div>
                             </div>
                             <span className={`text-xs font-black px-3 py-1 rounded-lg ${statusBg} ${statusColor}`}>
