@@ -190,11 +190,6 @@ const SmartTracker: React.FC = () => {
   const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null);
   const [confirmModalState, setConfirmModalState] = useState<'idle' | 'confirm' | 'success'>('idle');
 
-  // --- History State ---
-  const [showHistory, setShowHistory] = useState(false);
-  const [historyData, setHistoryData] = useState<any[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-
   // --- Fetch Data ---
   useEffect(() => {
     const fetchGrades = async () => {
@@ -309,25 +304,6 @@ const SmartTracker: React.FC = () => {
     fetchData();
   }, [grade, section, subject, date, user?.id]);
 
-  useEffect(() => {
-    const fetchHistory = async () => {
-      if (!showHistory || !user?.id || !grade || !section) return;
-      setHistoryLoading(true);
-      try {
-        const res = await apiFetch(`/api/tracker/history?teacher_id=${user.id}&grade=${encodeURIComponent(grade)}&section=${encodeURIComponent(section)}&subject=${encodeURIComponent(subject)}`);
-        if (res.ok) {
-          const data = await res.json();
-          setHistoryData(data);
-        }
-      } catch (err) {
-        console.error("Failed to fetch history", err);
-      } finally {
-        setHistoryLoading(false);
-      }
-    };
-    fetchHistory();
-  }, [showHistory, user?.id, grade, section, subject]);
-
   // --- Handlers ---
   const handleMarkAllPresent = () => {
     setStudentsState(prev => {
@@ -337,13 +313,6 @@ const SmartTracker: React.FC = () => {
       });
       return newState;
     });
-  };
-
-  const handleRandomSelection = () => {
-    if (students.length === 0) return;
-    const randomId = students[Math.floor(Math.random() * students.length)].id;
-    setHighlightedStudent(randomId);
-    setTimeout(() => setHighlightedStudent(null), 3000);
   };
 
   const handleAttendanceChange = (studentId: number, status: 'present' | 'late' | 'absent') => {
@@ -665,12 +634,6 @@ const SmartTracker: React.FC = () => {
               </button>
             </div>
             <div className="flex items-center gap-3">
-              <button
-                onClick={() => setShowHistory(!showHistory)}
-                className={`p-2 rounded-full transition-colors ${showHistory ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-600'}`}
-              >
-                <Clock size={16} />
-              </button>
               <div className="text-xs font-medium text-slate-500">
                 {formatHijriDate(date)}
               </div>
@@ -742,84 +705,20 @@ const SmartTracker: React.FC = () => {
           
           {/* Action Buttons */}
           <div className="flex flex-wrap justify-center gap-2">
-            <button
-              onClick={handleMarkAllPresent}
-              className="rounded-full bg-slate-50 hover:bg-slate-100 text-teal-700 border border-slate-200 px-4 py-2 text-sm font-bold shadow-sm transition-colors flex items-center gap-2"
-            >
-              <CheckCircle2 size={16} />
-              تحضير الكل
-            </button>
-            <button
-              onClick={handleRandomSelection}
-              className="rounded-full bg-slate-50 hover:bg-slate-100 text-teal-700 border border-slate-200 px-4 py-2 text-sm font-bold shadow-sm transition-colors flex items-center gap-2"
-            >
-              <Dices size={16} />
-              اختيار عشوائي
-            </button>
-            <button
-              onClick={() => setShowHistory(!showHistory)}
-              className={`rounded-full border px-4 py-2 text-sm font-bold shadow-sm transition-colors flex items-center gap-2 ${
-                showHistory ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-slate-50 hover:bg-slate-100 text-teal-700 border-slate-200'
-              }`}
-            >
-              <Clock size={16} />
-              {showHistory ? 'العودة للرصد' : 'سجل المهام'}
-            </button>
+            {activeTab === 'attendance' && (
+              <button
+                onClick={handleMarkAllPresent}
+                className="rounded-full bg-slate-50 hover:bg-slate-100 text-teal-700 border border-slate-200 px-4 py-2 text-sm font-bold shadow-sm transition-colors flex items-center gap-2"
+              >
+                <CheckCircle2 size={16} />
+                تحضير الكل
+              </button>
+            )}
           </div>
         </div>
 
-        {showHistory ? (
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-            <h2 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
-              <Clock className="text-indigo-500" />
-              سجل المهام المعتمدة
-            </h2>
-            {historyLoading ? (
-              <div className="flex justify-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-              </div>
-            ) : historyData.length === 0 ? (
-              <div className="text-center py-12 text-slate-500">
-                لا توجد مهام معتمدة سابقة لهذا الفصل.
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {historyData.map((task, idx) => (
-                  <div key={`${task.task_id}-${idx}`} className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-xl border border-slate-100 bg-slate-50 hover:bg-slate-100/50 transition-colors">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
-                        <CheckCircle2 size={20} />
-                      </div>
-                      <div>
-                        <h3 className="font-bold text-slate-800">{task.task_name}</h3>
-                        <p className="text-sm text-slate-500 flex items-center gap-2 mt-1">
-                          <span>{formatHijriDate(task.session_date)}</span>
-                          <span>•</span>
-                          <span>الدرجة العظمى: {task.max_grade}</span>
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => {
-                        setDate(task.session_date.split('T')[0]);
-                        setActiveCategory(task.category as TaskCategory);
-                        setActiveTab('grades');
-                        setShowHistory(false);
-                      }}
-                      className="flex items-center justify-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-semibold text-slate-700 hover:text-indigo-600 hover:border-indigo-200 transition-colors w-full md:w-auto"
-                    >
-                      <Edit2 size={16} />
-                      تعديل الدرجات
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : (
-          <>
-            {/* Segmented Control (iOS Style) - Desktop */}
-            <div className="hidden md:flex bg-slate-200/60 p-1 rounded-xl w-full max-w-md mx-auto">
+        {/* Segmented Control (iOS Style) - Desktop */}
+        <div className="hidden md:flex bg-slate-200/60 p-1 rounded-xl w-full max-w-md mx-auto">
           <button
             onClick={() => setActiveTab('attendance')}
             className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${
@@ -1059,20 +958,13 @@ const SmartTracker: React.FC = () => {
         <div className="block md:hidden mt-4 pb-32">
           {activeTab === 'attendance' && (
             <div className="flex flex-col gap-3">
-              <div className="flex justify-between items-center mb-2">
+              <div className="flex justify-end items-center mb-2">
                 <button
                   onClick={handleMarkAllPresent}
                   className="rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2 text-xs font-bold shadow-sm transition-colors flex items-center gap-2"
                 >
                   <CheckCircle2 size={14} />
                   تحضير الكل
-                </button>
-                <button
-                  onClick={handleRandomSelection}
-                  className="rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 px-4 py-2 text-xs font-bold shadow-sm transition-colors flex items-center gap-2"
-                >
-                  <Dices size={14} />
-                  اختيار عشوائي
                 </button>
               </div>
               {students.map(student => {
@@ -1196,8 +1088,6 @@ const SmartTracker: React.FC = () => {
             </div>
           )}
         </div>
-      </>
-      )}
       </div>
 
       {/* Student Profile Drawer */}
@@ -1302,26 +1192,24 @@ const SmartTracker: React.FC = () => {
       </AnimatePresence>
 
       {/* Final Submit Button (Fixed at bottom) */}
-      {!showHistory && (
-        <div className="fixed bottom-16 md:bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-slate-200 z-30 print:hidden">
-          <div className="max-w-5xl mx-auto flex justify-end gap-3">
-            <button
-              onClick={() => window.print()}
-              className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-semibold py-3 px-6 rounded-xl flex items-center gap-2 shadow-sm transition-colors hidden md:flex"
-            >
-              <Printer size={18} />
-              طباعة الكشف
-            </button>
-            <button
-              onClick={handleFinalSubmit}
-              className="bg-slate-800 hover:bg-slate-900 text-white font-semibold py-3 px-8 rounded-xl flex items-center justify-center gap-2 shadow-sm transition-colors w-full md:w-auto"
-            >
-              <Save size={18} />
-              اعتماد وحفظ السجل
-            </button>
-          </div>
+      <div className="fixed bottom-16 md:bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-slate-200 z-30 print:hidden">
+        <div className="max-w-5xl mx-auto flex justify-end gap-3">
+          <button
+            onClick={() => window.print()}
+            className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-semibold py-3 px-6 rounded-xl flex items-center gap-2 shadow-sm transition-colors hidden md:flex"
+          >
+            <Printer size={18} />
+            طباعة الكشف
+          </button>
+          <button
+            onClick={handleFinalSubmit}
+            className="bg-slate-800 hover:bg-slate-900 text-white font-semibold py-3 px-8 rounded-xl flex items-center justify-center gap-2 shadow-sm transition-colors w-full md:w-auto"
+          >
+            <Save size={18} />
+            اعتماد وحفظ السجل
+          </button>
         </div>
-      )}
+      </div>
 
       {/* Add Behavior Modal */}
       <AnimatePresence>

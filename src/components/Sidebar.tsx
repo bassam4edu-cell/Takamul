@@ -15,7 +15,6 @@ import {
   Bell,
   FileText,
   MessageSquare,
-  Zap,
   Puzzle
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';

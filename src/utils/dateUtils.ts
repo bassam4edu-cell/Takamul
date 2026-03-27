@@ -8,7 +8,7 @@ export const formatHijriDate = (dateInput: string | Date | undefined | null): st
     year: 'numeric',
     month: 'long',
     day: 'numeric',
-  }).format(date) + ' هـ';
+  }).format(date);
 };
 
 export const formatHijriDateTime = (dateInput: string | Date | undefined | null): string => {
@@ -20,7 +20,7 @@ export const formatHijriDateTime = (dateInput: string | Date | undefined | null)
     year: 'numeric',
     month: 'long',
     day: 'numeric',
-  }).format(date) + ' هـ';
+  }).format(date);
 
   const timePart = new Intl.DateTimeFormat('ar-SA', {
     hour: '2-digit',
