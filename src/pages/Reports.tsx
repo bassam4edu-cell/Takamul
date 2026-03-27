@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { logAction } from '../services/auditLogger';
 
 interface TopStudent {
   name: string;
@@ -87,6 +88,12 @@ const Reports: React.FC = () => {
   }, [user, navigate]);
 
   const handlePrint = () => {
+    logAction(
+      'أخرى',
+      'READ',
+      'التقارير والإحصائيات',
+      `قام بطباعة التقرير: ${activeReport === 'comprehensive' ? 'التقرير الشامل' : activeReport === 'repeat' ? 'الطلاب متكرري المخالفات' : 'إحصائيات المعلمين'}`
+    );
     window.print();
   };
 

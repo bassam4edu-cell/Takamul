@@ -19,6 +19,7 @@ const ManagementDashboard = lazy(() => import('./pages/ManagementDashboard'));
 const ManagementReferrals = lazy(() => import('./pages/ManagementReferrals'));
 const ReferralDetails = lazy(() => import('./pages/ReferralDetails'));
 const StudentProfile = lazy(() => import('./pages/StudentProfile'));
+const SubjectDetails = lazy(() => import('./pages/SubjectDetails'));
 const Reports = lazy(() => import('./pages/Reports'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Notifications = lazy(() => import('./pages/Notifications'));
@@ -39,6 +40,7 @@ const Register = lazy(() => import('./pages/Register'));
 const AuditLogs = lazy(() => import('./pages/AuditLogs'));
 const SmartTracker = lazy(() => import('./pages/SmartTracker'));
 const SchoolSettings = lazy(() => import('./pages/SchoolSettings'));
+const ExtensionSetup = lazy(() => import('./pages/ExtensionSetup'));
 
 
 
@@ -109,6 +111,7 @@ const App: React.FC = () => {
               } />
               <Route path="referral/:id" element={<ReferralDetails />} />
               <Route path="student/:id" element={<StudentProfile />} />
+              <Route path="student/:studentId/subject/:subjectId" element={<SubjectDetails />} />
               <Route path="attendance/teacher" element={
                 <ProtectedRoute allowedRoles={['teacher']}>
                   <TeacherRollCall />
@@ -127,6 +130,11 @@ const App: React.FC = () => {
               <Route path="student-record" element={
                 <ProtectedRoute allowedRoles={['vice_principal', 'counselor', 'principal', 'admin']}>
                   <StudentRecordSearch />
+                </ProtectedRoute>
+              } />
+              <Route path="extension-setup" element={
+                <ProtectedRoute allowedRoles={['teacher', 'vice_principal']}>
+                  <ExtensionSetup />
                 </ProtectedRoute>
               } />
               <Route path="reports" element={<Reports />} />

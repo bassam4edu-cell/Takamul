@@ -1,3 +1,4 @@
+import { SubjectDetailedLogView } from '../components/SubjectDetailedLogView';
 import { apiFetch } from '../utils/api';
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -8,10 +9,15 @@ import {
   FileText, 
   ArrowRight,
   ShieldAlert,
-  Clock
+  Clock,
+  BookOpen,
+  GraduationCap,
+  X,
+  UserCircle
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { formatHijriDate } from '../utils/dateUtils';
+import { logAction } from '../services/auditLogger';
 
 interface Student {
   id: number;
@@ -62,8 +68,10 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly =
   const [referrals, setReferrals] = useState<Referral[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [behaviorRecords, setBehaviorRecords] = useState<BehaviorRecord[]>([]);
+  const [trackerData, setTrackerData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'referrals' | 'behavior' | 'attendance'>('referrals');
+  const [activeTab, setActiveTab] = useState<'referrals' | 'behavior' | 'attendance' | 'muwada_akademiya'>('referrals');
+  const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -72,9 +80,21 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly =
         if (!res.ok) throw new Error('Failed to fetch student profile');
         const data = await res.json();
         setStudent(data.student);
+        
+        logAction(
+          'أخرى',
+          'READ',
+          'الملف الشخصي للطالب',
+          `قام بعرض الملف الشخصي للطالب ${data.student?.name}`
+        );
+
         setReferrals(data.referrals || []);
         setAttendanceRecords(data.attendanceRecords || []);
         setBehaviorRecords(data.behaviorRecords || []);
+        
+        const localLogs = JSON.parse(localStorage.getItem('takamol_student_logs') || '[]');
+        const studentLocalLogs = localLogs.filter((log: any) => log.studentId === Number(id));
+        setTrackerData([...(data.trackerData || []), ...studentLocalLogs]);
       } catch (err) {
         console.error('Failed to fetch student data', err);
       } finally {
@@ -83,6 +103,18 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly =
     };
 
     fetchData();
+    
+    const handleLogsUpdated = () => {
+      const localLogs = JSON.parse(localStorage.getItem('takamol_student_logs') || '[]');
+      const studentLocalLogs = localLogs.filter((log: any) => log.studentId === Number(id));
+      setTrackerData(prev => {
+        const apiData = prev.filter(p => !p.id || typeof p.id === 'string'); // Filter out local logs
+        return [...apiData, ...studentLocalLogs];
+      });
+    };
+    
+    window.addEventListener('takamol_logs_updated', handleLogsUpdated);
+    return () => window.removeEventListener('takamol_logs_updated', handleLogsUpdated);
   }, [id]);
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div></div>;
@@ -176,10 +208,64 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly =
             <Clock size={18} />
             <span> الغياب والتأخر</span>
           </button>
+          <button
+            onClick={() => setActiveTab('muwada_akademiya')}
+            className={`flex items-center gap-2 px-6 py-4 font-bold text-sm whitespace-nowrap transition-all border-b-2 ${
+              activeTab === 'muwada_akademiya' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <GraduationCap size={18} />
+            <span>الأداء الأكاديمي</span>
+          </button>
         </div>
 
         <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden min-h-[300px]">
           <AnimatePresence mode="wait">
+            {activeTab === 'muwada_akademiya' && (
+              <motion.div
+                key="tab-muwada_akademiya"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="p-6"
+              >
+                {selectedSubject ? (
+                  <SubjectDetailedLogView 
+                    subject={selectedSubject}
+                    studentName={student.name}
+                    studentId={student.id}
+                    onBack={() => setSelectedSubject(null)}
+                  />
+                ) : (
+                  <div>
+                    <h3 className="font-bold text-slate-800 mb-4">المواد الدراسية</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {Array.from(new Set(trackerData.map(log => log.subject))).map(subject => {
+                        const subjectLog = trackerData.find(log => log.subject === subject);
+                        const teacherName = subjectLog?.teacher_name || subjectLog?.teacherName || 'أ. معلم المادة';
+
+                        return (
+                          <div 
+                            key={subject as string}
+                            className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm cursor-pointer hover:shadow-md hover:border-primary/30 transition-all flex flex-col gap-3"
+                            onClick={() => setSelectedSubject(subject as string)}
+                          >
+                            <div className="flex justify-between items-start">
+                              <p className="font-bold text-lg text-slate-800">{subject as string}</p>
+                            </div>
+                            
+                            <div className="flex items-center gap-2 text-slate-500 text-sm mt-auto pt-2 border-t border-slate-50">
+                              <UserCircle size={16} className="text-slate-400" />
+                              <span>{teacherName}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            )}
             {activeTab === 'referrals' && (
               <motion.div
                 key="tab-referrals"

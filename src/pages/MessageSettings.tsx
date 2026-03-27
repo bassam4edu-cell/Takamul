@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Save, Eye, EyeOff, MessageSquare, ShieldAlert, CheckCircle2, QrCode, RefreshCw, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { logAction } from '../services/auditLogger';
 
 const MessageSettings: React.FC = () => {
   const { user } = useAuth();
@@ -145,6 +146,13 @@ const MessageSettings: React.FC = () => {
       localStorage.setItem('greenapi_instance_id', instanceId);
       localStorage.setItem('greenapi_token', token);
       
+      logAction(
+        'أخرى',
+        'UPDATE',
+        'إعدادات الرسائل',
+        'قام بتحديث بيانات ربط الواتساب'
+      );
+
       setSaving(false);
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
@@ -176,6 +184,14 @@ const MessageSettings: React.FC = () => {
 
       localStorage.removeItem('greenapi_instance_id');
       localStorage.removeItem('greenapi_token');
+      
+      logAction(
+        'أخرى',
+        'DELETE',
+        'إعدادات الرسائل',
+        'قام بحذف بيانات ربط الواتساب'
+      );
+
       setInstanceId('');
       setToken('');
       setWaStatus(null);

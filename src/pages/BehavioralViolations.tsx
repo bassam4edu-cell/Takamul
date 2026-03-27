@@ -1,5 +1,6 @@
 import { apiFetch } from '../utils/api';
 import React, { useState, useEffect } from 'react';
+import { logAction } from '../services/auditLogger';
 import { 
   ShieldAlert, 
   Search, 
@@ -205,6 +206,12 @@ const BehavioralViolations: React.FC = () => {
 
       if (res.ok) {
         const data = await res.json();
+        logAction(
+          'سلوكي',
+          'CREATE',
+          'المشكلات السلوكية',
+          `قام برصد مشكلة سلوكية جديدة (${selectedFormViolation.violation_name}) للطالب ${selectedStudent.name}`
+        );
         if (typeof templateId === 'number') {
           navigate(`/print/${templateId}/${data.id}`);
         } else {

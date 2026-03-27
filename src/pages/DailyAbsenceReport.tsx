@@ -5,6 +5,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useMessageLog } from '../context/MessageLogContext';
 import { formatHijriDate } from '../utils/dateUtils';
+import { logAction } from '../services/auditLogger';
 
 const DailyAbsenceReport: React.FC = React.memo(() => {
   const { user } = useAuth();
@@ -70,6 +71,12 @@ const DailyAbsenceReport: React.FC = React.memo(() => {
   }, [location.search, periodFilter]);
 
   const handlePrint = () => {
+    logAction(
+      'أخرى',
+      'READ',
+      'تقرير الغياب اليومي',
+      `قام بطباعة تقرير الغياب اليومي`
+    );
     window.print();
   };
 
@@ -117,6 +124,13 @@ const DailyAbsenceReport: React.FC = React.memo(() => {
         messageText: finalMessage,
         status: 'success'
       });
+
+      logAction(
+        'أخرى',
+        'CREATE',
+        'تقرير الغياب اليومي',
+        `قام بإرسال إشعار غياب للطالب ${studentName} عبر الواتساب`
+      );
 
       return { success: true };
     } catch (error) {

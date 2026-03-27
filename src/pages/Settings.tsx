@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAuth } from '../context/AuthContext';
+import { logAction } from '../services/auditLogger';
 
 const Settings: React.FC = () => {
   const { user, login, logout } = useAuth();
@@ -40,6 +41,12 @@ const Settings: React.FC = () => {
       if (res.ok) {
         const updatedUser = { ...user!, ...profileForm };
         login(updatedUser);
+        logAction(
+          'إدارة مستخدمين',
+          'UPDATE',
+          'الإعدادات',
+          `قام بتحديث ملفه الشخصي (الاسم: ${profileForm.name}, البريد: ${profileForm.email})`
+        );
         setIsEditingProfile(false);
         alert('تم تحديث الملف الشخصي بنجاح');
       } else {

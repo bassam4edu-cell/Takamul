@@ -46,6 +46,16 @@ async function seed() {
       is_phone_verified: true,
       status: 'ACTIVE',
       national_id: '1000000004'
+    },
+    {
+      name: 'مدير النظام (سوبر أدمن)',
+      email: 'superadmin@test.com',
+      password: '123',
+      role: 'super_admin',
+      is_active: true,
+      is_phone_verified: true,
+      status: 'ACTIVE',
+      national_id: '1000000005'
     }
   ];
 

@@ -32,6 +32,26 @@ async function initDb() {
     `;
 
     await sql`
+      CREATE TABLE IF NOT EXISTS schools (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        subscription_end_date TEXT,
+        is_active BOOLEAN DEFAULT TRUE,
+        greenapi_instance_id TEXT,
+        greenapi_token TEXT
+      )
+    `;
+
+    // Check if default school exists
+    const defaultSchool = await sql`SELECT id FROM schools WHERE id = 1`;
+    if (defaultSchool.length === 0) {
+      await sql`
+        INSERT INTO schools (name, subscription_end_date, is_active)
+        VALUES ('ثانوية أم القرى', '1446-12-30', true)
+      `;
+    }
+
+    await sql`
       CREATE TABLE IF NOT EXISTS students (
         id SERIAL PRIMARY KEY,
         name TEXT,
@@ -1357,17 +1377,17 @@ async function startServer() {
     let students;
 
     if (grade && section) {
-      students = await sql`SELECT * FROM students WHERE grade = ${grade} AND section = ${section}`;
+      students = await sql`SELECT * FROM students WHERE grade = ${grade} AND section = ${section} ORDER BY name ASC`;
     } else if (userId) {
       const gradesResult = await sql`SELECT grade FROM user_grades WHERE user_id = ${userId}`;
       const grades = gradesResult.map((g: any) => g.grade);
       if (grades.length > 0) {
-        students = await sql`SELECT * FROM students WHERE grade = ANY(${grades})`;
+        students = await sql`SELECT * FROM students WHERE grade = ANY(${grades}) ORDER BY name ASC`;
       } else {
-        students = await sql`SELECT * FROM students`;
+        students = await sql`SELECT * FROM students ORDER BY name ASC`;
       }
     } else {
-      students = await sql`SELECT * FROM students`;
+      students = await sql`SELECT * FROM students ORDER BY name ASC`;
     }
 
     res.json(students);
@@ -1552,6 +1572,25 @@ async function startServer() {
         ORDER BY r.created_at DESC
       `;
 
+      // 5. Smart Tracker Data
+      const trackerData = await sql`
+        SELECT 
+          s.subject, 
+          s.date, 
+          t.name as task_name, 
+          t.max_grade, 
+          sg.grade as student_grade,
+          st.attendance as attendance_status,
+          u.name as teacher_name
+        FROM smart_tracker_sessions s
+        JOIN smart_tracker_tasks t ON s.id = t.session_id
+        JOIN smart_tracker_student_states st ON s.id = st.session_id
+        JOIN smart_tracker_student_grades sg ON st.id = sg.student_state_id AND sg.task_id = t.id
+        LEFT JOIN users u ON s.teacher_id = u.id
+        WHERE st.student_id = ${id}
+        ORDER BY s.date DESC
+      `;
+
       res.json({ 
         student: {
           ...studentResult[0],
@@ -1563,7 +1602,8 @@ async function startServer() {
         attendanceRecords,
         behaviorRecords,
         counselorNotes,
-        referrals
+        referrals,
+        trackerData
       });
     } catch (err) {
       console.error(err);
@@ -3334,6 +3374,89 @@ async function startServer() {
     } catch (err) {
       console.error("[SAVE TRACKER SESSION] Error:", err);
       res.status(500).json({ error: "Failed to save tracker session" });
+    }
+  });
+
+  // Superadmin Endpoints
+  app.get("/api/superadmin/schools", async (req, res) => {
+    try {
+      const schools = await sql`SELECT * FROM schools ORDER BY id ASC`;
+      res.json(schools);
+    } catch (err) {
+      console.error("[GET SCHOOLS] Error:", err);
+      res.status(500).json({ error: "Failed to fetch schools" });
+    }
+  });
+
+  app.post("/api/superadmin/schools/create", async (req, res) => {
+    try {
+      const { name, subscription_end_date } = req.body;
+      await sql`
+        INSERT INTO schools (name, subscription_end_date, is_active)
+        VALUES (${name}, ${subscription_end_date}, true)
+      `;
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[CREATE SCHOOL] Error:", err);
+      res.status(500).json({ error: "Failed to create school" });
+    }
+  });
+
+  app.post("/api/superadmin/schools/:id/toggle-status", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await sql`
+        UPDATE schools 
+        SET is_active = NOT is_active 
+        WHERE id = ${id}
+      `;
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[TOGGLE SCHOOL] Error:", err);
+      res.status(500).json({ error: "Failed to toggle school status" });
+    }
+  });
+
+  // --- Takamol Chrome Extension API ---
+  app.options("/api/get-takamol-grades", (req, res) => {
+    res.header("Access-Control-Allow-Origin", "https://noor.moe.gov.sa");
+    res.header("Access-Control-Allow-Methods", "GET, OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.status(200).end();
+  });
+
+  app.get("/api/get-takamol-grades", async (req, res) => {
+    try {
+      // Set CORS headers specifically for this route
+      res.header("Access-Control-Allow-Origin", "https://noor.moe.gov.sa");
+      res.header("Access-Control-Allow-Methods", "GET, OPTIONS");
+      res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+      // Fetch students and generate some mock grades for the extension to inject
+      // In a real scenario, this would join with a grades table.
+      const students = await sql`
+        SELECT national_id FROM students WHERE national_id IS NOT NULL LIMIT 50
+      `;
+
+      const gradesData = students.map(s => ({
+        nationalId: s.national_id,
+        oralScore: Math.floor(Math.random() * 5) + 15, // 15-20
+        performanceScore: Math.floor(Math.random() * 10) + 30 // 30-40
+      }));
+
+      // Add the specific mock student from the user's example if not present
+      if (!gradesData.find(g => g.nationalId === "1234567890")) {
+        gradesData.push({
+          nationalId: "1234567890",
+          oralScore: "19",
+          performanceScore: "38"
+        });
+      }
+
+      res.status(200).json(gradesData);
+    } catch (error) {
+      console.error('Database query error:', error);
+      res.status(500).json({ error: 'حدث خطأ داخلي في الخادم أثناء جلب البيانات' });
     }
   });
 

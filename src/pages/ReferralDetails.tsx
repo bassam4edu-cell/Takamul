@@ -1,6 +1,7 @@
 import { apiFetch } from '../utils/api';
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { logAction } from '../services/auditLogger';
 import { 
   ChevronRight, 
   ChevronDown,
@@ -304,6 +305,12 @@ const ReferralDetails: React.FC = () => {
       });
 
       if (response.ok) {
+        logAction(
+          'التحويلات',
+          'UPDATE',
+          'تفاصيل التحويل',
+          `قام بتعديل بيانات التحويل للطالب ${data?.referral.student_name}`
+        );
         const refreshRes = await apiFetch(`/api/referrals/${id}`);
         if (refreshRes.ok) {
           const d = await refreshRes.json().catch(() => null);
@@ -437,6 +444,12 @@ const ReferralDetails: React.FC = () => {
       });
 
       if (response.ok) {
+        logAction(
+          'التحويلات',
+          'UPDATE',
+          'تفاصيل التحويل',
+          `قام بتحديث حالة التحويل للطالب ${data?.referral.student_name} بإجراء: ${action}`
+        );
         // Refresh data
         const refreshRes = await apiFetch(`/api/referrals/${id}`);
         if (refreshRes.ok) {

@@ -1,6 +1,7 @@
 import { apiFetch } from '../utils/api';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { logAction } from '../services/auditLogger';
 import { 
   FileText, 
   Search, 
@@ -52,6 +53,13 @@ const AdminReferrals: React.FC = () => {
         method: 'POST'
       });
       if (res.ok) {
+        const referral = referrals.find(r => r.id === id);
+        logAction(
+          'التحويلات',
+          'DELETE',
+          'إدارة التحويلات',
+          `قام بحذف تحويل الطالب ${referral?.student_name}`
+        );
         setReferrals(referrals.filter(r => r.id !== id));
       } else {
         alert('فشل حذف التحويل');

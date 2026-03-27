@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../utils/api';
 import { Save, Info } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { logAction } from '../services/auditLogger';
 
 const SystemTemplates: React.FC = () => {
   const [template, setTemplate] = useState('');
@@ -37,6 +38,12 @@ const SystemTemplates: React.FC = () => {
         })
       });
       if (res.ok) {
+        logAction(
+          'أخرى',
+          'UPDATE',
+          'قوالب النظام',
+          'قام بتحديث قالب رسالة الغياب'
+        );
         setSuccess(true);
         setTimeout(() => setSuccess(false), 3000);
       } else {

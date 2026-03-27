@@ -1,6 +1,7 @@
 import { apiFetch } from '../utils/api';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { logAction } from '../services/auditLogger';
 import { 
   Users, 
   UserPlus, 
@@ -165,6 +166,13 @@ const SchoolUsers: React.FC = React.memo(() => {
         method: 'POST',
       });
       if (res.ok) {
+        const approvedUser = users.find(u => u.id === id);
+        logAction(
+          'إدارة مستخدمين',
+          'UPDATE',
+          'إدارة المستخدمين',
+          `قام بقبول تسجيل المستخدم ${approvedUser?.name}`
+        );
         fetchUsers();
       }
     } catch (err) {
@@ -184,6 +192,12 @@ const SchoolUsers: React.FC = React.memo(() => {
         body: JSON.stringify(newUserForm),
       });
       if (res.ok) {
+        logAction(
+          'إدارة مستخدمين',
+          'CREATE',
+          'إدارة المستخدمين',
+          `قام بإضافة مستخدم جديد: ${newUserForm.name} بصلاحية ${newUserForm.role}`
+        );
         setShowAddModal(false);
         fetchUsers();
       }
@@ -214,6 +228,12 @@ const SchoolUsers: React.FC = React.memo(() => {
           body: JSON.stringify({ role: editUserForm.role }),
         });
         if (roleRes.ok) {
+          logAction(
+            'إدارة مستخدمين',
+            'UPDATE',
+            'إدارة المستخدمين',
+            `قام بتعديل بيانات المستخدم ${editUserForm.name}`
+          );
           if (editUserForm.role === 'teacher') {
             handleSaveTeacherAssignment();
           } else {
@@ -239,6 +259,13 @@ const SchoolUsers: React.FC = React.memo(() => {
         body: JSON.stringify({ password: passwordForm.password }),
       });
       if (res.ok) {
+        const userToChange = users.find(u => u.id === passwordForm.id);
+        logAction(
+          'إدارة مستخدمين',
+          'UPDATE',
+          'إدارة المستخدمين',
+          `قام بتغيير كلمة المرور للمستخدم ${userToChange?.name}`
+        );
         setShowPasswordModal(false);
         setPasswordForm({ id: 0, password: '' });
       }
@@ -255,6 +282,13 @@ const SchoolUsers: React.FC = React.memo(() => {
         headers: { 'x-school-id': user?.schoolId?.toString() || '' }
       });
       if (res.ok) {
+        const deletedUser = users.find(u => u.id === deletingUserId);
+        logAction(
+          'إدارة مستخدمين',
+          'DELETE',
+          'إدارة المستخدمين',
+          `قام بحذف المستخدم ${deletedUser?.name}`
+        );
         setShowDeleteModal(false);
         setDeletingUserId(null);
         fetchUsers();

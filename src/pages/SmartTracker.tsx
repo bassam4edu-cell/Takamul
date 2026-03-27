@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
+  Check,
   CheckCircle2, 
   Dices, 
   Save, 
@@ -23,6 +24,7 @@ import { StudentProfileDrawer } from '../components/StudentProfileDrawer';
 import { apiFetch } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { useAuditLog } from '../context/AuditLogContext';
+import { logAction as globalLogAction } from '../services/auditLogger';
 import { formatHijriDate } from '../utils/dateUtils';
 import HijriDatePicker from '../components/HijriDatePicker';
 
@@ -102,7 +104,6 @@ const BehaviorCard: React.FC<{
         </div>
         <div className="flex flex-col overflow-hidden">
           <span className="font-bold text-slate-800 text-sm truncate group-hover:text-teal-700 transition-colors">{student.name}</span>
-          <span className="text-xs text-slate-500">#{student.id}</span>
         </div>
       </div>
 
@@ -283,9 +284,11 @@ const SmartTracker: React.FC = () => {
                   if (initialState[st.student_id]) {
                     initialState[st.student_id].attendance = st.attendance;
                     initialState[st.student_id].behaviorChips = st.behavior_chips || [];
-                    st.grades.forEach((g: any) => {
-                      initialState[st.student_id].grades[g.task_id] = Number(g.grade);
-                    });
+                    if (st.grades && Array.isArray(st.grades)) {
+                      st.grades.forEach((g: any) => {
+                        initialState[st.student_id].grades[g.task_id] = Number(g.grade);
+                      });
+                    }
                   }
                 });
               } else {
@@ -353,10 +356,37 @@ const SmartTracker: React.FC = () => {
     if (student) {
       const statusText = status === 'present' ? 'حاضر' : status === 'late' ? 'متأخر' : 'غائب';
       logAction('ATTENDANCE', `تم تسجيل [${statusText}] للطالب [${student.name}]`);
+      if (user) {
+        globalLogAction(
+          'حضور وغياب',
+          'UPDATE',
+          'كشف المتابعة',
+          `تم تسجيل حضور [${statusText}] للطالب [${student.name}] في مادة ${subject}`
+        );
+      }
     }
   };
 
-  const handleGradeChange = (studentId: number, taskId: string, value: string, maxGrade: number) => {
+  const saveLogToLocalStorage = (log: any) => {
+    const existingLogs = JSON.parse(localStorage.getItem('takamol_student_logs') || '[]');
+    const existingIndex = existingLogs.findIndex((l: any) => 
+      l.studentId === log.studentId && 
+      l.taskName === log.taskName && 
+      l.category === log.category && 
+      l.date === log.date
+    );
+    
+    if (existingIndex >= 0) {
+      existingLogs[existingIndex] = { ...existingLogs[existingIndex], ...log };
+    } else {
+      existingLogs.push({ id: Date.now() + Math.random(), ...log });
+    }
+    
+    localStorage.setItem('takamol_student_logs', JSON.stringify(existingLogs));
+    window.dispatchEvent(new Event('takamol_logs_updated'));
+  };
+
+  const handleGradeChange = (studentId: number, taskId: string, value: string | number, maxGrade: number) => {
     let numValue: number | '' = value === '' ? '' : Number(value);
     if (numValue !== '' && numValue < 0) return; // Only prevent negative numbers
 
@@ -370,28 +400,42 @@ const SmartTracker: React.FC = () => {
 
     const student = students.find(s => s.id === studentId);
     let taskName = '';
-    Object.values(tasks).forEach(categoryTasks => {
+    let categoryName = '';
+    Object.entries(tasks).forEach(([cat, categoryTasks]) => {
       const t = categoryTasks.find(t => t.id === taskId);
-      if (t) taskName = t.name;
+      if (t) {
+        taskName = t.name;
+        if (cat === 'participation') categoryName = 'مشاركة';
+        else if (cat === 'homework') categoryName = 'واجب';
+        else if (cat === 'performance') categoryName = 'مهمة أدائية';
+        else if (cat === 'exams') categoryName = 'اختبار';
+      }
     });
 
     if (student && taskName) {
       logAction('UPDATE_GRADE', `تم تعديل درجة [${student.name}] في [${taskName}] إلى [${value}]`);
+      if (user) {
+        globalLogAction(
+          'أكاديمي',
+          'UPDATE',
+          'كشف المتابعة',
+          `تم تعديل درجة الطالب ${student.name} في ${taskName} إلى ${value} في مادة ${subject}`
+        );
+      }
+      
+      saveLogToLocalStorage({
+        studentId,
+        subject: subject || 'مادة عامة',
+        category: categoryName,
+        taskName,
+        teacherNote: '',
+        teacherName: user?.name || 'معلم المادة',
+        score: numValue,
+        maxScore: maxGrade,
+        date: formatHijriDate(new Date()),
+        status: numValue === maxGrade ? 'مكتمل' : (numValue === '' ? '' : 'ناقص')
+      });
     }
-  };
-
-  const handleToggleGrade = (studentId: number, taskId: string, maxGrade: number) => {
-    setStudentsState(prev => {
-      const currentGrade = prev[studentId].grades[taskId];
-      const newGrade = currentGrade === maxGrade ? 0 : maxGrade;
-      return {
-        ...prev,
-        [studentId]: {
-          ...prev[studentId],
-          grades: { ...prev[studentId].grades, [taskId]: newGrade }
-        }
-      };
-    });
   };
 
   const handleSelectAll = (taskId: string, maxGrade: number) => {
@@ -506,9 +550,44 @@ const SmartTracker: React.FC = () => {
   const toggleBehaviorChip = (studentId: number, chip: string) => {
     setStudentsState(prev => {
       const chips = prev[studentId].behaviorChips;
-      const newChips = chips.includes(chip) 
-        ? chips.filter(c => c !== chip)
-        : [...chips, chip];
+      const isAdding = !chips.includes(chip);
+      const newChips = isAdding 
+        ? [...chips, chip]
+        : chips.filter(c => c !== chip);
+      
+      if (isAdding) {
+        if (user) {
+          const student = students.find(s => s.id === studentId);
+          globalLogAction(
+            'سلوكي',
+            'UPDATE',
+            'كشف المتابعة',
+            `تم إضافة ملاحظة سلوكية [${chip}] للطالب ${student?.name || studentId} في مادة ${subject}`
+          );
+        }
+        saveLogToLocalStorage({
+          studentId,
+          subject: subject || 'مادة عامة',
+          category: 'سلوك',
+          taskName: 'ملاحظة سلوكية',
+          teacherNote: chip,
+          teacherName: user?.name || 'معلم المادة',
+          score: null,
+          maxScore: null,
+          date: formatHijriDate(new Date()),
+          status: ''
+        });
+      } else {
+        if (user) {
+          const student = students.find(s => s.id === studentId);
+          globalLogAction(
+            'سلوكي',
+            'UPDATE',
+            'كشف المتابعة',
+            `تم إزالة ملاحظة سلوكية [${chip}] للطالب ${student?.name || studentId} في مادة ${subject}`
+          );
+        }
+      }
       
       return {
         ...prev,
@@ -552,6 +631,12 @@ const SmartTracker: React.FC = () => {
         })
       });
       if (res.ok) {
+        globalLogAction(
+          'متابعة',
+          'CREATE',
+          'المتابع الذكي',
+          `قام بحفظ متابعة الطلاب للصف ${grade} - ${section} لمادة ${subject}`
+        );
         setConfirmModalState('success');
         setTimeout(() => {
           setConfirmModalState(prev => prev === 'success' ? 'idle' : prev);
@@ -828,9 +913,16 @@ const SmartTracker: React.FC = () => {
                           <th 
                             key={task.id} 
                             onClick={() => handleEditTask(task)}
-                            className="border border-slate-300 bg-slate-100 p-2 text-sm h-10 whitespace-nowrap min-w-[100px] cursor-pointer hover:bg-slate-200 transition-colors"
+                            className="border border-slate-300 bg-slate-100 p-2 text-sm h-10 whitespace-nowrap min-w-[100px] cursor-pointer hover:bg-slate-200 transition-colors relative group"
                             title="انقر لتعديل المهمة"
                           >
+                            <button
+                              onClick={(e) => { e.stopPropagation(); deleteTask(task.id); }}
+                              className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 transition-opacity"
+                              title="حذف المهمة"
+                            >
+                              <Trash2 size={14} />
+                            </button>
                             <div className="flex flex-col items-center justify-center gap-0.5">
                               <span className="truncate w-full text-center">{task.name}</span>
                               <span className="text-[10px] text-slate-500 font-normal">({task.maxGrade})</span>
@@ -867,7 +959,6 @@ const SmartTracker: React.FC = () => {
                             className="flex items-center gap-2 cursor-pointer group"
                             onClick={() => setSelectedStudentId(student.id)}
                           >
-                            <span className="text-slate-400 font-mono text-xs w-5 text-center">{student.id}</span>
                             <span className="font-bold text-slate-800 text-sm truncate group-hover:text-indigo-600 transition-colors">{student.name}</span>
                           </div>
                         </td>
@@ -890,12 +981,26 @@ const SmartTracker: React.FC = () => {
                                       placeholder="-"
                                     />
                                   ) : (
-                                    <div className="flex items-center justify-center w-full h-full">
+                                    <div className="flex items-center justify-center gap-2">
                                       <button
-                                        onClick={() => handleToggleGrade(student.id, task.id, task.maxGrade)}
-                                        className={`w-10 h-5 rounded-full relative transition-colors duration-300 ease-in-out focus:outline-none ${val === task.maxGrade ? 'bg-[#34C759]' : 'bg-slate-200'}`}
+                                        onClick={() => handleGradeChange(student.id, task.id, task.maxGrade, task.maxGrade)}
+                                        className={`rounded-full p-1.5 transition-all ${
+                                          val === task.maxGrade 
+                                            ? 'bg-green-500 text-white shadow-sm ring-2 ring-green-200' 
+                                            : 'text-slate-400 bg-slate-50 hover:bg-green-50 hover:text-green-600'
+                                        }`}
                                       >
-                                        <div className={`absolute top-[2px] right-[2px] w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-300 ease-in-out ${val === task.maxGrade ? '-translate-x-5' : 'translate-x-0'}`} />
+                                        <Check size={14} />
+                                      </button>
+                                      <button
+                                        onClick={() => handleGradeChange(student.id, task.id, 0, task.maxGrade)}
+                                        className={`rounded-full p-1.5 transition-all ${
+                                          val === 0 
+                                            ? 'bg-red-500 text-white shadow-sm ring-2 ring-red-200' 
+                                            : 'text-slate-400 bg-slate-50 hover:bg-red-50 hover:text-red-600'
+                                        }`}
+                                      >
+                                        <X size={14} />
                                       </button>
                                     </div>
                                   )}
@@ -982,7 +1087,6 @@ const SmartTracker: React.FC = () => {
                       <img src={student.avatar} alt={student.name} className="w-12 h-12 rounded-full bg-slate-100" />
                       <div className="flex flex-col">
                         <span className="font-bold text-slate-800 text-sm">{student.name}</span>
-                        <span className="text-xs text-slate-500">#{student.id}</span>
                       </div>
                     </div>
                     <div className="flex gap-2">
@@ -1061,7 +1165,6 @@ const SmartTracker: React.FC = () => {
                       <img src={student.avatar} alt={student.name} className="w-12 h-12 rounded-full bg-slate-100" />
                       <div className="flex flex-col">
                         <span className="font-bold text-slate-800 text-sm">{student.name}</span>
-                        <span className="text-xs text-slate-500">#{student.id}</span>
                       </div>
                     </div>
                     <div className="flex flex-col items-end">
@@ -1099,7 +1202,7 @@ const SmartTracker: React.FC = () => {
 
       {/* Student Profile Drawer */}
       <AnimatePresence>
-        {selectedStudentId !== null && students.find(s => s.id === selectedStudentId) && (
+        {selectedStudentId !== null && students.find(s => s.id === selectedStudentId) && studentsState[selectedStudentId] && (
           <StudentProfileDrawer
             student={students.find(s => s.id === selectedStudentId)!}
             state={studentsState[selectedStudentId]}
@@ -1393,18 +1496,32 @@ const SmartTracker: React.FC = () => {
                             >+</button>
                           </div>
                         ) : (
-                          <div className="flex gap-2">
+                          <div className="flex items-center justify-center gap-2">
                             <button
-                              onClick={() => handleToggleGrade(mobileGradingStudentId, task.id, task.maxGrade)}
-                              className={`flex-1 py-3 rounded-xl font-bold text-sm transition-colors ${val === task.maxGrade ? 'bg-[#34C759] text-white shadow-md' : 'bg-white border border-slate-200 text-slate-600'}`}
+                              onClick={() => handleGradeChange(mobileGradingStudentId, task.id, task.maxGrade, task.maxGrade)}
+                              className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all ${
+                                val === task.maxGrade 
+                                  ? 'bg-green-500 text-white shadow-sm ring-2 ring-green-200' 
+                                  : 'bg-white border border-slate-200 text-slate-400 hover:bg-green-50 hover:text-green-600'
+                              }`}
                             >
-                              مكتمل ({task.maxGrade})
+                              <div className="flex items-center justify-center gap-2">
+                                <Check size={16} />
+                                <span>نفذ</span>
+                              </div>
                             </button>
                             <button
-                              onClick={() => handleGradeChange(mobileGradingStudentId, task.id, '0', task.maxGrade)}
-                              className={`flex-1 py-3 rounded-xl font-bold text-sm transition-colors ${val === 0 ? 'bg-red-500 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-600'}`}
+                              onClick={() => handleGradeChange(mobileGradingStudentId, task.id, 0, task.maxGrade)}
+                              className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all ${
+                                val === 0 
+                                  ? 'bg-red-500 text-white shadow-sm ring-2 ring-red-200' 
+                                  : 'bg-white border border-slate-200 text-slate-400 hover:bg-red-50 hover:text-red-600'
+                              }`}
                             >
-                              غير مكتمل (0)
+                              <div className="flex items-center justify-center gap-2">
+                                <X size={16} />
+                                <span>لم ينفذ</span>
+                              </div>
                             </button>
                           </div>
                         )}
@@ -1600,7 +1717,9 @@ const SmartTracker: React.FC = () => {
         )}
       </AnimatePresence>
     </div>
-    <PrintableTracker students={students} studentsState={studentsState} tasks={tasks} />
+    {!selectedStudentId && (
+      <PrintableTracker students={students} studentsState={studentsState} tasks={tasks} />
+    )}
     </>
   );
 };

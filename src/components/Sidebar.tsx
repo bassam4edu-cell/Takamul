@@ -14,9 +14,12 @@ import {
   UserCircle,
   Bell,
   FileText,
-  MessageSquare
+  MessageSquare,
+  Zap,
+  Puzzle
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { logAction } from '../services/auditLogger';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import Logo from './Logo';
@@ -124,6 +127,12 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
       roles: ['teacher', 'vice_principal', 'counselor', 'admin', 'principal']
     },
     { 
+      title: 'تفعيل الرصد الآلي', 
+      path: '/dashboard/extension-setup', 
+      icon: Puzzle,
+      roles: ['teacher', 'vice_principal']
+    },
+    { 
       title: 'الإعدادات', 
       path: '/dashboard/settings', 
       icon: Settings,
@@ -182,7 +191,19 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
         </div>
         
         <button
-          onClick={logout}
+          onClick={() => {
+            if (user) {
+              logAction(
+                'مصادقة/دخول',
+                'LOGOUT',
+                'النظام',
+                `تسجيل خروج المستخدم ${user.name}`,
+                undefined,
+                { id: user.id, name: user.name, role: user.role }
+              );
+            }
+            logout();
+          }}
           className="flex items-center gap-4 px-5 py-4 w-full text-right text-red-500 hover:bg-red-50 rounded-2xl transition-all duration-300 font-bold text-sm"
         >
           <LogOut size={20} />

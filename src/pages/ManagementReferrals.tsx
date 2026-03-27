@@ -19,6 +19,7 @@ import { Referral } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 import * as XLSX from 'xlsx';
+import { logAction } from '../services/auditLogger';
 import { formatHijriDate } from '../utils/dateUtils';
 import HijriDatePicker from '../components/HijriDatePicker';
 
@@ -77,6 +78,13 @@ const ManagementReferrals: React.FC = () => {
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "حالات نظام نور");
       XLSX.writeFile(wb, `Noor_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+      logAction(
+        'أخرى',
+        'READ',
+        'تصدير نور',
+        `قام بتصدير ${data.length} حالة لنظام نور للفترة من ${exportDates.start} إلى ${exportDates.end}`
+      );
 
       setShowExportModal(false);
       // Refresh referrals to update is_exported status if needed (though not shown in UI yet)

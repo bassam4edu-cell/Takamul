@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../utils/api';
 import { Smartphone, Save, BellOff } from 'lucide-react';
+import { logAction } from '../services/auditLogger';
 
 const AdminSettings: React.FC = () => {
   const [settings, setSettings] = useState({
@@ -48,6 +49,12 @@ const AdminSettings: React.FC = () => {
         })
       });
       if (res.ok) {
+        logAction(
+          'أخرى',
+          'UPDATE',
+          'إعدادات النظام',
+          'قام بتحديث إعدادات إشعارات الواتساب للنظام'
+        );
         alert('تم حفظ الإعدادات بنجاح');
       } else {
         alert('فشل حفظ الإعدادات');

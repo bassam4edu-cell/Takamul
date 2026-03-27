@@ -14,6 +14,7 @@ import {
 import { motion } from 'framer-motion';
 import { formatHijriDate } from '../utils/dateUtils';
 import HijriDatePicker from '../components/HijriDatePicker';
+import { logAction } from '../services/auditLogger';
 
 interface School {
   id: number;
@@ -62,6 +63,12 @@ const SuperAdminDashboard: React.FC = () => {
         body: JSON.stringify(newSchoolForm),
       });
       if (res.ok) {
+        logAction(
+          'أخرى',
+          'CREATE',
+          'إدارة المدارس',
+          `قام بإضافة مدرسة جديدة: ${newSchoolForm.name}`
+        );
         setShowAddModal(false);
         fetchSchools();
       }
@@ -76,6 +83,13 @@ const SuperAdminDashboard: React.FC = () => {
         method: 'POST'
       });
       if (res.ok) {
+        const school = schools.find(s => s.id === schoolId);
+        logAction(
+          'أخرى',
+          'UPDATE',
+          'إدارة المدارس',
+          `قام بتغيير حالة المدرسة: ${school?.name}`
+        );
         fetchSchools();
       }
     } catch (err) {

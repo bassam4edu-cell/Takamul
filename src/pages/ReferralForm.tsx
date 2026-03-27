@@ -2,6 +2,7 @@ import { apiFetch } from '../utils/api';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { logAction } from '../services/auditLogger';
 import { 
   ChevronRight, 
   Send, 
@@ -104,6 +105,17 @@ const ReferralForm: React.FC = () => {
 
       if (response.ok) {
         setSuccess(true);
+        if (user) {
+          const student = students.find(s => s.id === Number(formData.student_id));
+          logAction(
+            'التحويلات',
+            'CREATE',
+            'التحويلات',
+            `تم إنشاء تحويل جديد للطالب ${student?.name || formData.student_id} بسبب ${formData.reason}`,
+            undefined,
+            { id: user.id, name: user.name, role: user.role }
+          );
+        }
         setTimeout(() => navigate('/dashboard'), 2000);
       } else {
         const errorData = await response.json().catch(() => ({ error: 'فشل إرسال التحويل' }));

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState } from 'react';
 import { User } from '../types';
+import { logAction } from '../services/auditLogger';
 
 interface AuthContextType {
   user: User | null;
@@ -27,6 +28,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
+    if (user) {
+      logAction(
+        'مصادقة/خروج',
+        'LOGOUT',
+        'نظام الدخول',
+        `تسجيل خروج المستخدم ${user.name} (${user.role})`,
+        undefined,
+        { id: user.id, name: user.name, role: user.role }
+      );
+    }
     setUser(null);
     localStorage.removeItem('user');
   };

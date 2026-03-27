@@ -2,6 +2,7 @@ import { apiFetch } from '../utils/api';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useMessageLog } from '../context/MessageLogContext';
+import { logAction } from '../services/auditLogger';
 import { CheckCircle2, XCircle, Clock, Save, UserCheck, AlertCircle, Printer, Filter, Calendar, MessageSquare, AlertTriangle, Search, Hourglass, Trash2, Info, Unlock, Lock, Zap, PowerOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatHijriDate, formatHijriDateTime } from '../utils/dateUtils';
@@ -409,6 +410,15 @@ const VPRadar: React.FC = () => {
       });
 
       if (res.ok) {
+        const oldStatus = getStudentStatus(student.id);
+        logAction(
+          'حضور وغياب',
+          'UPDATE',
+          'رادار التحضير',
+          `قام بتعديل حالة الطالب ${student.name} من [${oldStatus}] إلى [${status}] بتاريخ ${date} للحصة ${selectedPeriod}`,
+          { old: { status: oldStatus }, new: { status } }
+        );
+
         setOriginalAttendanceData(prev => {
           const existingIndex = prev.findIndex(a => a.studentId === studentId && a.date === date && a.period === selectedPeriod);
           if (existingIndex >= 0) {
@@ -475,6 +485,14 @@ const VPRadar: React.FC = () => {
 
       if (res.ok) {
         setSuccess(true);
+        
+        logAction(
+          'حضور وغياب',
+          'UPDATE',
+          'رادار التحضير',
+          `قام بحفظ تحضير الحصة ${selectedPeriod} لعدد ${studentsToSubmit.length} طلاب بتاريخ ${date}`
+        );
+
         setOriginalAttendanceData(JSON.parse(JSON.stringify(attendanceData)));
         setTimeout(() => setSuccess(false), 3000);
         fetchData(); // Refresh to get updated teacher names and radar
@@ -495,6 +513,12 @@ const VPRadar: React.FC = () => {
         body: JSON.stringify({ date, period: selectedPeriod })
       });
       if (res.ok) {
+        logAction(
+          'حضور وغياب',
+          'DELETE',
+          'رادار التحضير',
+          `قام بتصفير تحضير الحصة ${selectedPeriod} بتاريخ ${date}`
+        );
         setAlertMessage(`تم تصفير تحضير الحصة ${selectedPeriod} بنجاح.`);
         fetchData();
         setIsResetModalOpen(false);
@@ -550,6 +574,13 @@ const VPRadar: React.FC = () => {
       });
 
       if (res.ok) {
+        logAction(
+          'حضور وغياب',
+          'UPDATE',
+          'رادار التحضير',
+          `قام بتحضير جميع طلاب الصف ${grade} - ${section} للحصة ${selectedPeriod} بتاريخ ${date}`
+        );
+
         setOriginalAttendanceData(prev => {
           const next = [...prev];
           classStudents.forEach(s => {
@@ -666,6 +697,12 @@ const VPRadar: React.FC = () => {
       return;
     }
     
+    logAction(
+      'حضور وغياب',
+      'CREATE',
+      'رادار التحضير',
+      `قام بإرسال رسالة واتساب لولي أمر الطالب ${student.name} بخصوص الغياب`
+    );
     setAlertMessage(`تم إرسال رسالة واتساب لولي أمر الطالب بنجاح.`);
   };
 
@@ -704,6 +741,12 @@ const VPRadar: React.FC = () => {
     setIsSendingBulk(false);
     
     if (!hasCredentialError) {
+      logAction(
+        'حضور وغياب',
+        'CREATE',
+        'رادار التحضير',
+        `قام بإرسال رسائل واتساب جماعية لعدد ${sentCount} طلاب غائبين`
+      );
       setAlertMessage(`تم إرسال ${sentCount} رسالة بنجاح، وتخطي ${skippedCount} طالب لعدم وجود رقم.`);
     }
   };

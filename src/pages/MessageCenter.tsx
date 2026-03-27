@@ -2,6 +2,7 @@ import { apiFetch } from '../utils/api';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useMessageLog } from '../context/MessageLogContext';
 import { useAuth } from '../context/AuthContext';
+import { logAction } from '../services/auditLogger';
 import { Search, RotateCcw, Send, Users, CheckCircle2, XCircle, Clock, MessageSquare, AlertCircle, Settings, Save, User, Pencil, Trash2, Eye } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import MessageSettings from './MessageSettings';
@@ -245,6 +246,14 @@ const MessageCenter: React.FC = () => {
       }
 
       setSendResult({ success: successCount, failed: failCount });
+      
+      logAction(
+        'أخرى',
+        'CREATE',
+        'مركز الرسائل',
+        `قام بإرسال حملة رسائل (${campaignName}) لعدد ${successCount} مستلم بنجاح`
+      );
+
       setMessageText('');
       setSelectedStudents([]);
     } catch (error) {

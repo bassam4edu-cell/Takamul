@@ -1,6 +1,7 @@
 import { apiFetch } from '../utils/api';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { logAction } from '../services/auditLogger';
 import { CheckCircle2, XCircle, Clock, Save, Lock, Users, AlertCircle, AlertTriangle } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -153,6 +154,12 @@ const TeacherRollCall: React.FC = () => {
       });
 
       if (res.ok) {
+        logAction(
+          'حضور وغياب',
+          'UPDATE',
+          'التحضير اليومي',
+          `قام بحفظ تحضير الحصة ${period} للصف ${grade} - ${section} لعدد ${students.length} طلاب`
+        );
         setSuccess(true);
         setIsSubmitted(true);
         setSubmitterName(user?.name || 'أنت');

@@ -2,6 +2,7 @@ import { apiFetch } from '../utils/api';
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { logAction } from '../services/auditLogger';
 import { ShieldCheck, Lock, Mail, ChevronRight, User as UserIcon, ArrowRight, X, Phone } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Logo from '../components/Logo';
@@ -351,6 +352,14 @@ const Login: React.FC = () => {
         if (data.user.role === 'admin' || data.user.email.endsWith('@test.com')) {
           // تخطي التحقق الثنائي (OTP) للمدير وحسابات التجربة
           login(data.user);
+          logAction(
+            'مصادقة/دخول',
+            'LOGIN',
+            'نظام الدخول',
+            `تسجيل دخول ناجح للمستخدم ${data.user.name} (${data.user.role})`,
+            undefined,
+            { id: data.user.id, name: data.user.name, role: data.user.role }
+          );
           let from = (location.state as any)?.from?.pathname;
           if (!from || from === '/') {
             from = '/dashboard';
@@ -448,6 +457,14 @@ const Login: React.FC = () => {
 
       // If successful, log the user in
       login(tempUser);
+      logAction(
+        'مصادقة/دخول',
+        'LOGIN',
+        'نظام الدخول',
+        `تسجيل دخول ناجح للمستخدم ${tempUser.name} (${tempUser.role}) بعد التحقق الثنائي`,
+        undefined,
+        { id: tempUser.id, name: tempUser.name, role: tempUser.role }
+      );
       
       if (tempUser.role === 'parent') {
         try {

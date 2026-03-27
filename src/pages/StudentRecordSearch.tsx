@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, User, FileText, ChevronLeft, Layers, UserCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { logAction } from '../services/auditLogger';
 
 interface Student {
   id: number;
@@ -79,6 +80,13 @@ const StudentRecordSearch: React.FC = () => {
 
   const handleViewProfile = () => {
     if (selectedStudentId) {
+      const student = students.find(s => s.id === selectedStudentId);
+      logAction(
+        'أخرى',
+        'READ',
+        'السجل الشامل للطالب',
+        `قام بعرض السجل الشامل للطالب ${student?.name}`
+      );
       navigate(`/dashboard/student/${selectedStudentId}`);
     }
   };

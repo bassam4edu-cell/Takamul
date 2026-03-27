@@ -4,6 +4,7 @@ import StudentProfile from './StudentProfile';
 import { motion } from 'motion/react';
 import { LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { logAction } from '../services/auditLogger';
 
 const ParentPortal: React.FC = () => {
   const { user, logout } = useAuth();
@@ -19,6 +20,14 @@ const ParentPortal: React.FC = () => {
   const parentName = nameParts.slice(1).join(' ') || '';
 
   const handleLogout = () => {
+    logAction(
+      'مصادقة/دخول',
+      'LOGOUT',
+      'بوابة ولي الأمر',
+      `تسجيل خروج ولي الأمر ${user.name}`,
+      undefined,
+      { id: user.id, name: user.name, role: user.role }
+    );
     logout();
     navigate('/parent-login');
   };
