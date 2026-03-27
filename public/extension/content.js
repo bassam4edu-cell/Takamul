@@ -109,7 +109,7 @@ async function openSyncModal() {
     
     <style>
       @keyframes takamol-spin { to { transform: rotate(360deg); } }
-      .takamol-select { width: 100%; padding: 12px; border: 2px solid #e2e8f0; border-radius: 12px; font-family: 'Tajawal', sans-serif; font-size: 15px; margin-bottom: 24px; outline: none; transition: border-color 0.2s; }
+      .takamol-select { width: 100%; padding: 12px; border: 2px solid #e2e8f0; border-radius: 12px; font-family: 'Tajawal', sans-serif; font-size: 15px; outline: none; transition: border-color 0.2s; }
       .takamol-select:focus { border-color: #059669; }
       .takamol-btn { padding: 12px 24px; border-radius: 12px; font-family: 'Tajawal', sans-serif; font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.2s; border: none; width: 100%; margin-bottom: 12px; }
       .takamol-btn-primary { background: #059669; color: white; }
@@ -117,17 +117,33 @@ async function openSyncModal() {
       .takamol-btn-primary:disabled { background: #94a3b8; cursor: not-allowed; }
       .takamol-btn-secondary { background: #f1f5f9; color: #475569; }
       .takamol-btn-secondary:hover { background: #e2e8f0; }
+      .takamol-refresh-btn { background: none; border: none; color: #059669; cursor: pointer; font-family: 'Tajawal', sans-serif; font-size: 14px; display: flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 6px; transition: background 0.2s; }
+      .takamol-refresh-btn:hover { background: #ecfdf5; }
     </style>
   `;
 
   modalOverlay.appendChild(modalContent);
   document.body.appendChild(modalOverlay);
 
+  await fetchAndPopulateSubjects(syncCode, modalOverlay, modalContent);
+}
+
+async function fetchAndPopulateSubjects(syncCode, modalOverlay, modalContent) {
+  const modalBody = document.getElementById('takamol-modal-body');
+  const subtitle = document.getElementById('takamol-modal-subtitle');
+  
+  // Show spinner
+  modalBody.innerHTML = `
+    <div style="width: 40px; height: 40px; border: 4px solid #e2e8f0; border-top-color: #059669; border-radius: 50%; animation: takamol-spin 1s linear infinite; margin: 0 auto;"></div>
+    <p style="color: #64748b; margin-top: 12px; font-size: 14px;">جاري تحديث القائمة...</p>
+  `;
+
   try {
     const url = new URL(`${API_BASE_URL}/get-teacher-subjects`);
     url.searchParams.append('syncCode', syncCode);
+    url.searchParams.append('v', Date.now()); // Cache busting
     
-    const response = await fetch(url.toString());
+    const response = await fetch(url.toString(), { cache: 'no-store' });
     
     if (response.status === 401) {
       clearSyncCode();
@@ -141,17 +157,19 @@ async function openSyncModal() {
     const data = await response.json();
     const subjects = data.subjects || [];
     
-    document.getElementById('takamol-modal-subtitle').innerText = `مرحباً بك، ${data.teacherName}`;
-    
-    const modalBody = document.getElementById('takamol-modal-body');
+    subtitle.innerText = `مرحباً بك، ${data.teacherName}`;
     
     if (subjects.length === 0) {
       modalBody.innerHTML = `
         <div style="background: #fef2f2; color: #dc2626; padding: 16px; border-radius: 12px; margin-bottom: 24px;">
           لا توجد مواد مسجلة لك في نظام تكامل حالياً.
         </div>
+        <div style="display: flex; justify-content: center; margin-bottom: 24px;">
+          <button id="takamol-refresh-btn" class="takamol-refresh-btn">🔄 تحديث القائمة</button>
+        </div>
         <button class="takamol-btn takamol-btn-secondary" onclick="document.body.removeChild(document.getElementById('takamol-modal-overlay'))">إغلاق</button>
       `;
+      document.getElementById('takamol-refresh-btn').addEventListener('click', () => fetchAndPopulateSubjects(syncCode, modalOverlay, modalContent));
       return;
     }
 
@@ -161,12 +179,18 @@ async function openSyncModal() {
     });
 
     modalBody.innerHTML = `
-      <select id="takamol-subject-select" class="takamol-select">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <label style="font-size: 14px; color: #475569; font-weight: bold;">اختر المادة:</label>
+        <button id="takamol-refresh-btn" class="takamol-refresh-btn">🔄 تحديث</button>
+      </div>
+      <select id="takamol-subject-select" class="takamol-select" style="margin-bottom: 24px;">
         ${optionsHtml}
       </select>
       <button id="takamol-start-btn" class="takamol-btn takamol-btn-primary" disabled>بدء الرصد الآلي</button>
       <button class="takamol-btn takamol-btn-secondary" onclick="document.body.removeChild(document.getElementById('takamol-modal-overlay'))">إلغاء</button>
     `;
+
+    document.getElementById('takamol-refresh-btn').addEventListener('click', () => fetchAndPopulateSubjects(syncCode, modalOverlay, modalContent));
 
     const selectEl = document.getElementById('takamol-subject-select');
     const startBtn = document.getElementById('takamol-start-btn');
@@ -184,12 +208,16 @@ async function openSyncModal() {
     });
 
   } catch (error) {
-    document.getElementById('takamol-modal-body').innerHTML = `
+    modalBody.innerHTML = `
       <div style="background: #fef2f2; color: #dc2626; padding: 16px; border-radius: 12px; margin-bottom: 24px;">
         ${error.message || 'حدث خطأ أثناء جلب البيانات.'}
       </div>
+      <div style="display: flex; justify-content: center; margin-bottom: 24px;">
+        <button id="takamol-refresh-btn" class="takamol-refresh-btn">🔄 إعادة المحاولة</button>
+      </div>
       <button class="takamol-btn takamol-btn-secondary" onclick="document.body.removeChild(document.getElementById('takamol-modal-overlay'))">إغلاق</button>
     `;
+    document.getElementById('takamol-refresh-btn').addEventListener('click', () => fetchAndPopulateSubjects(syncCode, modalOverlay, modalContent));
   }
 }
 
