@@ -8,6 +8,7 @@ export interface User {
   school_id?: number;
   schoolId?: number;
   assigned_grades?: string[];
+  assignments?: TeacherAssignment[];
   is_active?: boolean;
   phone_number?: string;
   whatsapp_enabled?: boolean;
@@ -61,6 +62,9 @@ export interface Subject {
   id: number;
   name: string;
   school_id: number;
+  is_elective?: boolean;
+  grade?: string | null;
+  semester?: string | null;
 }
 
 export interface Class {

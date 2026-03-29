@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Printer, BookOpen, Calculator, FlaskConical, Languages, Palette, ChevronLeft } from 'lucide-react';
+import { X, Printer, Share2, BookOpen, Calculator, FlaskConical, Languages, Palette, ChevronLeft } from 'lucide-react';
+import * as htmlToImage from 'html-to-image';
 import { Student, StudentState, TaskCategory, Task } from '../pages/SmartTracker';
 import { formatHijriDate } from '../utils/dateUtils';
 import { apiFetch } from '../utils/api';
 import { logAction } from '../services/auditLogger';
+import { useAuth } from '../context/AuthContext';
 
 const positiveBehaviors = ['مجتهد', 'مشاركة فعالة', 'مساعدة زميل'];
 
@@ -27,13 +29,59 @@ interface StudentProfileDrawerProps {
   student: Student;
   state: StudentState;
   tasks: Record<TaskCategory, Task[]>;
+  grade: string;
+  section: string;
+  date: string;
   onClose: () => void;
 }
 
-export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ student, state, tasks, onClose }) => {
+export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ student, state, tasks, grade, section, date, onClose }) => {
+  const { user: currentUser } = useAuth();
   if (!state) return null; // إضافة فحص أمان
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [selectedSubject, setSelectedSubject] = useState<any | null>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
+  const [isSharing, setIsSharing] = useState(false);
+
+  const handleShare = async () => {
+    if (!drawerRef.current) return;
+    try {
+      setIsSharing(true);
+      
+      // Use html-to-image instead of html2canvas to support modern CSS like oklch
+      const dataUrl = await htmlToImage.toPng(drawerRef.current, {
+        quality: 1.0,
+        pixelRatio: 2,
+        backgroundColor: '#ffffff'
+      });
+      
+      // Convert dataUrl to Blob
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      
+      const file = new File([blob], `تقرير_${student.name}.png`, { type: 'image/png' });
+      
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: `تقرير الطالب ${student.name}`,
+          files: [file]
+        });
+      } else {
+        // Fallback for browsers that don't support file sharing
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `تقرير_${student.name}.png`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      console.error('Error sharing image:', error);
+      alert('حدث خطأ أثناء تجهيز الصورة للمشاركة. الرجاء المحاولة مرة أخرى.');
+    } finally {
+      setIsSharing(false);
+    }
+  };
 
   useEffect(() => {
     logAction(
@@ -56,12 +104,30 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
     fetchAttendance();
   }, [student.id]);
 
+  const combinedAttendance = React.useMemo(() => {
+    const records = [...attendanceRecords];
+    
+    // Check if the current session's date is already in the records
+    const hasCurrentDate = records.some(r => r.date && r.date.startsWith(date));
+    
+    if (!hasCurrentDate && state.attendance !== 'present') {
+      records.unshift({
+        id: Date.now(), // mock ID
+        date: date,
+        status: state.attendance === 'absent' ? 'غائب' : 'متأخر',
+        is_excused: false
+      });
+    }
+    
+    return records;
+  }, [attendanceRecords, date, state.attendance]);
+
   const getCategoryTotal = (category: TaskCategory) => {
-    return tasks[category].reduce((sum, t) => sum + (Number(state.grades?.[t.id]) || 0), 0);
+    return (tasks?.[category] || []).reduce((sum, t) => sum + (Number(state.grades?.[t.id]) || 0), 0);
   };
 
   const getCategoryMax = (category: TaskCategory) => {
-    return tasks[category].reduce((sum, t) => sum + t.maxGrade, 0);
+    return (tasks?.[category] || []).reduce((sum, t) => sum + t.maxGrade, 0);
   };
 
   const participationTotal = getCategoryTotal('participation');
@@ -82,7 +148,7 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
   const percentage = overallMax > 0 ? Math.round((overallTotal / overallMax) * 100) : 0;
 
   // Collect all tasks for the timeline
-  const allTasks = Object.values(tasks).flat();
+  const allTasks = Object.values(tasks || {}).flat();
 
   return (
     <>
@@ -101,11 +167,14 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
         animate={{ x: 0 }}
         exit={{ x: '-100%' }}
         transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-        className="fixed inset-y-0 left-0 z-50 w-full max-w-md bg-white shadow-2xl overflow-y-auto print:hidden"
+        className="fixed inset-y-0 left-0 z-50 w-full max-w-md bg-white shadow-2xl overflow-y-auto print:w-full print:absolute print:inset-0 print:border-none print:shadow-none print:max-w-none print:overflow-visible print:bg-white"
         dir="rtl"
+        ref={drawerRef}
       >
-        {/* 360° Header */}
-        <div className="bg-teal-700 text-white p-6 rounded-b-xl mb-6 relative">
+        {/* Normal UI - Hidden in print */}
+        <div className="print:hidden">
+          {/* 360° Header */}
+          <div className="bg-teal-700 text-white p-6 rounded-b-xl mb-6 relative">
           <button 
             onClick={onClose} 
             className="absolute top-4 left-4 p-2 text-teal-100 hover:text-white hover:bg-teal-600/50 rounded-full transition-colors"
@@ -122,35 +191,27 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
               <h2 className="text-xl font-bold">{student.name}</h2>
               <p className="text-teal-100 text-sm mt-1">الصف الحالي</p>
             </div>
-            <button 
-              onClick={() => window.print()} 
-              className="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
-            >
-              <Printer size={16} />
-              <span className="hidden sm:inline">طباعة التقرير التفصيلي</span>
-            </button>
+            <div className="flex flex-col gap-2">
+              <button 
+                onClick={() => window.print()} 
+                className="flex items-center justify-center gap-2 bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+              >
+                <Printer size={16} />
+                <span className="hidden sm:inline">طباعة</span>
+              </button>
+              <button 
+                onClick={handleShare} 
+                disabled={isSharing}
+                className="flex items-center justify-center gap-2 bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                <Share2 size={16} />
+                <span className="hidden sm:inline">{isSharing ? 'جاري التجهيز...' : 'مشاركة'}</span>
+              </button>
+            </div>
           </div>
         </div>
 
         <div className="px-6 pb-8">
-          {/* Quick Stats Dashboard */}
-          <div className="grid grid-cols-2 gap-4 mb-8">
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col items-center text-center">
-              <span className="text-xs font-bold text-slate-500 mb-1">المعدل الكلي</span>
-              <span className="text-2xl font-black text-emerald-600">{percentage}%</span>
-            </div>
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col items-center text-center">
-              <span className="text-xs font-bold text-slate-500 mb-1">نسبة الحضور</span>
-              <span className={`text-2xl font-black ${student.semesterAttendance < 90 ? 'text-amber-500' : 'text-slate-700'}`}>
-                {student.semesterAttendance}%
-              </span>
-            </div>
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col items-center text-center col-span-2">
-              <span className="text-xs font-bold text-slate-500 mb-1">عدد السلوكيات المسجلة</span>
-              <span className="text-2xl font-black text-slate-700">{state.behaviorChips.length}</span>
-            </div>
-          </div>
-
           {/* 2. Attendance Section */}
           <div className="mb-8">
             <h3 className="text-lg font-bold text-slate-800 border-b border-slate-200 pb-2 mb-4">سجل الغياب والتأخر</h3>
@@ -164,23 +225,26 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {attendanceRecords.length > 0 ? (
-                    attendanceRecords.map((record) => {
+                  {combinedAttendance.length > 0 ? (
+                    combinedAttendance.map((record) => {
                       const dateObj = new Date(record.date);
                       const days = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
                       const dayName = days[dateObj.getDay()];
+                      const isAbsent = record.status === 'absent' || record.status === 'غائب';
+                      const isLate = record.status === 'late' || record.status === 'متأخر';
+                      
                       return (
                         <tr key={record.id} className="hover:bg-slate-50 transition-colors">
                           <td className="p-3 text-slate-700">{dayName}</td>
                           <td className="p-3 text-slate-500" dir="ltr">{formatHijriDate(record.date)}</td>
                           <td className="p-3">
                             <span className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium border ${
-                              record.status === 'absent' ? 'bg-red-50 text-red-700 border-red-100' :
-                              record.status === 'late' ? 'bg-amber-50 text-amber-700 border-amber-100' :
+                              isAbsent ? 'bg-red-50 text-red-700 border-red-100' :
+                              isLate ? 'bg-amber-50 text-amber-700 border-amber-100' :
                               'bg-emerald-50 text-emerald-700 border-emerald-100'
                             }`}>
-                              {record.status === 'absent' ? (record.is_excused ? 'غياب بعذر' : 'غياب بدون عذر') :
-                               record.status === 'late' ? 'تأخر صباحي' : 'حاضر'}
+                              {isAbsent ? (record.is_excused ? 'غياب بعذر' : 'غياب بدون عذر') :
+                               isLate ? 'تأخر صباحي' : 'حاضر'}
                             </span>
                           </td>
                         </tr>
@@ -323,7 +387,7 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
           <div>
             <h3 className="text-lg font-bold text-slate-800 border-b border-slate-200 pb-2 mb-4">سجل السلوك</h3>
             <div className="flex flex-col gap-3">
-              {state.behaviorChips.length > 0 ? (
+              {state.behaviorChips?.length > 0 ? (
                 state.behaviorChips.map((chip, idx) => {
                   const isPositive = positiveBehaviors.includes(chip) || chip.startsWith('🌟 ');
                   return (
@@ -348,6 +412,170 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
             </div>
           </div>
 
+        </div>
+        </div>
+
+        {/* Printable Report */}
+        <div className="hidden print:block print:p-4 w-full print:text-[9pt] print:leading-tight" dir="rtl">
+          {/* 1. Official Header */}
+          <div className="hidden print:flex print:justify-between print:border-b-2 print:border-black print:pb-2 print:mb-3">
+            <div className="text-right print:text-xs text-sm leading-relaxed font-bold">
+              <p>المملكة العربية السعودية</p>
+              <p>وزارة التعليم</p>
+              <p>إدارة التعليم بمحافظة الخرج</p>
+              <p>ثانوية أم القرى</p>
+            </div>
+            <div className="text-center flex flex-col items-center justify-center">
+              <h1 className="print:text-lg text-2xl font-bold mt-2">التقرير التفصيلي لمستوى الطالب</h1>
+            </div>
+            <div className="text-left print:text-xs text-sm leading-relaxed font-bold">
+              <p>التاريخ: {new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura', { year: 'numeric', month: 'numeric', day: 'numeric' }).format(new Date()).replace(/ هـ| AH|هـ/g, '')}هـ</p>
+            </div>
+          </div>
+
+          {/* 2. Student Info */}
+          <div className="print:border print:border-gray-400 print:rounded-md print:p-2 print:mb-3 print:shadow-none flex justify-between items-center bg-gray-50 p-4 mb-6">
+            <div>
+              <span className="text-gray-500 print:text-xs text-sm">اسم الطالب:</span>
+              <span className="font-bold print:text-sm text-lg mr-2">{student.name}</span>
+            </div>
+            <div>
+              <span className="text-gray-500 print:text-xs text-sm">الصف:</span>
+              <span className="font-bold print:text-sm text-lg mr-2">{grade || 'الحالي'}</span>
+            </div>
+            <div>
+              <span className="text-gray-500 print:text-xs text-sm">الفصل:</span>
+              <span className="font-bold print:text-sm text-lg mr-2">{section || '-'}</span>
+            </div>
+          </div>
+
+          {/* 3. Academic & Attendance Grid */}
+          <div className="print:grid print:grid-cols-2 print:gap-2 print:mb-3">
+            {/* Participation */}
+            <div className="print:bg-white print:border print:border-gray-300 print:shadow-none print:p-2 p-4 rounded-lg bg-teal-50">
+              <h3 className="font-bold print:text-sm text-lg print:mb-1 mb-2 border-b print:pb-1 pb-2">المشاركة</h3>
+              <div className="space-y-1 print:space-y-0.5 print:mb-1 mb-3">
+                {tasks.participation?.map(t => {
+                  const grade = state.grades?.[t.id];
+                  const isDone = grade !== undefined && grade !== '' && Number(grade) > 0;
+                  return (
+                    <div key={t.id} className="flex justify-between print:text-xs text-sm">
+                      <span>{t.name} <span className="print:text-[10px] text-xs text-gray-500 mr-1">({isDone ? 'نفذ' : 'لم ينفذ'})</span></span>
+                      <span className="font-medium">{grade || 0} / {t.maxGrade}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex justify-between items-center print:pt-1 pt-2 border-t">
+                <span className="text-gray-600 font-bold print:text-xs">المجموع:</span>
+                <span className="font-bold print:text-sm text-lg">{participationTotal} / {participationMax}</span>
+              </div>
+            </div>
+            {/* Homework */}
+            <div className="print:bg-white print:border print:border-gray-300 print:shadow-none print:p-2 p-4 rounded-lg bg-indigo-50">
+              <h3 className="font-bold print:text-sm text-lg print:mb-1 mb-2 border-b print:pb-1 pb-2">الواجبات</h3>
+              <div className="space-y-1 print:space-y-0.5 print:mb-1 mb-3">
+                {tasks.homework?.map(t => {
+                  const grade = state.grades?.[t.id];
+                  const isDone = grade !== undefined && grade !== '' && Number(grade) > 0;
+                  return (
+                    <div key={t.id} className="flex justify-between print:text-xs text-sm">
+                      <span>{t.name} <span className="print:text-[10px] text-xs text-gray-500 mr-1">({isDone ? 'نفذ' : 'لم ينفذ'})</span></span>
+                      <span className="font-medium">{grade || 0} / {t.maxGrade}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex justify-between items-center print:pt-1 pt-2 border-t">
+                <span className="text-gray-600 font-bold print:text-xs">المجموع:</span>
+                <span className="font-bold print:text-sm text-lg">{homeworkTotal} / {homeworkMax}</span>
+              </div>
+            </div>
+            {/* Performance */}
+            <div className="print:bg-white print:border print:border-gray-300 print:shadow-none print:p-2 p-4 rounded-lg bg-amber-50">
+              <h3 className="font-bold print:text-sm text-lg print:mb-1 mb-2 border-b print:pb-1 pb-2">المهام الأدائية</h3>
+              <div className="space-y-1 print:space-y-0.5 print:mb-1 mb-3">
+                {tasks.performance?.map(t => {
+                  const grade = state.grades?.[t.id];
+                  const isDone = grade !== undefined && grade !== '' && Number(grade) > 0;
+                  return (
+                    <div key={t.id} className="flex justify-between print:text-xs text-sm">
+                      <span>{t.name} <span className="print:text-[10px] text-xs text-gray-500 mr-1">({isDone ? 'نفذ' : 'لم ينفذ'})</span></span>
+                      <span className="font-medium">{grade || 0} / {t.maxGrade}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex justify-between items-center print:pt-1 pt-2 border-t">
+                <span className="text-gray-600 font-bold print:text-xs">المجموع:</span>
+                <span className="font-bold print:text-sm text-lg">{performanceTotal} / {performanceMax}</span>
+              </div>
+            </div>
+            {/* Exams */}
+            <div className="print:bg-white print:border print:border-gray-300 print:shadow-none print:p-2 p-4 rounded-lg bg-rose-50">
+              <h3 className="font-bold print:text-sm text-lg print:mb-1 mb-2 border-b print:pb-1 pb-2">الاختبارات</h3>
+              <div className="space-y-1 print:space-y-0.5 print:mb-1 mb-3">
+                {tasks.exams?.map(t => {
+                  const grade = state.grades?.[t.id];
+                  const isDone = grade !== undefined && grade !== '' && Number(grade) > 0;
+                  return (
+                    <div key={t.id} className="flex justify-between print:text-xs text-sm">
+                      <span>{t.name} <span className="print:text-[10px] text-xs text-gray-500 mr-1">({isDone ? 'نفذ' : 'لم ينفذ'})</span></span>
+                      <span className="font-medium">{grade || 0} / {t.maxGrade}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex justify-between items-center print:pt-1 pt-2 border-t">
+                <span className="text-gray-600 font-bold print:text-xs">المجموع:</span>
+                <span className="font-bold print:text-sm text-lg">{examsTotal} / {examsMax}</span>
+              </div>
+            </div>
+            {/* Attendance */}
+            <div className="print:bg-white print:border print:border-gray-300 print:shadow-none print:p-2 p-4 rounded-lg col-span-2 bg-slate-50">
+              <h3 className="font-bold print:text-sm text-lg print:mb-1 mb-2 border-b print:pb-1 pb-2">سجل الغياب والتأخر</h3>
+              <div className="space-y-2 print:space-y-0.5">
+                {combinedAttendance.filter(r => r.status !== 'present' && r.status !== 'حاضر').length > 0 ? (
+                  combinedAttendance.filter(r => r.status !== 'present' && r.status !== 'حاضر').map(record => {
+                    const isAbsent = record.status === 'absent' || record.status === 'غائب';
+                    const isLate = record.status === 'late' || record.status === 'متأخر';
+                    
+                    return (
+                      <div key={record.id} className="flex justify-between items-center print:text-xs text-sm border-b border-gray-100 print:pb-0.5 pb-1 last:border-0">
+                        <div className="flex items-center gap-2">
+                          <span className={`print:w-1.5 print:h-1.5 w-2 h-2 rounded-full ${isAbsent ? 'bg-red-500' : 'bg-amber-500'}`}></span>
+                          <span>{formatHijriDate(record.date)}</span>
+                        </div>
+                        <span className="font-medium">
+                          {isAbsent ? 'غياب' : 'تأخر'}
+                          {record.is_excused ? ' (بعذر)' : ' (بدون عذر)'}
+                        </span>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="print:text-xs text-sm text-gray-500 text-center print:py-1 py-2">لا يوجد غياب أو تأخر مسجل.</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* 4. Teacher's Remarks Section */}
+          <div className="mt-6 p-5 print:mt-2 print:p-2 bg-blue-50/50 rounded-xl print:bg-transparent print:border print:border-gray-400 print:rounded-md print:break-inside-avoid">
+            <h3 className="text-lg print:text-sm font-bold text-gray-800 mb-3 print:mb-1 print:text-black print:border-b print:border-gray-300 print:pb-1">
+              ملاحظات وتوجيهات المعلم:
+            </h3>
+            <p className="text-gray-700 print:text-xs leading-relaxed whitespace-pre-wrap print:text-black">
+              {state.behaviorChips?.length > 0 ? state.behaviorChips.join('\n') : 'لا توجد ملاحظات مسجلة.'}
+            </p>
+          </div>
+
+          {/* 5. Teacher Footer */}
+          <div className="hidden print:flex print:justify-end print:mt-2 print:pt-2 print:border-t print:border-gray-400 print:break-inside-avoid">
+            <p className="text-lg print:text-xs font-bold text-gray-800 print:text-black">
+              معلم المادة : {currentUser?.name || 'غير محدد'}
+            </p>
+          </div>
         </div>
       </motion.div>
 
@@ -384,161 +612,6 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Printable Report */}
-      <style type="text/css" media="print">
-        {`
-          body > * { display: none !important; }
-          .print-only { display: block !important; }
-        `}
-      </style>
-      <div className="hidden print:block print-only print:bg-white print:text-black print:p-8 w-full absolute top-0 left-0 z-[100]" dir="rtl">
-        {/* Header */}
-        <div className="flex justify-between items-start border-b-2 border-black pb-4 mb-6">
-          <div className="text-sm leading-relaxed">
-            <p>المملكة العربية السعودية</p>
-            <p>وزارة التعليم</p>
-            <p>إدارة التعليم بـ ....................</p>
-            <p>مدرسة ثانوية أم القرى</p>
-          </div>
-          <div className="text-center flex flex-col items-center justify-center">
-            <h1 className="text-2xl font-bold mt-4">تقرير الأداء الشامل للطالب</h1>
-          </div>
-          <div className="text-sm leading-relaxed text-left">
-            <p>تاريخ الطباعة: {formatHijriDate(new Date())}</p>
-            <p>رقم الكشف: {student.id}</p>
-            <p>اسم الطالب: {student.name}</p>
-            <p>الصف: الحالي</p>
-          </div>
-        </div>
-
-        {/* Table 1: Attendance */}
-        <div className="mb-8 print:break-inside-avoid">
-          <h2 className="text-lg font-bold mb-3 bg-gray-100 p-2 border border-black">سجل الغياب والتأخر</h2>
-          <table className="w-full border-collapse border border-black text-sm text-center">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="border border-black p-2">اليوم</th>
-                <th className="border border-black p-2">التاريخ الهجري</th>
-                <th className="border border-black p-2">حالة الحضور</th>
-              </tr>
-            </thead>
-            <tbody>
-              {attendanceRecords.length > 0 ? (
-                attendanceRecords.map((record) => {
-                  const dateObj = new Date(record.date);
-                  const days = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
-                  const dayName = days[dateObj.getDay()];
-                  return (
-                    <tr key={record.id}>
-                      <td className="border border-black p-2">{dayName}</td>
-                      <td className="border border-black p-2" dir="ltr">{formatHijriDate(record.date)}</td>
-                      <td className="border border-black p-2">
-                        {record.status === 'absent' ? (record.is_excused ? 'غياب بعذر' : 'غياب بدون عذر') :
-                         record.status === 'late' ? 'تأخر صباحي' : 'حاضر'}
-                      </td>
-                    </tr>
-                  );
-                })
-              ) : (
-                <tr>
-                  <td colSpan={3} className="border border-black p-4 text-gray-500">لا يوجد سجل غياب أو تأخر</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Table 2: Academic */}
-        <div className="mb-8 print:break-inside-avoid">
-          <h2 className="text-lg font-bold mb-3 bg-gray-100 p-2 border border-black">السجل الأكاديمي والدرجات</h2>
-          <table className="w-full border-collapse border border-black text-sm text-center">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="border border-black p-2 w-12">م</th>
-                <th className="border border-black p-2">فئة المتابعة</th>
-                <th className="border border-black p-2">اسم المهمة</th>
-                <th className="border border-black p-2">الدرجة العظمى</th>
-                <th className="border border-black p-2">الدرجة المكتسبة</th>
-              </tr>
-            </thead>
-            <tbody>
-              {allTasks.map((task, idx) => {
-                const grade = state.grades?.[task.id];
-                let categoryName = '';
-                if (tasks.participation.find(t => t.id === task.id)) categoryName = 'مشاركة';
-                else if (tasks.homework.find(t => t.id === task.id)) categoryName = 'واجبات';
-                else if (tasks.performance.find(t => t.id === task.id)) categoryName = 'مهام أدائية';
-                else if (tasks.exams.find(t => t.id === task.id)) categoryName = 'اختبارات';
-
-                return (
-                  <tr key={task.id}>
-                    <td className="border border-black p-2">{idx + 1}</td>
-                    <td className="border border-black p-2">{categoryName}</td>
-                    <td className="border border-black p-2">{task.name}</td>
-                    <td className="border border-black p-2">{task.maxGrade}</td>
-                    <td className="border border-black p-2 font-bold">{grade !== undefined && grade !== '' ? grade : '-'}</td>
-                  </tr>
-                );
-              })}
-              {allTasks.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="border border-black p-4 text-gray-500">لا توجد مهام مسجلة</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Table 3: Behavior */}
-        <div className="mb-8 print:break-inside-avoid">
-          <h2 className="text-lg font-bold mb-3 bg-gray-100 p-2 border border-black">السجل السلوكي</h2>
-          <table className="w-full border-collapse border border-black text-sm text-center">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="border border-black p-2 w-12">م</th>
-                <th className="border border-black p-2">نوع السلوك</th>
-                <th className="border border-black p-2">تفصيل الملاحظة</th>
-                <th className="border border-black p-2">التاريخ الهجري</th>
-              </tr>
-            </thead>
-            <tbody>
-              {state.behaviorChips.map((chip, idx) => {
-                const isPositive = positiveBehaviors.includes(chip) || chip.startsWith('🌟 ');
-                return (
-                  <tr key={idx}>
-                    <td className="border border-black p-2">{idx + 1}</td>
-                    <td className="border border-black p-2">{isPositive ? 'إيجابي' : 'سلبي'}</td>
-                    <td className="border border-black p-2">{chip}</td>
-                    <td className="border border-black p-2">{formatHijriDate(new Date())}</td>
-                  </tr>
-                );
-              })}
-              {state.behaviorChips.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="border border-black p-4 text-gray-500">لا توجد ملاحظات سلوكية مسجلة</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Footer */}
-        <div className="flex justify-between mt-12 pt-8 print:break-inside-avoid">
-          <div className="text-center">
-            <p className="font-bold mb-8">توقيع المعلم</p>
-            <p>........................</p>
-          </div>
-          <div className="text-center">
-            <p className="font-bold mb-8">ختم المدرسة</p>
-            <p>........................</p>
-          </div>
-          <div className="text-center">
-            <p className="font-bold mb-8">إشعار ولي الأمر (الاسم والتوقيع)</p>
-            <p>........................</p>
-          </div>
-        </div>
-      </div>
     </>
   );
 };

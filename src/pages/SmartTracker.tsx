@@ -45,6 +45,14 @@ export interface Task {
   type: 'number' | 'binary';
 }
 
+export interface TeacherAssignment {
+  class_id: string;
+  subject_name: string;
+  subject_id: number;
+  grade: string;
+  semester: string;
+}
+
 export interface StudentState {
   attendance: 'present' | 'late' | 'absent';
   grades: Record<string, number | ''>;
@@ -154,11 +162,13 @@ const SmartTracker: React.FC = () => {
   // --- Header State ---
   const [grade, setGrade] = useState('');
   const [section, setSection] = useState('');
-  const [subject, setSubject] = useState('رياضيات');
+  const [subject, setSubject] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
 
   const [availableGrades, setAvailableGrades] = useState<string[]>([]);
   const [availableSections, setAvailableSections] = useState<string[]>([]);
+  const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
+  const [assignments, setAssignments] = useState<TeacherAssignment[]>([]);
 
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(false);
@@ -192,35 +202,70 @@ const SmartTracker: React.FC = () => {
 
   // --- Fetch Data ---
   useEffect(() => {
-    const fetchGrades = async () => {
+    const fetchInitialData = async () => {
       try {
-        const res = await apiFetch('/api/hierarchy/grades');
-        if (res.ok) {
-          const data = await res.json();
-          setAvailableGrades(data);
-          if (data.length > 0) {
-            setGrade(data[0]);
+        if (user?.role === 'teacher') {
+          // Fetch teacher assignments
+          const assignRes = await apiFetch('/api/teacher/assignments');
+          if (assignRes.ok) {
+            const data: TeacherAssignment[] = await assignRes.json();
+            setAssignments(data);
+            
+            // Extract unique grades
+            const grades = [...new Set(data.map(a => a.grade))];
+            setAvailableGrades(grades);
+            if (grades.length > 0) {
+              setGrade(grades[0]);
+            }
+          }
+        } else {
+          // Admin/Principal: fetch all grades
+          const res = await apiFetch('/api/hierarchy/grades');
+          if (res.ok) {
+            const data = await res.json();
+            setAvailableGrades(data);
+            if (data.length > 0) {
+              setGrade(data[0]);
+            }
           }
         }
       } catch (err) {
-        console.error("Failed to fetch grades", err);
+        console.error("Failed to fetch initial data", err);
       }
     };
-    fetchGrades();
-  }, []);
+    if (user) {
+      fetchInitialData();
+    }
+  }, [user]);
 
   useEffect(() => {
     const fetchSections = async () => {
-      if (!grade) return;
+      if (!grade) {
+        setAvailableSections([]);
+        setSection('');
+        return;
+      }
       try {
-        const res = await apiFetch(`/api/hierarchy/sections?grade=${encodeURIComponent(grade)}`);
-        if (res.ok) {
-          const data = await res.json();
-          setAvailableSections(data);
-          if (data.length > 0) {
-            setSection(data[0]);
+        if (user?.role === 'teacher') {
+          // Filter assignments by selected grade
+          const gradeAssignments = assignments.filter(a => a.grade === grade);
+          const sections = [...new Set(gradeAssignments.map(a => a.class_id.split('|')[1]))];
+          setAvailableSections(sections);
+          if (sections.length > 0) {
+            setSection(sections[0]);
           } else {
             setSection('');
+          }
+        } else {
+          const res = await apiFetch(`/api/hierarchy/sections?grade=${encodeURIComponent(grade)}`);
+          if (res.ok) {
+            const data = await res.json();
+            setAvailableSections(data);
+            if (data.length > 0) {
+              setSection(data[0]);
+            } else {
+              setSection('');
+            }
           }
         }
       } catch (err) {
@@ -228,11 +273,49 @@ const SmartTracker: React.FC = () => {
       }
     };
     fetchSections();
-  }, [grade]);
+  }, [grade, user, assignments]);
+
+  useEffect(() => {
+    // Update available subjects based on selected grade and section
+    if (user?.role === 'teacher') {
+      if (grade && section) {
+        const classId = `${grade}|${section}`;
+        const classAssignments = assignments.filter(a => a.class_id === classId);
+        const subjects = [...new Set(classAssignments.map(a => a.subject_name))];
+        setAvailableSubjects(subjects);
+        if (subjects.length > 0 && !subjects.includes(subject)) {
+          setSubject(subjects[0]);
+        } else if (subjects.length === 0) {
+          setSubject('');
+        }
+      } else {
+        setAvailableSubjects([]);
+        setSubject('');
+      }
+    } else if (user?.role) {
+      // For admins, fetch all subjects or keep default
+      const fetchSubjects = async () => {
+        try {
+          const res = await apiFetch('/api/admin/subjects');
+          if (res.ok) {
+            const data = await res.json();
+            const subjects = [...new Set(data.map((s: any) => s.name))] as string[];
+            setAvailableSubjects(subjects.length > 0 ? subjects : ['الرياضيات', 'العلوم', 'لغتي', 'التربية الإسلامية']);
+            if (subjects.length > 0 && !subjects.includes(subject)) {
+              setSubject(subjects[0]);
+            }
+          }
+        } catch (err) {
+          console.error("Failed to fetch subjects", err);
+        }
+      };
+      fetchSubjects();
+    }
+  }, [grade, section, user, assignments]);
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!grade || !section) return;
+      if (!grade || !section || !subject) return;
       
       setLoading(true);
       try {
@@ -665,10 +748,15 @@ const SmartTracker: React.FC = () => {
                   value={subject} onChange={e => setSubject(e.target.value)}
                   className="appearance-none bg-transparent border-none text-slate-700 font-medium text-sm focus:ring-0 cursor-pointer pr-10 pl-8 py-2.5 w-full outline-none"
                   style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: 'left 0.5rem center', backgroundRepeat: 'no-repeat', backgroundSize: '1.5em 1.5em' }}
+                  disabled={availableSubjects.length === 0}
                 >
-                  <option>رياضيات</option>
-                  <option>فيزياء</option>
-                  <option>كيمياء</option>
+                  {availableSubjects.length === 0 ? (
+                    <option value="">لا توجد مواد مسندة</option>
+                  ) : (
+                    availableSubjects.map(subj => (
+                      <option key={subj} value={subj}>{subj}</option>
+                    ))
+                  )}
                 </select>
               </div>
 
@@ -679,10 +767,15 @@ const SmartTracker: React.FC = () => {
                   value={grade} onChange={e => setGrade(e.target.value)}
                   className="appearance-none bg-transparent border-none text-slate-700 font-medium text-sm focus:ring-0 cursor-pointer pr-10 pl-8 py-2.5 w-full outline-none"
                   style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: 'left 0.5rem center', backgroundRepeat: 'no-repeat', backgroundSize: '1.5em 1.5em' }}
+                  disabled={availableGrades.length === 0}
                 >
-                  {availableGrades.map(g => (
-                    <option key={g} value={g}>{g}</option>
-                  ))}
+                  {availableGrades.length === 0 ? (
+                    <option value="">لا توجد صفوف</option>
+                  ) : (
+                    availableGrades.map(g => (
+                      <option key={g} value={g}>{g}</option>
+                    ))
+                  )}
                 </select>
               </div>
 
@@ -693,10 +786,15 @@ const SmartTracker: React.FC = () => {
                   value={section} onChange={e => setSection(e.target.value)}
                   className="appearance-none bg-transparent border-none text-slate-700 font-medium text-sm focus:ring-0 cursor-pointer pr-10 pl-8 py-2.5 w-full outline-none"
                   style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: 'left 0.5rem center', backgroundRepeat: 'no-repeat', backgroundSize: '1.5em 1.5em' }}
+                  disabled={availableSections.length === 0}
                 >
-                  {availableSections.map(s => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
+                  {availableSections.length === 0 ? (
+                    <option value="">لا توجد فصول</option>
+                  ) : (
+                    availableSections.map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))
+                  )}
                 </select>
               </div>
             </div>
@@ -1090,17 +1188,7 @@ const SmartTracker: React.FC = () => {
         </div>
       </div>
 
-      {/* Student Profile Drawer */}
-      <AnimatePresence>
-        {selectedStudentId !== null && students.find(s => s.id === selectedStudentId) && studentsState[selectedStudentId] && (
-          <StudentProfileDrawer
-            student={students.find(s => s.id === selectedStudentId)!}
-            state={studentsState[selectedStudentId]}
-            tasks={tasks}
-            onClose={() => setSelectedStudentId(null)}
-          />
-        )}
-      </AnimatePresence>
+
 
       {/* Task Creation Modal */}
       <AnimatePresence>
@@ -1470,7 +1558,7 @@ const SmartTracker: React.FC = () => {
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-2">المادة</label>
                   <div className="flex flex-wrap gap-2">
-                    {['الرياضيات', 'العلوم', 'لغتي', 'التربية الإسلامية'].map(subj => (
+                    {availableSubjects.map(subj => (
                       <button
                         key={subj}
                         onClick={() => setSubject(subj)}
@@ -1605,8 +1693,32 @@ const SmartTracker: React.FC = () => {
         )}
       </AnimatePresence>
     </div>
+
+    {/* Student Profile Drawer */}
+    <AnimatePresence>
+      {selectedStudentId !== null && students.find(s => s.id === selectedStudentId) && studentsState[selectedStudentId] && (
+        <StudentProfileDrawer
+          student={students.find(s => s.id === selectedStudentId)!}
+          state={studentsState[selectedStudentId]}
+          tasks={tasks}
+          grade={grade}
+          section={section}
+          date={date}
+          onClose={() => setSelectedStudentId(null)}
+        />
+      )}
+    </AnimatePresence>
+
     {!selectedStudentId && (
-      <PrintableTracker students={students} studentsState={studentsState} tasks={tasks} />
+      <PrintableTracker 
+        students={students} 
+        studentsState={studentsState} 
+        tasks={tasks} 
+        subject={subject}
+        grade={grade}
+        section={section}
+        teacherName={user?.name || ''}
+      />
     )}
     </>
   );

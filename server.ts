@@ -55,8 +55,9 @@ async function initDb() {
     await sql`
       CREATE TABLE IF NOT EXISTS students (
         id SERIAL PRIMARY KEY,
+        school_id INTEGER REFERENCES schools(id),
         name TEXT,
-        national_id TEXT,
+        national_id TEXT UNIQUE,
         grade TEXT,
         section TEXT,
         parent_phone TEXT
@@ -64,7 +65,14 @@ async function initDb() {
     `;
 
     try {
-      await sql`ALTER TABLE students ADD COLUMN parent_phone TEXT`;
+      await sql`ALTER TABLE students ADD CONSTRAINT students_national_id_key UNIQUE (national_id)`;
+    } catch (e) {
+      // Constraint might already exist
+    }
+
+    try {
+      await sql`ALTER TABLE students ADD COLUMN IF NOT EXISTS school_id INTEGER REFERENCES schools(id)`;
+      await sql`ALTER TABLE students ADD COLUMN IF NOT EXISTS parent_phone TEXT`;
     } catch (e) {
       // Column might already exist, ignore
     }
@@ -89,6 +97,8 @@ async function initDb() {
     await sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS remedial_plan_file TEXT`;
     await sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS evidence_file TEXT`;
     await sql`ALTER TABLE referrals ADD COLUMN IF NOT EXISTS is_exported_to_noor BOOLEAN DEFAULT FALSE`;
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS school_id INTEGER REFERENCES schools(id)`;
+    await sql`UPDATE users SET school_id = 1 WHERE school_id IS NULL`;
     await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE`;
     await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_number TEXT`;
     await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS whatsapp_enabled BOOLEAN DEFAULT TRUE`;
@@ -217,6 +227,34 @@ async function initDb() {
       // Ignore if column already exists or other error
     }
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS subjects (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        school_id INTEGER REFERENCES schools(id) ON DELETE CASCADE,
+        is_elective BOOLEAN DEFAULT FALSE,
+        grade TEXT,
+        semester TEXT
+      )
+    `;
+
+    try {
+      await sql`ALTER TABLE subjects ADD COLUMN IF NOT EXISTS is_elective BOOLEAN DEFAULT FALSE`;
+      await sql`ALTER TABLE subjects ADD COLUMN IF NOT EXISTS grade TEXT`;
+      await sql`ALTER TABLE subjects ADD COLUMN IF NOT EXISTS semester TEXT`;
+    } catch (e) {
+      // Ignore if columns already exist
+    }
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS teacher_assignments (
+        id SERIAL PRIMARY KEY,
+        teacher_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        subject_id INTEGER REFERENCES subjects(id) ON DELETE CASCADE,
+        class_id TEXT NOT NULL
+      )
+    `;
+
     // Smart Tracker Tables
     await sql`
       CREATE TABLE IF NOT EXISTS smart_tracker_sessions (
@@ -302,6 +340,85 @@ async function initDb() {
     const principalExists = await sql`SELECT * FROM users WHERE role = 'principal'`;
     if (principalExists.length === 0) {
       await sql`INSERT INTO users (name, email, password, role) VALUES ('د. خالد المنصور', 'principal@school.edu', 'password', 'principal')`;
+    }
+
+    // Seed official subjects
+    const subjectsCount = await sql`SELECT COUNT(*) as count FROM subjects`;
+    if (parseInt(subjectsCount[0].count) === 0) {
+      const defaultSchoolId = 1;
+      const officialSubjects = [
+        // Grade 1, Semester 1
+        { name: 'القرآن الكريم وتفسيره', grade: 'الصف الأول', semester: 'الفصل الأول', is_elective: false },
+        { name: 'الرياضيات', grade: 'الصف الأول', semester: 'الفصل الأول', is_elective: false },
+        { name: 'اللغة الإنجليزية', grade: 'الصف الأول', semester: 'الفصل الأول', is_elective: false },
+        { name: 'التقنية الرقمية', grade: 'الصف الأول', semester: 'الفصل الأول', is_elective: false },
+        { name: 'الأحياء', grade: 'الصف الأول', semester: 'الفصل الأول', is_elective: false },
+        { name: 'الكيمياء', grade: 'الصف الأول', semester: 'الفصل الأول', is_elective: false },
+        { name: 'الكفايات اللغوية', grade: 'الصف الأول', semester: 'الفصل الأول', is_elective: false },
+        { name: 'التفكير الناقد', grade: 'الصف الأول', semester: 'الفصل الأول', is_elective: false },
+        { name: 'التربية الصحية والبدنية', grade: 'الصف الأول', semester: 'الفصل الأول', is_elective: false },
+        // Grade 1, Semester 2
+        { name: 'الحديث', grade: 'الصف الأول', semester: 'الفصل الثاني', is_elective: false },
+        { name: 'الرياضيات', grade: 'الصف الأول', semester: 'الفصل الثاني', is_elective: false },
+        { name: 'اللغة الإنجليزية', grade: 'الصف الأول', semester: 'الفصل الثاني', is_elective: false },
+        { name: 'التقنية الرقمية', grade: 'الصف الأول', semester: 'الفصل الثاني', is_elective: false },
+        { name: 'علم البيئة', grade: 'الصف الأول', semester: 'الفصل الثاني', is_elective: false },
+        { name: 'التربية المهنية', grade: 'الصف الأول', semester: 'الفصل الثاني', is_elective: false },
+        { name: 'الفيزياء', grade: 'الصف الأول', semester: 'الفصل الثاني', is_elective: false },
+        { name: 'الكفايات اللغوية', grade: 'الصف الأول', semester: 'الفصل الثاني', is_elective: false },
+        { name: 'التربية الصحية والبدنية', grade: 'الصف الأول', semester: 'الفصل الثاني', is_elective: false },
+        // Grade 2, Semester 1
+        { name: 'الرياضيات', grade: 'الصف الثاني', semester: 'الفصل الأول', is_elective: false },
+        { name: 'اللغة الإنجليزية', grade: 'الصف الثاني', semester: 'الفصل الأول', is_elective: false },
+        { name: 'الأحياء', grade: 'الصف الثاني', semester: 'الفصل الأول', is_elective: false },
+        { name: 'الكيمياء', grade: 'الصف الثاني', semester: 'الفصل الأول', is_elective: false },
+        { name: 'الفيزياء', grade: 'الصف الثاني', semester: 'الفصل الأول', is_elective: false },
+        { name: 'الكفايات اللغوية', grade: 'الصف الثاني', semester: 'الفصل الأول', is_elective: false },
+        { name: 'التاريخ', grade: 'الصف الثاني', semester: 'الفصل الأول', is_elective: false },
+        { name: 'المعرفة المالية', grade: 'الصف الثاني', semester: 'الفصل الأول', is_elective: false },
+        { name: 'الدراسات الاجتماعية', grade: 'الصف الثاني', semester: 'الفصل الأول', is_elective: false },
+        { name: 'اللياقة والثقافة الصحية', grade: 'الصف الثاني', semester: 'الفصل الأول', is_elective: false },
+        // Grade 2, Semester 2
+        { name: 'التوحيد', grade: 'الصف الثاني', semester: 'الفصل الثاني', is_elective: false },
+        { name: 'الرياضيات', grade: 'الصف الثاني', semester: 'الفصل الثاني', is_elective: false },
+        { name: 'اللغة الإنجليزية', grade: 'الصف الثاني', semester: 'الفصل الثاني', is_elective: false },
+        { name: 'التقنية الرقمية', grade: 'الصف الثاني', semester: 'الفصل الثاني', is_elective: false },
+        { name: 'علوم الأرض والفضاء', grade: 'الصف الثاني', semester: 'الفصل الثاني', is_elective: false },
+        { name: 'الكيمياء', grade: 'الصف الثاني', semester: 'الفصل الثاني', is_elective: false },
+        { name: 'الفيزياء', grade: 'الصف الثاني', semester: 'الفصل الثاني', is_elective: false },
+        { name: 'الفنون', grade: 'الصف الثاني', semester: 'الفصل الثاني', is_elective: false },
+        { name: 'التربية الصحية والبدنية', grade: 'الصف الثاني', semester: 'الفصل الثاني', is_elective: false },
+        { name: 'البحث ومصادر المعلومات', grade: 'الصف الثاني', semester: 'الفصل الثاني', is_elective: false },
+        // Grade 3, Semester 1
+        { name: 'الفقه', grade: 'الصف الثالث', semester: 'الفصل الأول', is_elective: false },
+        { name: 'الرياضيات', grade: 'الصف الثالث', semester: 'الفصل الأول', is_elective: false },
+        { name: 'اللغة الإنجليزية', grade: 'الصف الثالث', semester: 'الفصل الأول', is_elective: false },
+        { name: 'المواطنة الرقمية', grade: 'الصف الثالث', semester: 'الفصل الأول', is_elective: false },
+        { name: 'علوم الأرض والفضاء', grade: 'الصف الثالث', semester: 'الفصل الأول', is_elective: false },
+        { name: 'الفيزياء', grade: 'الصف الثالث', semester: 'الفصل الأول', is_elective: false },
+        { name: 'الدراسات الأدبية', grade: 'الصف الثالث', semester: 'الفصل الأول', is_elective: false },
+        { name: 'المهارات الحياتية', grade: 'الصف الثالث', semester: 'الفصل الأول', is_elective: false },
+        { name: 'الجغرافيا', grade: 'الصف الثالث', semester: 'الفصل الأول', is_elective: false },
+        { name: 'الدراسات النفسية والاجتماعية', grade: 'الصف الثالث', semester: 'الفصل الأول', is_elective: false },
+        // Grade 3, Semester 2
+        { name: 'الرياضيات', grade: 'الصف الثالث', semester: 'الفصل الثاني', is_elective: false },
+        { name: 'اللغة الإنجليزية', grade: 'الصف الثالث', semester: 'الفصل الثاني', is_elective: false },
+        { name: 'الفيزياء', grade: 'الصف الثالث', semester: 'الفصل الثاني', is_elective: false },
+        // Electives
+        { name: 'التصميم الرقمي', grade: null, semester: null, is_elective: true },
+        { name: 'المهارات الإدارية', grade: null, semester: null, is_elective: true },
+        { name: 'التنمية المستدامة', grade: null, semester: null, is_elective: true },
+        { name: 'الكتابة الوظيفية والإبداعية', grade: null, semester: null, is_elective: true },
+        { name: 'فن تصميم الأزياء', grade: null, semester: null, is_elective: true },
+        { name: 'الإسعافات الأولية', grade: null, semester: null, is_elective: true },
+        { name: 'الأمن السيبراني', grade: null, semester: null, is_elective: true },
+        { name: 'السياحة والضيافة', grade: null, semester: null, is_elective: true },
+        { name: 'الذكاء الاصطناعي', grade: null, semester: null, is_elective: true }
+      ];
+
+      for (const sub of officialSubjects) {
+        await sql`INSERT INTO subjects (name, school_id, grade, semester, is_elective) VALUES (${sub.name}, ${defaultSchoolId}, ${sub.grade}, ${sub.semester}, ${sub.is_elective})`;
+      }
     }
 
     // Seed mock attendance data for today if empty
@@ -867,7 +984,7 @@ async function startServer() {
             UPDATE users 
             SET name = ${name}, phone_number = ${phone_number}, password = ${password}, role = ${role}, otp_code = ${otp_code}, status = 'PENDING', is_active = FALSE
             WHERE id = ${user.id}
-            RETURNING id, name, email
+            RETURNING id, name, email, school_id
           `;
           return res.json({ 
             success: true, 
@@ -881,9 +998,9 @@ async function startServer() {
       }
       
       const result = await sql`
-        INSERT INTO users (name, phone_number, email, password, role, is_active, status, is_phone_verified, otp_code)
-        VALUES (${name}, ${phone_number}, ${email}, ${password}, ${role}, FALSE, 'PENDING', FALSE, ${otp_code})
-        RETURNING id, name, email
+        INSERT INTO users (name, phone_number, email, password, role, is_active, status, is_phone_verified, otp_code, school_id)
+        VALUES (${name}, ${phone_number}, ${email}, ${password}, ${role}, FALSE, 'PENDING', FALSE, ${otp_code}, 1)
+        RETURNING id, name, email, school_id
       `;
 
       res.json({ 
@@ -973,6 +1090,7 @@ async function startServer() {
             national_id: student.national_id,
             grade: student.grade,
             section: student.section,
+            school_id: student.school_id,
             otp_code: '1234' // Mock OTP for parents since it's not stored in students table
           };
           isParent = true;
@@ -1056,7 +1174,8 @@ async function startServer() {
         national_id: student.national_id,
         grade: student.grade,
         section: student.section,
-        parent_phone: student.parent_phone
+        parent_phone: student.parent_phone,
+        school_id: student.school_id
       }, otp_code });
     } catch (err) {
       console.error("[PARENT LOGIN] Error:", err);
@@ -1381,20 +1500,21 @@ async function startServer() {
     const userId = req.query.userId as string;
     const grade = req.query.grade as string;
     const section = req.query.section as string;
+    const schoolId = req.headers['x-school-id'] || '1';
     let students;
 
     if (grade && section) {
-      students = await sql`SELECT * FROM students WHERE grade = ${grade} AND section = ${section} ORDER BY name ASC`;
+      students = await sql`SELECT * FROM students WHERE school_id = ${schoolId} AND grade = ${grade} AND section = ${section} ORDER BY name ASC`;
     } else if (userId) {
       const gradesResult = await sql`SELECT grade FROM user_grades WHERE user_id = ${userId}`;
       const grades = gradesResult.map((g: any) => g.grade);
       if (grades.length > 0) {
-        students = await sql`SELECT * FROM students WHERE grade = ANY(${grades}) ORDER BY name ASC`;
+        students = await sql`SELECT * FROM students WHERE school_id = ${schoolId} AND grade = ANY(${grades}) ORDER BY name ASC`;
       } else {
-        students = await sql`SELECT * FROM students ORDER BY name ASC`;
+        students = await sql`SELECT * FROM students WHERE school_id = ${schoolId} ORDER BY name ASC`;
       }
     } else {
-      students = await sql`SELECT * FROM students ORDER BY name ASC`;
+      students = await sql`SELECT * FROM students WHERE school_id = ${schoolId} ORDER BY name ASC`;
     }
 
     res.json(students);
@@ -1402,46 +1522,78 @@ async function startServer() {
 
   app.get("/api/student-search", async (req, res) => {
     const { query } = req.query;
+    const schoolId = req.headers['x-school-id'];
+    
     if (!query) return res.json([]);
+    if (!schoolId) return res.status(400).json({ error: "School ID is required" });
     
     try {
       const students = await sql`
         SELECT * FROM students 
-        WHERE name LIKE ${`%${query}%`} 
-        OR national_id = ${query}
+        WHERE school_id = ${schoolId}
+        AND (name ILIKE ${`%${query}%`} 
+        OR national_id = ${query})
         LIMIT 20
       `;
       res.json(students);
     } catch (err) {
+      console.error("Search failed:", err);
       res.status(500).json({ error: "Search failed" });
     }
   });
 
-  app.get("/api/hierarchy/grades", async (req, res) => {
+  app.get("/api/teacher/assignments", async (req, res) => {
     try {
-      const grades = await sql`SELECT DISTINCT grade FROM students ORDER BY grade`;
+      const teacherId = req.headers['x-user-id'];
+      if (!teacherId) return res.status(401).json({ error: "Unauthorized" });
+
+      const assignments = await sql`
+        SELECT ta.class_id, s.name as subject_name, s.id as subject_id, s.grade, s.semester
+        FROM teacher_assignments ta
+        JOIN subjects s ON ta.subject_id = s.id
+        WHERE ta.teacher_id = ${teacherId}
+      `;
+      
+      res.json(assignments);
+    } catch (err) {
+      console.error("Failed to fetch teacher assignments:", err);
+      res.status(500).json({ error: "Failed to fetch assignments" });
+    }
+  });
+
+  app.get("/api/hierarchy/grades", async (req, res) => {
+    const schoolId = req.headers['x-school-id'] || '1';
+    
+    try {
+      const grades = await sql`SELECT DISTINCT grade FROM students WHERE school_id = ${schoolId} ORDER BY grade`;
       res.json(grades.map((g: any) => g.grade));
     } catch (err) {
+      console.error("Failed to fetch grades:", err);
       res.status(500).json({ error: "Failed to fetch grades" });
     }
   });
 
   app.get("/api/hierarchy/sections", async (req, res) => {
     const { grade } = req.query;
+    const schoolId = req.headers['x-school-id'] || '1';
+    
     try {
-      const sections = await sql`SELECT DISTINCT section FROM students WHERE grade = ${grade} ORDER BY section`;
+      const sections = await sql`SELECT DISTINCT section FROM students WHERE grade = ${grade} AND school_id = ${schoolId} ORDER BY section`;
       res.json(sections.map((s: any) => s.section));
     } catch (err) {
+      console.error("Failed to fetch sections:", err);
       res.status(500).json({ error: "Failed to fetch sections" });
     }
   });
 
   app.get("/api/hierarchy/students", async (req, res) => {
     const { grade, section } = req.query;
+    const schoolId = req.headers['x-school-id'] || '1';
     try {
-      const students = await sql`SELECT id, name FROM students WHERE grade = ${grade} AND section = ${section} ORDER BY name`;
+      const students = await sql`SELECT id, name FROM students WHERE grade = ${grade} AND section = ${section} AND school_id = ${schoolId} ORDER BY name`;
       res.json(students);
     } catch (err) {
+      console.error("Failed to fetch admin students:", err);
       res.status(500).json({ error: "Failed to fetch students" });
     }
   });
@@ -2228,17 +2380,133 @@ async function startServer() {
     }
   });
 
+  app.get("/api/admin/subjects", async (req, res) => {
+    try {
+      const schoolId = req.headers['x-school-id'] || '1';
+      const subjects = await sql`SELECT * FROM subjects WHERE school_id = ${schoolId}`;
+      res.json(subjects);
+    } catch (err) {
+      console.error("Failed to fetch subjects:", err);
+      res.status(500).json({ error: "Failed to fetch subjects" });
+    }
+  });
+
+  app.post("/api/admin/subjects", async (req, res) => {
+    try {
+      const schoolId = req.headers['x-school-id'] || '1';
+      const { name, is_elective, grade, semester } = req.body;
+      const result = await sql`INSERT INTO subjects (name, school_id, is_elective, grade, semester) VALUES (${name}, ${schoolId}, ${is_elective || false}, ${grade || null}, ${semester || null}) RETURNING *`;
+      res.json(result[0]);
+    } catch (err) {
+      console.error("Failed to add subject:", err);
+      res.status(500).json({ error: "Failed to add subject" });
+    }
+  });
+
+  app.put("/api/admin/subjects/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const schoolId = req.headers['x-school-id'] || '1';
+      const { name, is_elective, grade, semester } = req.body;
+      
+      const result = await sql`
+        UPDATE subjects 
+        SET name = ${name}, is_elective = ${is_elective}, grade = ${grade || null}, semester = ${semester || null}
+        WHERE id = ${id} AND school_id = ${schoolId}
+        RETURNING *
+      `;
+      
+      if (result.length === 0) {
+        return res.status(404).json({ error: "Subject not found or unauthorized" });
+      }
+      
+      res.json(result[0]);
+    } catch (err) {
+      console.error("Failed to update subject:", err);
+      res.status(500).json({ error: "Failed to update subject" });
+    }
+  });
+
+  app.delete("/api/admin/subjects/:id", async (req, res) => {
+    try {
+      const schoolId = req.headers['x-school-id'] || '1';
+      const result = await sql`DELETE FROM subjects WHERE id = ${req.params.id} AND school_id = ${schoolId} AND is_elective = TRUE RETURNING *`;
+      if (result.length === 0) {
+        return res.status(403).json({ error: "Cannot delete core subjects or subject not found" });
+      }
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Failed to delete subject:", err);
+      res.status(500).json({ error: "Failed to delete subject" });
+    }
+  });
+
   app.get("/api/admin/users", async (req, res) => {
     try {
-      const users = await sql`SELECT id, name, email, role, is_active, phone_number, whatsapp_enabled, status, is_phone_verified, national_id FROM users WHERE is_phone_verified = TRUE OR role IN ('admin', 'principal')` as any[];
+      const schoolId = req.headers['x-school-id'] || '1';
+      
+      const users = await sql`SELECT id, name, email, role, is_active, phone_number, whatsapp_enabled, status, is_phone_verified, national_id FROM users WHERE (is_phone_verified = TRUE OR role IN ('admin', 'principal')) AND school_id = ${schoolId}` as any[];
       const usersWithGrades = await Promise.all(users.map(async u => {
         const gradesResult = await sql`SELECT grade FROM user_grades WHERE user_id = ${u.id}`;
         const grades = gradesResult.map((g: any) => g.grade);
-        return { ...u, assigned_grades: grades };
+        
+        let assignments = [];
+        if (u.role === 'teacher') {
+          assignments = await sql`SELECT * FROM teacher_assignments WHERE teacher_id = ${u.id}`;
+        }
+        
+        return { ...u, assigned_grades: grades, assignments };
       }));
       res.json(usersWithGrades);
     } catch (err) {
+      console.error("Failed to fetch users:", err);
       res.status(500).json({ error: "Failed to fetch users" });
+    }
+  });
+
+  app.get("/api/admin/sections", async (req, res) => {
+    const { grade } = req.query;
+    const schoolId = req.headers['x-school-id'];
+    console.log("Fetching sections for grade:", grade, "for school:", schoolId);
+    
+    if (!grade) {
+      return res.status(400).json({ error: "Grade is required" });
+    }
+    
+    if (!schoolId) {
+      return res.status(400).json({ error: "School ID is required" });
+    }
+    
+    try {
+      let searchGrade = (grade as string).trim();
+      // Normalize: remove "الصف " prefix if present
+      if (searchGrade.startsWith("الصف ")) {
+        searchGrade = searchGrade.replace("الصف ", "").trim();
+      }
+      
+      // Further normalize: split into words and remove "ال" prefix from each word
+      // This helps match "أول ثانوي" with "الصف الأول الثانوي"
+      const words = searchGrade.split(/\s+/);
+      const normalizedWords = words.map(word => word.replace(/^ال/, ''));
+      const searchPattern = `%${normalizedWords.join('%')}%`;
+      
+      console.log(`[SECTIONS] Querying for: ${searchPattern} in school ${schoolId}`);
+      
+      const sections = await sql`
+        SELECT DISTINCT TRIM(section) as section 
+        FROM students 
+        WHERE school_id = ${schoolId}
+        AND TRIM(grade) ILIKE ${searchPattern}
+        AND section IS NOT NULL 
+        AND section != ''
+        ORDER BY section
+      `;
+      
+      console.log("Normalized search for", grade, "->", searchPattern, ". Found sections:", sections);
+      res.json(sections.map(s => s.section));
+    } catch (err) {
+      console.error("Failed to fetch sections:", err);
+      res.status(500).json({ error: "Failed to fetch sections" });
     }
   });
 
@@ -2284,9 +2552,26 @@ async function startServer() {
   });
 
   app.post("/api/admin/users/:id/update", async (req, res) => {
-    const { name, email, phone_number, whatsapp_enabled } = req.body;
+    const { name, email, phone_number, whatsapp_enabled, subjects, classes } = req.body;
     try {
       await sql`UPDATE users SET name = ${name}, email = ${email}, phone_number = ${phone_number || null}, whatsapp_enabled = ${whatsapp_enabled !== undefined ? whatsapp_enabled : true} WHERE id = ${req.params.id}`;
+      
+      if (subjects && Array.isArray(subjects) && classes && Array.isArray(classes)) {
+        await sql`DELETE FROM teacher_assignments WHERE teacher_id = ${req.params.id}`;
+        
+        for (const subject_id of subjects) {
+          for (const class_id of classes) {
+            await sql`
+              INSERT INTO teacher_assignments (teacher_id, subject_id, class_id)
+              VALUES (${req.params.id}, ${subject_id}, ${class_id})
+            `;
+          }
+        }
+      } else if (subjects !== undefined || classes !== undefined) {
+        // If they are explicitly passed as empty arrays, clear assignments
+        await sql`DELETE FROM teacher_assignments WHERE teacher_id = ${req.params.id}`;
+      }
+      
       res.json({ success: true });
     } catch (err) {
       console.error("Failed to update user:", err);
@@ -2408,12 +2693,15 @@ async function startServer() {
 
   app.post("/api/admin/users/create", async (req, res) => {
     const { name, email, password, role, phone_number, whatsapp_enabled } = req.body;
+    const schoolId = req.headers['x-school-id'];
+    if (!schoolId) return res.status(400).json({ error: "School ID is required" });
+    
     try {
       const existing = await sql`SELECT * FROM users WHERE email = ${email}`;
       if (existing.length > 0) {
         return res.status(400).json({ success: false, error: "البريد الإلكتروني موجود مسبقاً" });
       }
-      await sql`INSERT INTO users (name, email, password, role, phone_number, whatsapp_enabled) VALUES (${name}, ${email}, ${password}, ${role}, ${phone_number || null}, ${whatsapp_enabled !== undefined ? whatsapp_enabled : true})`;
+      await sql`INSERT INTO users (name, email, password, role, phone_number, whatsapp_enabled, school_id) VALUES (${name}, ${email}, ${password}, ${role}, ${phone_number || null}, ${whatsapp_enabled !== undefined ? whatsapp_enabled : true}, ${schoolId})`;
       res.json({ success: true });
     } catch (err) {
       console.error("User creation failed:", err);
@@ -2437,104 +2725,51 @@ async function startServer() {
   });
 
   app.post("/api/admin/students/import", async (req, res) => {
-    const { students, clearExisting } = req.body;
-    console.log(`[IMPORT] Request received. Students: ${students?.length}, ClearExisting: ${clearExisting}`);
-    
+    const { students } = req.body;
+    const schoolId = req.headers['x-school-id'] || '1';
+
     try {
-      if (!students || !Array.isArray(students)) {
+      if (!students || !Array.isArray(students) || students.length === 0) {
         return res.status(400).json({ success: false, error: "بيانات الطلاب غير صالحة" });
       }
 
-      // 1. Handle Wipe Logic (Clear Database)
-      if (clearExisting) {
-        console.log("[IMPORT] Wiping existing student data...");
-        // Delete in order to respect foreign keys
-        await sql`DELETE FROM notifications`;
-        await sql`DELETE FROM referral_logs`;
-        await sql`DELETE FROM referrals`;
-        await sql`DELETE FROM student_score_logs`;
-        await sql`DELETE FROM attendance_records`;
-        await sql`DELETE FROM smart_tracker_student_states`;
-        await sql`DELETE FROM smart_tracker_sessions`;
-        await sql`DELETE FROM students`;
-        console.log("[IMPORT] Database wiped successfully.");
+      // Smart Bulk Insert (Upsert) in chunks to prevent server overload
+      const chunkSize = 100;
+      for (let i = 0; i < students.length; i += chunkSize) {
+        const chunk = students.slice(i, i + chunkSize);
+        
+        const values: string[] = [];
+        const params: any[] = [];
+        let paramIndex = 1;
+
+        chunk.forEach(student => {
+          values.push(`($${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++})`);
+          params.push(
+            schoolId, 
+            student.national_id, 
+            student.name, 
+            student.grade, 
+            student.section, 
+            student.mobile
+          );
+        });
+
+        const query = `
+          INSERT INTO students (school_id, national_id, name, grade, section, parent_phone) 
+          VALUES ${values.join(', ')}
+          ON CONFLICT (national_id) 
+          DO UPDATE SET 
+            name = EXCLUDED.name, 
+            grade = EXCLUDED.grade, 
+            section = EXCLUDED.section, 
+            parent_phone = EXCLUDED.parent_phone,
+            school_id = EXCLUDED.school_id
+        `;
+
+        await (sql as any).query(query, params);
       }
 
-      // 2. Process Students Loop
-      let importedCount = 0;
-      
-      // Filter valid students first
-      const validStudents = students.filter((s: any) => s.name && String(s.name).trim() !== "");
-      
-      if (clearExisting && validStudents.length > 0) {
-        // Fast path: Bulk insert since database is empty
-        const chunkSize = 500;
-        for (let i = 0; i < validStudents.length; i += chunkSize) {
-          const chunk = validStudents.slice(i, i + chunkSize);
-          
-          await Promise.all(chunk.map(async (s: any) => {
-            const name = String(s.name).trim();
-            const national_id = s.national_id ? String(s.national_id).trim() : null;
-            const grade = s.grade ? String(s.grade).trim() : null;
-            const section = s.section ? String(s.section).trim() : null;
-            const parent_phone = s.parent_phone ? String(s.parent_phone).trim() : null;
-            
-            await sql`
-              INSERT INTO students (name, national_id, grade, section, parent_phone) 
-              VALUES (${name}, ${national_id}, ${grade}, ${section}, ${parent_phone})
-            `;
-          }));
-          
-          importedCount += chunk.length;
-          console.log(`[IMPORT] Bulk inserted ${importedCount}/${validStudents.length} students...`);
-        }
-      } else {
-        // Slow path: Upsert logic
-        const chunkSize = 50;
-        for (let i = 0; i < validStudents.length; i += chunkSize) {
-          const chunk = validStudents.slice(i, i + chunkSize);
-          
-          await Promise.all(chunk.map(async (student: any) => {
-            const name = String(student.name).trim();
-            const national_id = student.national_id ? String(student.national_id).trim() : null;
-            const grade = student.grade ? String(student.grade).trim() : null;
-            const section = student.section ? String(student.section).trim() : null;
-            const parent_phone = student.parent_phone ? String(student.parent_phone).trim() : null;
-
-            if (national_id && national_id !== "") {
-              // Upsert based on national_id without relying on UNIQUE constraint
-              const existing = await sql`SELECT id FROM students WHERE national_id = ${national_id} LIMIT 1`;
-              if (existing.length > 0) {
-                await sql`
-                  UPDATE students SET 
-                    name = ${name},
-                    grade = ${grade},
-                    section = ${section},
-                    parent_phone = ${parent_phone}
-                  WHERE id = ${existing[0].id}
-                `;
-              } else {
-                await sql`
-                  INSERT INTO students (name, national_id, grade, section, parent_phone) 
-                  VALUES (${name}, ${national_id}, ${grade}, ${section}, ${parent_phone})
-                `;
-              }
-            } else {
-              // Insert without national_id
-              await sql`
-                INSERT INTO students (name, grade, section, parent_phone) 
-                VALUES (${name}, ${grade}, ${section}, ${parent_phone})
-              `;
-            }
-          }));
-          
-          importedCount += chunk.length;
-          console.log(`[IMPORT] Processed ${importedCount}/${validStudents.length} students...`);
-        }
-      }
-
-      console.log(`[IMPORT] Successfully processed ${importedCount} students`);
-      res.json({ success: true, count: importedCount });
+      res.json({ success: true, count: students.length });
     } catch (err) {
       console.error("[IMPORT] Critical Failure:", err);
       res.status(500).json({ 
@@ -2544,11 +2779,51 @@ async function startServer() {
     }
   });
 
-  app.get("/api/admin/students", async (req, res) => {
+  app.get("/api/admin/students/filters", async (req, res) => {
+    const schoolId = req.headers['x-school-id'] || '1';
     try {
-      const students = await sql`SELECT * FROM students ORDER BY grade, section, name`;
-      res.json(students);
+      const result = await (sql as any).query(
+        `SELECT DISTINCT grade, section FROM students 
+         WHERE school_id = $1 AND grade IS NOT NULL AND section IS NOT NULL 
+         ORDER BY grade, section`,
+        [schoolId]
+      );
+      
+      const rows = result.rows ? result.rows : result;
+      const filters: Record<string, string[]> = {};
+      
+      rows.forEach((row: any) => {
+        if (!filters[row.grade]) {
+          filters[row.grade] = [];
+        }
+        if (!filters[row.grade].includes(row.section)) {
+          filters[row.grade].push(row.section);
+        }
+      });
+      
+      res.json({ filters });
     } catch (err) {
+      console.error("Failed to fetch student filters:", err);
+      res.status(500).json({ error: "Failed to fetch filters" });
+    }
+  });
+
+  app.get("/api/admin/students", async (req, res) => {
+    const schoolId = req.headers['x-school-id'] || '1';
+    const { grade, section } = req.query;
+    
+    try {
+      const result = await (sql as any).query(
+        `SELECT * FROM students 
+         WHERE grade = $1 AND section = $2 AND school_id = $3 
+         ORDER BY name ASC`,
+        [grade, section, schoolId]
+      );
+      
+      const students = result.rows ? result.rows : result;
+      res.json({ students });
+    } catch (err) {
+      console.error("Failed to fetch admin students:", err);
       res.status(500).json({ error: "Failed to fetch students" });
     }
   });

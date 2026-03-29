@@ -6,15 +6,19 @@ interface PrintableTrackerProps {
   students: Student[];
   studentsState: Record<number, StudentState>;
   tasks: Record<TaskCategory, Task[]>;
+  subject: string;
+  grade: string;
+  section: string;
+  teacherName?: string;
 }
 
-export const PrintableTracker: React.FC<PrintableTrackerProps> = ({ students, studentsState, tasks }) => {
+export const PrintableTracker: React.FC<PrintableTrackerProps> = ({ students, studentsState, tasks, subject, grade, section, teacherName }) => {
   const { settings } = useSchoolSettings();
 
   const getCategoryTotal = (studentId: number, category: TaskCategory) => {
     const studentState = studentsState[studentId];
     if (!studentState) return 0;
-    return tasks[category].reduce((sum, t) => sum + (Number(studentState.grades[t.id]) || 0), 0);
+    return (tasks?.[category] || []).reduce((sum, t) => sum + (Number(studentState.grades?.[t.id]) || 0), 0);
   };
 
   return (
@@ -22,56 +26,95 @@ export const PrintableTracker: React.FC<PrintableTrackerProps> = ({ students, st
       <style>
         {`
           @media print {
-            @page { size: A4 portrait; margin: 15mm; }
+            @page { size: A4 portrait; margin: 5mm; }
             body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            table { page-break-inside: auto; }
+            tr { page-break-inside: avoid; page-break-after: auto; }
+            thead { display: table-header-group; }
+            tfoot { display: table-footer-group; }
           }
         `}
       </style>
 
       {/* Header */}
-      <div className="flex justify-between items-start mb-8 border-b-2 border-slate-800 pb-4">
-        <div className="text-sm font-bold leading-relaxed text-slate-800">
+      <div className="flex justify-between items-start mb-2 border-b-2 border-black pb-1">
+        <div className="text-[10px] font-bold leading-relaxed text-black">
           <p>المملكة العربية السعودية</p>
           <p>وزارة التعليم</p>
           <p>{settings.schoolName ? `مدرسة ${settings.schoolName}` : 'مدرسة ....................'}</p>
         </div>
 
         <div className="flex flex-col items-center justify-center">
-          <div className="bg-slate-800 text-white px-8 py-2 rounded-full font-bold text-xl shadow-sm">
-            كشف درجات الطلاب الإجمالي
+          <div className="border-2 border-black text-black px-4 py-0.5 rounded-full font-bold text-base shadow-sm">
+            كشف درجات الطلاب التفصيلي
           </div>
-          <p className="text-sm font-semibold mt-2 text-slate-600">للتسليم للإدارة</p>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="w-16 h-16 border-2 border-slate-300 rounded flex items-center justify-center text-[10px] text-slate-400 font-bold text-center">
-            رؤية<br/>2030
-          </div>
-          <div className="w-16 h-16 border-2 border-slate-300 rounded flex items-center justify-center text-[10px] text-slate-400 font-bold text-center">
-            شعار<br/>الوزارة
-          </div>
+        <div className="flex items-center gap-2">
+          {/* Logos removed as requested */}
         </div>
       </div>
 
       {/* Meta-info Bar */}
-      <div className="flex justify-between bg-slate-100 border border-slate-300 text-slate-800 p-4 text-sm font-bold mb-6 rounded-lg">
-        <div>المادة / المقرر: ....................</div>
-        <div>الشعبة / الصف: ....................</div>
-        <div>اسم المعلم: ....................</div>
-        <div>الفصل الدراسي: ....................</div>
+      <div className="flex justify-between border-2 border-black text-black px-2 py-1 text-[10px] font-bold mb-2 rounded-lg">
+        <div>المادة: {subject || '....................'}</div>
+        <div>الصف: {grade || '....................'} - الفصل: {section || '....................'}</div>
+        <div>المعلم: {teacherName || '....................'}</div>
       </div>
 
       {/* Master Table */}
-      <table className="w-full border-collapse border-2 border-slate-800 text-center text-sm">
+      <table className="w-full border-collapse border-2 border-black text-center text-[9px]">
         <thead>
-          <tr className="bg-slate-800 text-white">
-            <th className="w-12 border border-slate-700 p-3 font-bold text-lg">م</th>
-            <th className="border border-slate-700 p-3 font-bold text-lg text-right pr-4">اسم الطالب</th>
-            <th className="w-32 border border-slate-700 p-3 font-bold text-lg">المجموع الكلي (60)</th>
+          <tr className="bg-white text-black border-b-2 border-black">
+            <th rowSpan={2} className="w-6 border border-black p-0.5 font-bold">م</th>
+            <th rowSpan={2} className="w-32 border border-black p-0.5 font-bold text-right pr-1">اسم الطالب</th>
+            
+            {(tasks.participation?.length || 0) > 0 && (
+              <th colSpan={tasks.participation?.length} className="border border-black p-0.5 font-bold">المشاركة</th>
+            )}
+            {(tasks.homework?.length || 0) > 0 && (
+              <th colSpan={tasks.homework?.length} className="border border-black p-0.5 font-bold">الواجبات</th>
+            )}
+            {(tasks.performance?.length || 0) > 0 && (
+              <th colSpan={tasks.performance?.length} className="border border-black p-0.5 font-bold">المهام الأدائية</th>
+            )}
+            {(tasks.exams?.length || 0) > 0 && (
+              <th colSpan={tasks.exams?.length} className="border border-black p-0.5 font-bold">الاختبارات</th>
+            )}
+            
+            <th rowSpan={2} className="w-12 border border-black p-0.5 font-bold">المجموع</th>
+          </tr>
+          <tr className="bg-white text-black text-[7px] border-b-2 border-black">
+            {tasks.participation?.map(t => (
+              <th key={t.id} className="border border-black p-0.5 font-normal w-6" title={t.name}>
+                <div className="truncate max-w-[30px] mx-auto">{t.name}</div>
+                <div className="text-[6px] text-gray-600 mt-0.5">({t.maxGrade})</div>
+              </th>
+            ))}
+            {tasks.homework?.map(t => (
+              <th key={t.id} className="border border-black p-0.5 font-normal w-6" title={t.name}>
+                <div className="truncate max-w-[30px] mx-auto">{t.name}</div>
+                <div className="text-[6px] text-gray-600 mt-0.5">({t.maxGrade})</div>
+              </th>
+            ))}
+            {tasks.performance?.map(t => (
+              <th key={t.id} className="border border-black p-0.5 font-normal w-6" title={t.name}>
+                <div className="truncate max-w-[30px] mx-auto">{t.name}</div>
+                <div className="text-[6px] text-gray-600 mt-0.5">({t.maxGrade})</div>
+              </th>
+            ))}
+            {tasks.exams?.map(t => (
+              <th key={t.id} className="border border-black p-0.5 font-normal w-6" title={t.name}>
+                <div className="truncate max-w-[30px] mx-auto">{t.name}</div>
+                <div className="text-[6px] text-gray-600 mt-0.5">({t.maxGrade})</div>
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
           {students.map((student, index) => {
+            const studentState = studentsState[student.id];
+            
             const partTotal = getCategoryTotal(student.id, 'participation');
             const hwTotal = getCategoryTotal(student.id, 'homework');
             const perfTotal = getCategoryTotal(student.id, 'performance');
@@ -79,10 +122,32 @@ export const PrintableTracker: React.FC<PrintableTrackerProps> = ({ students, st
             const overall = partTotal + hwTotal + perfTotal + examTotal;
 
             return (
-              <tr key={student.id} className="even:bg-slate-50">
-                <td className="border border-slate-400 p-3 font-bold text-slate-700">{index + 1}</td>
-                <td className="border border-slate-400 p-3 text-right pr-4 font-bold text-slate-800 text-base">{student.name}</td>
-                <td className="border border-slate-400 p-3 font-black text-xl text-slate-900 bg-slate-100">{overall}</td>
+              <tr key={student.id} className="bg-white">
+                <td className="border border-black p-0.5 font-bold text-black">{index + 1}</td>
+                <td className="border border-black p-0.5 text-right pr-1 font-bold text-black text-[10px]">{student.name}</td>
+                
+                {tasks.participation?.map(t => (
+                  <td key={t.id} className="border border-black p-0.5 text-black">
+                    {studentState?.grades?.[t.id] || '-'}
+                  </td>
+                ))}
+                {tasks.homework?.map(t => (
+                  <td key={t.id} className="border border-black p-0.5 text-black">
+                    {studentState?.grades?.[t.id] || '-'}
+                  </td>
+                ))}
+                {tasks.performance?.map(t => (
+                  <td key={t.id} className="border border-black p-0.5 text-black">
+                    {studentState?.grades?.[t.id] || '-'}
+                  </td>
+                ))}
+                {tasks.exams?.map(t => (
+                  <td key={t.id} className="border border-black p-0.5 text-black">
+                    {studentState?.grades?.[t.id] || '-'}
+                  </td>
+                ))}
+
+                <td className="border border-black p-0.5 font-black text-[10px] text-black">{overall}</td>
               </tr>
             );
           })}
@@ -90,7 +155,7 @@ export const PrintableTracker: React.FC<PrintableTrackerProps> = ({ students, st
       </table>
 
       {/* Footer */}
-      <div className="flex justify-between mt-16 text-base font-bold px-8 text-slate-800">
+      <div className="flex justify-between mt-4 text-xs font-bold px-4 text-black">
         <div>توقيع المعلم: ........................................</div>
         <div>توقيع مدير المدرسة: ........................................</div>
       </div>
