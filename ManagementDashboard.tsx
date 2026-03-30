@@ -1,0 +1,78 @@
+import React, { createContext, useContext, useState, useEffect } from 'react';
+
+export interface MessageLogEntry {
+  id: string;
+  timestamp: string;
+  recipient: string;
+  recipientPhone: string;
+  messageType: string;
+  messageText: string;
+  status: 'success' | 'failed';
+  batchId?: string;
+  campaignName?: string;
+  targetAudience?: string;
+  messageId?: string;
+}
+
+interface MessageLogContextType {
+  globalMessageLog: MessageLogEntry[];
+  addLogEntry: (entry: Omit<MessageLogEntry, 'id' | 'timestamp'>) => void;
+  clearLog: () => void;
+  deleteLogEntry: (id: string) => void;
+  deleteBatch: (batchId: string) => void;
+}
+
+const MessageLogContext = createContext<MessageLogContextType | undefined>(undefined);
+
+export const MessageLogProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [globalMessageLog, setGlobalMessageLog] = useState<MessageLogEntry[]>(() => {
+    const saved = localStorage.getItem('globalMessageLog');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('globalMessageLog', JSON.stringify(globalMessageLog));
+  }, [globalMessageLog]);
+
+  const addLogEntry = (entry: Omit<MessageLogEntry, 'id' | 'timestamp'>) => {
+    const newEntry: MessageLogEntry = {
+      ...entry,
+      id: Math.random().toString(36).substring(2, 9),
+      timestamp: new Date().toISOString()
+    };
+    setGlobalMessageLog(prev => [newEntry, ...prev]);
+  };
+
+  const clearLog = () => {
+    setGlobalMessageLog([]);
+  };
+
+  const deleteLogEntry = (id: string) => {
+    setGlobalMessageLog(prev => prev.filter(log => log.id !== id));
+  };
+
+  const deleteBatch = (batchId: string) => {
+    setGlobalMessageLog(prev => prev.filter(log => log.batchId !== batchId && log.id !== batchId));
+  };
+
+  return (
+    <MessageLogContext.Provider value={{ globalMessageLog, addLogEntry, clearLog, deleteLogEntry, deleteBatch }}>
+      {children}
+    </MessageLogContext.Provider>
+  );
+};
+
+export const useMessageLog = () => {
+  const context = useContext(MessageLogContext);
+  if (context === undefined) {
+    throw new Error('useMessageLog must be used within a MessageLogProvider');
+  }
+  return context;
+};

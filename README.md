@@ -1,20 +1,80 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+export type ActionType = 'CREATE' | 'UPDATE' | 'DELETE' | 'LOGIN' | 'LOGOUT' | 'READ';
+export type ActionCategory = 'إدارة مستخدمين' | 'أكاديمي' | 'سلوكي' | 'حضور وغياب' | 'إعدادات نظام' | 'مصادقة/دخول' | 'مصادقة/خروج' | 'التحويلات' | 'متابعة' | 'أخرى';
 
-# Run and deploy your AI Studio app
+export interface AuditActor {
+  id: string | number;
+  name: string;
+  role: string;
+}
 
-This contains everything you need to run your app locally.
+export interface StateDiff {
+  old?: any;
+  new?: any;
+}
 
-View your app in AI Studio: https://ai.studio/apps/ae7666dc-6949-4426-ba20-dee443a9dd91
+export interface AuditLog {
+  id: string;
+  actor: AuditActor;
+  actionCategory: ActionCategory;
+  actionType: ActionType;
+  module: string;
+  detailedMessage: string;
+  stateDiff?: StateDiff;
+  timestamp: string;
+}
 
-## Run Locally
+export const logAction = (
+  actionCategory: ActionCategory,
+  actionType: ActionType,
+  module: string,
+  detailedMessage: string,
+  stateDiff?: StateDiff,
+  explicitActor?: AuditActor // Optional, in case we want to override (like during login before state is set)
+) => {
+  try {
+    let actor = explicitActor;
+    if (!actor) {
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        actor = {
+          id: user.id,
+          name: user.name,
+          role: user.role
+        };
+      } else {
+        actor = {
+          id: 'system',
+          name: 'النظام',
+          role: 'system'
+        };
+      }
+    }
 
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+    const existingLogsStr = localStorage.getItem('takamol_audit_logs');
+    const existingLogs: AuditLog[] = existingLogsStr ? JSON.parse(existingLogsStr) : [];
+    
+    const now = new Date();
+    // Format: DD/MM/YYYY HH:mm:ss
+    const timestamp = `${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+    
+    const newLog: AuditLog = {
+      id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
+      actor,
+      actionCategory,
+      actionType,
+      module,
+      detailedMessage,
+      stateDiff,
+      timestamp
+    };
+    
+    const updatedLogs = [newLog, ...existingLogs];
+    localStorage.setItem('takamol_audit_logs', JSON.stringify(updatedLogs));
+    
+    // Dispatch event for real-time updates if needed
+    window.dispatchEvent(new Event('takamol_audit_logs_updated'));
+  } catch (error) {
+    console.error('Failed to log action:', error);
+  }
+};
