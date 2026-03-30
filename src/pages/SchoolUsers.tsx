@@ -1187,7 +1187,16 @@ const SchoolUsers: React.FC = React.memo(() => {
                     {/* Selection Summary */}
                     {selectedClasses.length > 0 && (
                       <div className="pt-4 border-t border-slate-100 mt-4">
-                        <h5 className="text-sm font-bold text-slate-700 mb-2">الفصول المحددة:</h5>
+                        <div className="flex items-center justify-between mb-2">
+                          <h5 className="text-sm font-bold text-slate-700">الفصول المحددة:</h5>
+                          <button 
+                            type="button"
+                            onClick={() => setSelectedClasses([])}
+                            className="text-[10px] text-red-500 hover:text-red-700 font-bold"
+                          >
+                            مسح الكل
+                          </button>
+                        </div>
                         <div className="flex flex-wrap gap-2">
                           {selectedClasses.map(cls => (
                             <span key={cls} className="inline-flex items-center gap-1 bg-teal-50 text-teal-700 px-2 py-1 rounded-lg text-xs font-bold border border-teal-100">
@@ -1223,8 +1232,10 @@ const SchoolUsers: React.FC = React.memo(() => {
               <button 
                 type="button" 
                 onClick={() => {
-                  setSelectedSubjects([]);
-                  setSelectedClasses([]);
+                  if (window.confirm('هل أنت متأكد من رغبتك في تفريغ جميع الإسنادات لهذا المعلم؟')) {
+                    setSelectedSubjects([]);
+                    setSelectedClasses([]);
+                  }
                 }}
                 className="px-6 bg-red-50 hover:bg-red-100 text-red-600 py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
                 title="تفريغ جميع الإسنادات"

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Check,
@@ -38,6 +38,13 @@ export interface Student {
 
 export type TaskCategory = 'participation' | 'homework' | 'performance' | 'exams';
 
+const CATEGORY_NAMES: Record<TaskCategory, string> = {
+  participation: 'المشاركة',
+  homework: 'الواجبات',
+  performance: 'المهام الأدائية',
+  exams: 'اختبار الفترة'
+};
+
 export interface Task {
   id: string;
   name: string;
@@ -59,19 +66,127 @@ export interface StudentState {
   behaviorChips: string[];
 }
 
-// --- Mock Data ---
-const mockStudents: Student[] = [
-  { id: 1, name: 'خالد عبدالله', avatar: 'https://ui-avatars.com/api/?name=خالد+عبدالله&background=f1f5f9&color=334155', semesterAttendance: 98 },
-  { id: 2, name: 'سعود محمد', avatar: 'https://ui-avatars.com/api/?name=سعود+محمد&background=f1f5f9&color=334155', semesterAttendance: 85 },
-  { id: 3, name: 'فيصل فهد', avatar: 'https://ui-avatars.com/api/?name=فيصل+فهد&background=f1f5f9&color=334155', semesterAttendance: 100 },
-  { id: 4, name: 'عبدالرحمن سالم', avatar: 'https://ui-avatars.com/api/?name=عبدالرحمن+سالم&background=f1f5f9&color=334155', semesterAttendance: 92 },
-  { id: 5, name: 'عمر خالد', avatar: 'https://ui-avatars.com/api/?name=عمر+خالد&background=f1f5f9&color=334155', semesterAttendance: 76 },
-];
-
 const negativeBehaviors = ['نوم', 'لم يحضر الكتاب', 'إزعاج', 'مقاطعة درس'];
 const positiveBehaviors = ['مجتهد', 'مشاركة فعالة', 'مساعدة زميل'];
 
+interface FilterSheetProps {
+  availableSubjects: string[]; // المواد المسندة للمعلم
+  availableGrades: string[]; // الصفوف (مثال: أول ثانوي، ثاني ثانوي)
+  availableSections: string[]; // الفصول (مثال: 1, 2, 3, 4)
+  selectedSubject: string;
+  selectedGrade: string;
+  selectedSection: string;
+  onSelectSubject: (s: string) => void;
+  onSelectGrade: (g: string) => void;
+  onSelectSection: (s: string) => void;
+  onApplyFilters: (filters: any) => void;
+  onClose: () => void;
+}
+
 // --- Subcomponents ---
+
+const FilterBottomSheet: React.FC<FilterSheetProps> = ({ 
+  availableSubjects, availableGrades, availableSections,
+  selectedSubject, selectedGrade, selectedSection,
+  onSelectSubject, onSelectGrade, onSelectSection,
+  onApplyFilters, onClose 
+}) => {
+  return (
+    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 backdrop-blur-sm">
+      <motion.div 
+        initial={{ y: "100%" }}
+        animate={{ y: 0 }}
+        exit={{ y: "100%" }}
+        className="bg-white w-full max-w-md rounded-t-3xl p-6 shadow-2xl flex flex-col gap-6 max-h-[90vh] overflow-y-auto"
+      >
+        <div className="flex justify-between items-center">
+          <h3 className="text-xl font-bold text-slate-800">تصفية السجل</h3>
+          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+            <X size={24} className="text-slate-400" />
+          </button>
+        </div>
+
+        <div className="space-y-6">
+          {/* Subject */}
+          <div className="space-y-3">
+            <label className="text-sm font-bold text-slate-500 flex items-center gap-2">
+              <Book size={16} /> المادة الدراسية
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {availableSubjects.map(s => (
+                <button
+                  key={s}
+                  onClick={() => onSelectSubject(s)}
+                  className={`py-3 px-4 rounded-xl text-sm font-bold transition-all border ${
+                    selectedSubject === s 
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-100' 
+                      : 'bg-slate-50 text-slate-600 border-slate-100 hover:border-slate-200'
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Grade */}
+          <div className="space-y-3">
+            <label className="text-sm font-bold text-slate-500 flex items-center gap-2">
+              <GraduationCap size={16} /> الصف الدراسي
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {availableGrades.map(g => (
+                <button
+                  key={g}
+                  onClick={() => onSelectGrade(g)}
+                  className={`py-3 px-4 rounded-xl text-sm font-bold transition-all border ${
+                    selectedGrade === g 
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-100' 
+                      : 'bg-slate-50 text-slate-600 border-slate-100 hover:border-slate-200'
+                  }`}
+                >
+                  {g}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Section */}
+          <div className="space-y-3">
+            <label className="text-sm font-bold text-slate-500 flex items-center gap-2">
+              <Users size={16} /> الفصل
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {availableSections.map(s => (
+                <button
+                  key={s}
+                  onClick={() => onSelectSection(s)}
+                  className={`py-3 px-4 rounded-xl text-sm font-bold transition-all border ${
+                    selectedSection === s 
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-100' 
+                      : 'bg-slate-50 text-slate-600 border-slate-100 hover:border-slate-200'
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <button
+          onClick={() => {
+            onApplyFilters({ subject: selectedSubject, grade: selectedGrade, section: selectedSection });
+            onClose();
+          }}
+          className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold text-lg shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all mt-4"
+        >
+          تطبيق الفلاتر
+        </button>
+      </motion.div>
+    </div>
+  );
+};
 
 const ProgressBar = ({ label, current, max }: { label: string, current: number, max: number }) => {
   const percentage = max > 0 ? Math.round((current / max) * 100) : 0;
@@ -165,18 +280,64 @@ const SmartTracker: React.FC = () => {
   const [subject, setSubject] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
 
-  const [availableGrades, setAvailableGrades] = useState<string[]>([]);
-  const [availableSections, setAvailableSections] = useState<string[]>([]);
-  const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
-  const [assignments, setAssignments] = useState<TeacherAssignment[]>([]);
+  const [teacherAssignments, setTeacherAssignments] = useState<TeacherAssignment[]>([]);
+  const [adminGrades, setAdminGrades] = useState<string[]>([]);
+  const [adminSections, setAdminSections] = useState<string[]>([]);
+  const [adminSubjects, setAdminSubjects] = useState<string[]>([]);
+
+  // --- Derived State (Cascading Filters) ---
+  const availableGrades = useMemo(() => {
+    // If we have teacher assignments, they are the primary source of truth
+    if (teacherAssignments.length > 0) {
+      // Use the grade from class_id to ensure we only show grades where the teacher actually has classes
+      const grades = [...new Set(teacherAssignments.map(a => a.class_id.split('|')[0]))];
+      console.log("[DEBUG] Teacher available grades (from class_id):", grades);
+      return grades;
+    }
+    // If teacher role, don't fall back to admin data
+    if (user?.role === 'teacher') return [];
+    // Fallback to admin grades only if no teacher assignments exist
+    console.log("[DEBUG] No teacher assignments, using admin grades:", adminGrades);
+    return adminGrades;
+  }, [teacherAssignments, adminGrades, user?.role]);
+
+  const availableSections = useMemo(() => {
+    if (teacherAssignments.length > 0) {
+      if (!grade) return [];
+      // Filter assignments by the grade part of class_id
+      const sections = [...new Set(teacherAssignments
+        .filter(a => a.class_id.startsWith(grade + '|'))
+        .map(a => a.class_id.split('|')[1]))];
+      console.log(`[DEBUG] Teacher available sections for grade ${grade}:`, sections);
+      return sections;
+    }
+    // If teacher role, don't fall back to admin data
+    if (user?.role === 'teacher') return [];
+    console.log(`[DEBUG] No teacher assignments, using admin sections for grade ${grade}:`, adminSections);
+    return adminSections;
+  }, [grade, teacherAssignments, adminSections, user?.role]);
+
+  const availableSubjects = useMemo(() => {
+    if (teacherAssignments.length > 0) {
+      if (!grade || !section) return [];
+      const fullClassId = `${grade}|${section}`;
+      const subjects = [...new Set(teacherAssignments
+        .filter(a => a.class_id === fullClassId)
+        .map(a => a.subject_name))];
+      console.log(`[DEBUG] Teacher available subjects for class ${fullClassId}:`, subjects);
+      return subjects;
+    }
+    // If teacher role, don't fall back to admin data
+    if (user?.role === 'teacher') return [];
+    console.log(`[DEBUG] No teacher assignments, using admin subjects:`, adminSubjects);
+    return adminSubjects;
+  }, [grade, section, teacherAssignments, adminSubjects, user?.role]);
 
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(false);
 
   // --- Global Tab State ---
   const [activeTab, setActiveTab] = useState<'attendance' | 'grades' | 'behavior'>('attendance');
-  const [isMobileFilterSheetOpen, setIsMobileFilterSheetOpen] = useState(false);
-  const [mobileGradingStudentId, setMobileGradingStudentId] = useState<number | null>(null);
   const [activeCategory, setActiveCategory] = useState<TaskCategory>('participation');
 
   // --- Tasks State ---
@@ -200,31 +361,66 @@ const SmartTracker: React.FC = () => {
   const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null);
   const [confirmModalState, setConfirmModalState] = useState<'idle' | 'confirm' | 'success'>('idle');
 
+  // --- Mobile State ---
+  const [isMobileFilterSheetOpen, setIsMobileFilterSheetOpen] = useState(false);
+  const [mobileGradingStudentId, setMobileGradingStudentId] = useState<number | null>(null);
+
+  // --- Derived State ---
+  const currentClassLabel = grade && section ? `${grade} - ${section}` : 'اختر الصف والفصل';
+  const currentSubjectLabel = subject || 'اختر المادة';
+
+  // --- Auto-Reset Effect (Cascading Logic) ---
+  useEffect(() => {
+    if (grade && availableSections.length > 0) {
+      if (!section || !availableSections.includes(section)) {
+        setSection(availableSections[0]);
+      }
+    } else {
+      setSection('');
+    }
+  }, [grade, availableSections]);
+
+  useEffect(() => {
+    if (grade && section && availableSubjects.length > 0) {
+      if (!subject || !availableSubjects.includes(subject)) {
+        setSubject(availableSubjects[0]);
+      }
+    } else {
+      setSubject('');
+    }
+  }, [grade, section, availableSubjects]);
+
   // --- Fetch Data ---
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
-        if (user?.role === 'teacher') {
-          // Fetch teacher assignments
-          const assignRes = await apiFetch('/api/teacher/assignments');
-          if (assignRes.ok) {
-            const data: TeacherAssignment[] = await assignRes.json();
-            setAssignments(data);
+        // Always try to fetch teacher assignments first for any user
+        const assignRes = await apiFetch('/api/teacher/assignments');
+        let hasAssignments = false;
+        
+        if (assignRes.ok) {
+          const data: TeacherAssignment[] = await assignRes.json();
+          if (data && data.length > 0) {
+            setTeacherAssignments(data);
+            hasAssignments = true;
             
-            // Extract unique grades
-            const grades = [...new Set(data.map(a => a.grade))];
-            setAvailableGrades(grades);
-            if (grades.length > 0) {
+            // Set initial grade if not set
+            // Use the grade from class_id to ensure consistency with availableGrades
+            const grades = [...new Set(data.map(a => a.class_id.split('|')[0]))];
+            if (grades.length > 0 && !grade) {
               setGrade(grades[0]);
             }
           }
-        } else {
+        }
+
+        // If no assignments found, and user is not a teacher, fetch admin data
+        if (!hasAssignments && user?.role !== 'teacher') {
           // Admin/Principal: fetch all grades
           const res = await apiFetch('/api/hierarchy/grades');
           if (res.ok) {
             const data = await res.json();
-            setAvailableGrades(data);
-            if (data.length > 0) {
+            setAdminGrades(data);
+            if (data.length > 0 && !grade) {
               setGrade(data[0]);
             }
           }
@@ -238,70 +434,38 @@ const SmartTracker: React.FC = () => {
     }
   }, [user]);
 
+  // Fetch admin sections and subjects only if teacherAssignments is empty
   useEffect(() => {
-    const fetchSections = async () => {
-      if (!grade) {
-        setAvailableSections([]);
-        setSection('');
-        return;
-      }
-      try {
-        if (user?.role === 'teacher') {
-          // Filter assignments by selected grade
-          const gradeAssignments = assignments.filter(a => a.grade === grade);
-          const sections = [...new Set(gradeAssignments.map(a => a.class_id.split('|')[1]))];
-          setAvailableSections(sections);
-          if (sections.length > 0) {
-            setSection(sections[0]);
-          } else {
-            setSection('');
-          }
-        } else {
+    if (teacherAssignments.length === 0 && user?.role !== 'teacher') {
+      const fetchSections = async () => {
+        if (!grade) return;
+        try {
           const res = await apiFetch(`/api/hierarchy/sections?grade=${encodeURIComponent(grade)}`);
           if (res.ok) {
             const data = await res.json();
-            setAvailableSections(data);
-            if (data.length > 0) {
+            setAdminSections(data);
+            if (data.length > 0 && !section) {
               setSection(data[0]);
-            } else {
-              setSection('');
             }
           }
+        } catch (err) {
+          console.error("Failed to fetch sections", err);
         }
-      } catch (err) {
-        console.error("Failed to fetch sections", err);
-      }
-    };
-    fetchSections();
-  }, [grade, user, assignments]);
+      };
+      fetchSections();
+    }
+  }, [grade, user?.role, teacherAssignments.length]);
 
   useEffect(() => {
-    // Update available subjects based on selected grade and section
-    if (user?.role === 'teacher') {
-      if (grade && section) {
-        const classId = `${grade}|${section}`;
-        const classAssignments = assignments.filter(a => a.class_id === classId);
-        const subjects = [...new Set(classAssignments.map(a => a.subject_name))];
-        setAvailableSubjects(subjects);
-        if (subjects.length > 0 && !subjects.includes(subject)) {
-          setSubject(subjects[0]);
-        } else if (subjects.length === 0) {
-          setSubject('');
-        }
-      } else {
-        setAvailableSubjects([]);
-        setSubject('');
-      }
-    } else if (user?.role) {
-      // For admins, fetch all subjects or keep default
+    if (teacherAssignments.length === 0 && user?.role !== 'teacher') {
       const fetchSubjects = async () => {
         try {
           const res = await apiFetch('/api/admin/subjects');
           if (res.ok) {
             const data = await res.json();
             const subjects = [...new Set(data.map((s: any) => s.name))] as string[];
-            setAvailableSubjects(subjects.length > 0 ? subjects : ['الرياضيات', 'العلوم', 'لغتي', 'التربية الإسلامية']);
-            if (subjects.length > 0 && !subjects.includes(subject)) {
+            setAdminSubjects(subjects.length > 0 ? subjects : ['الرياضيات', 'العلوم', 'لغتي', 'التربية الإسلامية']);
+            if (subjects.length > 0 && !subject) {
               setSubject(subjects[0]);
             }
           }
@@ -311,7 +475,7 @@ const SmartTracker: React.FC = () => {
       };
       fetchSubjects();
     }
-  }, [grade, section, user, assignments]);
+  }, [grade, section, user?.role, teacherAssignments.length]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -701,29 +865,27 @@ const SmartTracker: React.FC = () => {
 
   return (
     <>
-    <div className="min-h-screen bg-slate-50 p-4 md:p-8 pb-32 font-sans print:hidden" dir="rtl">
-      <div className="max-w-5xl mx-auto space-y-8">
-        
-        {/* Mobile Header */}
-        <div className="md:hidden sticky top-0 z-30 bg-white/90 backdrop-blur pb-2 pt-2 px-4 -mx-4 mb-4 border-b border-slate-200">
-          <div className="flex justify-between items-center">
-            <div className="flex flex-col">
-              <span className="text-sm font-bold text-slate-800">{subject}</span>
-              <button 
-                onClick={() => setIsMobileFilterSheetOpen(true)}
-                className="text-xs text-teal-600 flex items-center gap-1 font-medium"
-              >
-                {grade} - {section} <span className="text-[10px]">▼</span>
-              </button>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="text-xs font-medium text-slate-500">
-                {formatHijriDate(date)}
-              </div>
-            </div>
+    <div className="min-h-screen bg-slate-50 pb-32 font-sans print:hidden" dir="rtl">
+      
+      {/* Mobile Header */}
+      <div className="md:hidden sticky top-0 z-[40] bg-white/80 backdrop-blur-md border-b border-slate-200 p-4 flex items-center justify-between">
+        <div className="flex flex-col">
+          <h1 className="text-lg font-black text-slate-800">سجل المتابعة</h1>
+          <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500">
+            <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full">{currentClassLabel}</span>
+            <span className="bg-teal-50 text-teal-700 px-2 py-0.5 rounded-full">{currentSubjectLabel}</span>
           </div>
         </div>
+        <button 
+          onClick={() => setIsMobileFilterSheetOpen(true)}
+          className="p-2 bg-slate-100 rounded-xl text-slate-600 hover:bg-slate-200 transition-colors"
+        >
+          <Dices size={20} />
+        </button>
+      </div>
 
+      <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6 md:space-y-8">
+        
         {/* Desktop Header & Filters */}
         <div className="hidden md:flex flex-col items-center gap-6 mb-2">
           {/* Smart Pill Container */}
@@ -849,20 +1011,17 @@ const SmartTracker: React.FC = () => {
           {activeTab === 'grades' && (
             <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-slate-50">
               <div className="flex gap-2 overflow-x-auto hide-scrollbar">
-                {(['participation', 'homework', 'performance', 'exams'] as const).map(cat => {
-                  const categoryNames = { participation: 'المشاركة', homework: 'الواجبات', performance: 'المهام الأدائية', exams: 'اختبار الفترة' };
-                  return (
-                    <button
-                      key={cat}
-                      onClick={() => setActiveCategory(cat)}
-                      className={`px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-colors ${
-                        activeCategory === cat ? 'bg-teal-50 text-teal-700' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                      }`}
-                    >
-                      {categoryNames[cat]}
-                    </button>
-                  );
-                })}
+                {(['participation', 'homework', 'performance', 'exams'] as const).map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => setActiveCategory(cat)}
+                    className={`px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-colors ${
+                      activeCategory === cat ? 'bg-teal-50 text-teal-700' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    {CATEGORY_NAMES[cat]}
+                  </button>
+                ))}
               </div>
               <button
                 onClick={() => {
@@ -1051,144 +1210,390 @@ const SmartTracker: React.FC = () => {
             </div>
           )}
         </div>
-
-        {/* Mobile UI */}
-        <div className="block md:hidden mt-4 pb-32">
-          {activeTab === 'attendance' && (
-            <div className="flex flex-col gap-3">
-              <div className="flex justify-end items-center mb-2">
-                <button
-                  onClick={handleMarkAllPresent}
-                  className="rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2 text-xs font-bold shadow-sm transition-colors flex items-center gap-2"
-                >
-                  <CheckCircle2 size={14} />
-                  تحضير الكل
-                </button>
-              </div>
-              {students.map(student => {
-                const state = studentsState[student.id];
-                if (!state) return null;
-                return (
-                  <div key={student.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
-                    <div 
-                      className="flex items-center gap-3 cursor-pointer"
-                      onClick={() => setSelectedStudentId(student.id)}
-                    >
-                      <img src={student.avatar} alt={student.name} className="w-12 h-12 rounded-full bg-slate-100" />
-                      <div className="flex flex-col">
-                        <span className="font-bold text-slate-800 text-sm">{student.name}</span>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleAttendanceChange(student.id, 'present')}
-                        className={`w-11 h-11 rounded-full flex items-center justify-center transition-colors ${state.attendance === 'present' ? 'bg-emerald-500 text-white shadow-md' : 'bg-slate-100 text-slate-400'}`}
-                      >
-                        <CheckCircle2 size={24} />
-                      </button>
-                      <button
-                        onClick={() => handleAttendanceChange(student.id, 'late')}
-                        className={`w-11 h-11 rounded-full flex items-center justify-center transition-colors ${state.attendance === 'late' ? 'bg-amber-500 text-white shadow-md' : 'bg-slate-100 text-slate-400'}`}
-                      >
-                        <Clock size={24} />
-                      </button>
-                      <button
-                        onClick={() => handleAttendanceChange(student.id, 'absent')}
-                        className={`w-11 h-11 rounded-full flex items-center justify-center transition-colors ${state.attendance === 'absent' ? 'bg-red-500 text-white shadow-md' : 'bg-slate-100 text-slate-400'}`}
-                      >
-                        <X size={24} />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {activeTab === 'grades' && (
-            <div className="flex flex-col gap-3">
-              {/* Mobile Category Selector */}
-              <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-2">
-                {(['participation', 'homework', 'performance', 'exams'] as const).map(cat => {
-                  const categoryNames = { participation: 'المشاركة', homework: 'الواجبات', performance: 'المهام الأدائية', exams: 'اختبار الفترة' };
-                  return (
-                    <button
-                      key={cat}
-                      onClick={() => setActiveCategory(cat)}
-                      className={`px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-colors ${
-                        activeCategory === cat ? 'bg-teal-50 text-teal-700 border border-teal-200' : 'bg-white border border-slate-200 text-slate-600'
-                      }`}
-                    >
-                      {categoryNames[cat]}
-                    </button>
-                  );
-                })}
-              </div>
-              
-              <div className="flex justify-end mb-2">
-                <button
-                  onClick={() => {
-                    setEditingTaskId(null);
-                    setNewTask({ name: '', maxGrade: 5, type: 'number' });
-                    setIsTaskModalOpen(true);
-                  }}
-                  className="bg-teal-700 text-white hover:bg-teal-800 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors shadow-sm"
-                >
-                  <Plus size={14} />
-                  إضافة مهمة
-                </button>
-              </div>
-
-              {students.map(student => {
-                const state = studentsState[student.id];
-                if (!state) return null;
-                const total = tasks[activeCategory].reduce((sum, t) => sum + (Number(state.grades[t.id]) || 0), 0);
-                const max = tasks[activeCategory].reduce((sum, t) => sum + t.maxGrade, 0);
-                
-                return (
-                  <div 
-                    key={student.id} 
-                    onClick={() => setMobileGradingStudentId(student.id)}
-                    className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between cursor-pointer active:bg-slate-50"
-                  >
-                    <div className="flex items-center gap-3">
-                      <img src={student.avatar} alt={student.name} className="w-12 h-12 rounded-full bg-slate-100" />
-                      <div className="flex flex-col">
-                        <span className="font-bold text-slate-800 text-sm">{student.name}</span>
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end">
-                      <span className="text-2xl font-black text-teal-700">{total}</span>
-                      <span className="text-[10px] text-slate-400 font-bold">من {max}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {activeTab === 'behavior' && (
-            <div className="flex flex-col gap-3">
-              {students.map(student => {
-                const state = studentsState[student.id];
-                if (!state) return null;
-                return (
-                  <BehaviorCard
-                    key={student.id}
-                    student={student}
-                    chips={state.behaviorChips}
-                    onAddClick={() => setBehaviorModalStudent(student.id)}
-                    onRemoveChip={(chip) => toggleBehaviorChip(student.id, chip)}
-                    onStudentClick={() => setSelectedStudentId(student.id)}
-                  />
-                );
-              })}
-            </div>
-          )}
-        </div>
       </div>
 
+        {/* Mobile Category Tabs & Actions */}
+        {activeTab === 'grades' && (
+          <div className="md:hidden flex flex-col gap-3 mb-4">
+            <div className="flex overflow-x-auto hide-scrollbar whitespace-nowrap gap-2 pb-2 px-1">
+              {(['participation', 'homework', 'performance', 'exams'] as const).map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => setActiveCategory(cat)}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm border ${
+                    activeCategory === cat 
+                      ? 'bg-teal-500 text-white border-teal-500 shadow-teal-100' 
+                      : 'bg-white border-slate-200 text-slate-600'
+                  }`}
+                >
+                  {CATEGORY_NAMES[cat]}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => {
+                setEditingTaskId(null);
+                setNewTask({ name: '', maxGrade: 5, type: 'number' });
+                setIsTaskModalOpen(true);
+              }}
+              className="w-full bg-teal-700 text-white hover:bg-teal-800 px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors shadow-sm"
+            >
+              <Plus size={16} />
+              إضافة مهمة جديدة
+            </button>
+          </div>
+        )}
 
+        {/* Mobile Student Cards Layout */}
+        <div className="block md:hidden space-y-4">
+          {students.map((student) => {
+            const state = studentsState[student.id];
+            if (!state) return null;
+
+            return (
+              <motion.div 
+                key={student.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex flex-col gap-4"
+              >
+                {/* Card Header: Student Name & Total */}
+                <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-600">
+                      {student.name.charAt(0)}
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="font-bold text-slate-800 text-sm">{student.name}</span>
+                      <span className="text-[10px] text-slate-400">رقم الطالب: #{student.id}</span>
+                    </div>
+                  </div>
+                  
+                  {activeTab === 'grades' && (
+                    <div className="flex flex-col items-center bg-slate-50 px-3 py-1 rounded-lg border border-slate-200">
+                      <span className="text-[10px] text-slate-500 font-bold">المجموع</span>
+                      <span className="font-bold text-teal-700 text-lg">
+                        {tasks[activeCategory].reduce((sum, t) => sum + (Number(state.grades[t.id]) || 0), 0)}
+                      </span>
+                    </div>
+                  )}
+
+                  {activeTab !== 'grades' && (
+                    <button 
+                      onClick={() => setSelectedStudentId(student.id)}
+                      className="p-2 text-slate-400 hover:text-indigo-600 transition-colors"
+                    >
+                      <Users size={18} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Tab Specific Content */}
+                {activeTab === 'attendance' && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleAttendanceChange(student.id, 'present')}
+                      className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                        state.attendance === 'present' 
+                          ? 'bg-emerald-500 text-white shadow-md shadow-emerald-100' 
+                          : 'bg-slate-50 text-slate-400'
+                      }`}
+                    >
+                      حاضر
+                    </button>
+                    <button
+                      onClick={() => handleAttendanceChange(student.id, 'late')}
+                      className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                        state.attendance === 'late' 
+                          ? 'bg-amber-500 text-white shadow-md shadow-amber-100' 
+                          : 'bg-slate-50 text-slate-400'
+                      }`}
+                    >
+                      متأخر
+                    </button>
+                    <button
+                      onClick={() => handleAttendanceChange(student.id, 'absent')}
+                      className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                        state.attendance === 'absent' 
+                          ? 'bg-red-500 text-white shadow-md shadow-red-100' 
+                          : 'bg-slate-50 text-slate-400'
+                      }`}
+                    >
+                      غائب
+                    </button>
+                  </div>
+                )}
+
+                {activeTab === 'grades' && (
+                  <div className="space-y-3">
+                    {tasks[activeCategory].map((task) => {
+                      const val = state.grades[task.id] ?? '';
+                      const isError = val !== '' && Number(val) > task.maxGrade;
+                      
+                      return (
+                        <div key={task.id} className={`flex justify-between items-center bg-slate-50 p-2 rounded-xl border border-slate-100 ${isError ? 'bg-red-50 border-red-100' : ''}`}>
+                          <div className="flex flex-col">
+                            <span className="text-xs font-bold text-slate-700">{task.name}</span>
+                            <span className="text-[10px] text-slate-400">الدرجة العظمى: {task.maxGrade}</span>
+                          </div>
+                          
+                          <div className="flex items-center gap-2">
+                            {task.type === 'number' ? (
+                              <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg overflow-hidden">
+                                <button 
+                                  onClick={() => handleGradeChange(student.id, task.id, Math.max(0, (Number(val) || 0) - 1), task.maxGrade)}
+                                  className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+                                >
+                                  <Plus size={14} className="rotate-45" />
+                                </button>
+                                <input 
+                                  type="number"
+                                  value={val}
+                                  onChange={(e) => handleGradeChange(student.id, task.id, e.target.value, task.maxGrade)}
+                                  className="w-12 text-center font-bold text-teal-700 text-sm bg-transparent border-none focus:ring-0 p-0"
+                                  placeholder="0"
+                                />
+                                <button 
+                                  onClick={() => handleGradeChange(student.id, task.id, Math.min(task.maxGrade, (Number(val) || 0) + 1), task.maxGrade)}
+                                  className="p-2 text-slate-400 hover:text-teal-600 transition-colors"
+                                >
+                                  <Plus size={14} />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => handleGradeChange(student.id, task.id, 0, task.maxGrade)}
+                                  className={`w-10 h-10 flex items-center justify-center rounded-lg transition-all border ${
+                                    val === 0 
+                                      ? 'bg-red-500 text-white border-red-600 shadow-sm' 
+                                      : 'bg-white text-slate-300 hover:bg-red-50'
+                                  }`}
+                                >
+                                  <X size={18} />
+                                </button>
+                                <button
+                                  onClick={() => handleGradeChange(student.id, task.id, task.maxGrade, task.maxGrade)}
+                                  className={`w-10 h-10 flex items-center justify-center rounded-lg transition-all border ${
+                                    val === task.maxGrade 
+                                      ? 'bg-emerald-500 text-white border-emerald-600 shadow-sm' 
+                                      : 'bg-white text-slate-300 hover:bg-emerald-50'
+                                  }`}
+                                >
+                                  <Check size={18} />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {tasks[activeCategory].length === 0 && (
+                      <div className="text-center py-4 text-slate-400 text-xs italic">
+                        لا توجد مهام مضافة في هذا القسم
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === 'behavior' && (
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap gap-1.5">
+                      {state.behaviorChips.length > 0 ? (
+                        state.behaviorChips.map(chip => (
+                          <span key={chip} className="text-[9px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                            {chip}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-[9px] text-slate-400 italic">لا توجد ملاحظات</span>
+                      )}
+                    </div>
+                    <button 
+                      onClick={() => setBehaviorModalStudent(student.id)}
+                      className="w-full py-2 bg-indigo-50 text-indigo-700 rounded-lg text-[10px] font-bold flex items-center justify-center gap-2"
+                    >
+                      <Plus size={14} /> إضافة ملاحظة سلوكية
+                    </button>
+                  </div>
+                )}
+              </motion.div>
+            );
+          })}
+        </div>
+
+      {/* Mobile Grading Bottom Sheet */}
+      <AnimatePresence>
+        {mobileGradingStudentId !== null && (
+          <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 backdrop-blur-sm md:hidden">
+            <motion.div 
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              className="bg-white w-full rounded-t-3xl p-6 shadow-2xl flex flex-col gap-6 max-h-[85vh] overflow-y-auto"
+            >
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center font-bold">
+                    {students.find(s => s.id === mobileGradingStudentId)?.name.charAt(0)}
+                  </div>
+                  <div className="flex flex-col">
+                    <h3 className="text-lg font-bold text-slate-800">رصد درجات الطالب</h3>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-500">{students.find(s => s.id === mobileGradingStudentId)?.name}</span>
+                      <span className="text-[10px] bg-teal-50 text-teal-700 px-2 py-0.5 rounded-full font-bold">
+                        {CATEGORY_NAMES[activeCategory]}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <button onClick={() => setMobileGradingStudentId(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                  <X size={24} className="text-slate-400" />
+                </button>
+              </div>
+
+              {/* Category selector inside bottom sheet */}
+              <div className="flex gap-2 overflow-x-auto hide-scrollbar px-1">
+                {(['participation', 'homework', 'performance', 'exams'] as const).map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => setActiveCategory(cat)}
+                    className={`px-4 py-2 rounded-xl text-[10px] font-bold whitespace-nowrap transition-all border ${
+                      activeCategory === cat 
+                        ? 'bg-teal-500 text-white border-teal-500 shadow-sm' 
+                        : 'bg-slate-50 border-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {CATEGORY_NAMES[cat]}
+                  </button>
+                ))}
+              </div>
+
+              <div className="space-y-6">
+                {tasks[activeCategory].map((task) => {
+                  const val = studentsState[mobileGradingStudentId]?.grades[task.id] ?? '';
+                  return (
+                    <div key={task.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-slate-700 text-sm">{task.name}</span>
+                        <span className="text-[10px] text-slate-400 font-bold">الدرجة العظمى: {task.maxGrade}</span>
+                      </div>
+                      
+                      {task.type === 'number' ? (
+                        <div className="flex items-center gap-4">
+                          <input 
+                            type="number"
+                            value={val}
+                            onChange={(e) => handleGradeChange(mobileGradingStudentId, task.id, e.target.value, task.maxGrade)}
+                            className="flex-1 py-3 text-center bg-white border border-slate-200 rounded-xl font-black text-lg text-teal-700 focus:ring-2 focus:ring-teal-500 outline-none"
+                            placeholder="0"
+                          />
+                          <div className="flex flex-col gap-1">
+                            <button 
+                              onClick={() => handleGradeChange(mobileGradingStudentId, task.id, Math.min(task.maxGrade, (Number(val) || 0) + 1), task.maxGrade)}
+                              className="p-2 bg-white border border-slate-200 rounded-lg text-slate-600"
+                            >
+                              <Plus size={16} />
+                            </button>
+                            <button 
+                              onClick={() => handleGradeChange(mobileGradingStudentId, task.id, Math.max(0, (Number(val) || 0) - 1), task.maxGrade)}
+                              className="p-2 bg-white border border-slate-200 rounded-lg text-slate-600"
+                            >
+                              <X size={16} className="rotate-45" />
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleGradeChange(mobileGradingStudentId, task.id, task.maxGrade, task.maxGrade)}
+                            className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all ${
+                              val === task.maxGrade ? 'bg-emerald-500 text-white' : 'bg-white border border-slate-200 text-slate-500'
+                            }`}
+                          >
+                            تم الإنجاز
+                          </button>
+                          <button
+                            onClick={() => handleGradeChange(mobileGradingStudentId, task.id, 0, task.maxGrade)}
+                            className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all ${
+                              val === 0 ? 'bg-red-500 text-white' : 'bg-white border border-slate-200 text-slate-500'
+                            }`}
+                          >
+                            لم يتم
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {tasks[activeCategory].length === 0 && (
+                  <div className="text-center py-10 text-slate-400 italic text-sm">
+                    لا توجد مهام مضافة في هذا التصنيف
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={() => setMobileGradingStudentId(null)}
+                className="w-full py-4 bg-slate-800 text-white rounded-2xl font-bold text-lg shadow-lg hover:bg-slate-900 transition-all mt-4"
+              >
+                تم
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Mobile Filter Bottom Sheet */}
+      <AnimatePresence>
+        {isMobileFilterSheetOpen && (
+          <FilterBottomSheet
+            availableSubjects={availableSubjects}
+            availableGrades={availableGrades}
+            availableSections={availableSections}
+            selectedSubject={subject}
+            selectedGrade={grade}
+            selectedSection={section}
+            onSelectSubject={setSubject}
+            onSelectGrade={setGrade}
+            onSelectSection={setSection}
+            onApplyFilters={() => {}}
+            onClose={() => setIsMobileFilterSheetOpen(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Mobile Bottom Navigation */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-6 py-3 flex items-center justify-between z-[50] shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
+        <button 
+          onClick={() => setActiveTab('attendance')}
+          className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'attendance' ? 'text-indigo-600' : 'text-slate-400'}`}
+        >
+          <Clock size={20} />
+          <span className="text-[10px] font-bold">الحضور</span>
+        </button>
+        <button 
+          onClick={() => setActiveTab('grades')}
+          className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'grades' ? 'text-teal-600' : 'text-slate-400'}`}
+        >
+          <Star size={20} />
+          <span className="text-[10px] font-bold">المتابعة</span>
+        </button>
+        <button 
+          onClick={() => setActiveTab('behavior')}
+          className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'behavior' ? 'text-amber-600' : 'text-slate-400'}`}
+        >
+          <Trophy size={20} />
+          <span className="text-[10px] font-bold">السلوك</span>
+        </button>
+        <div className="w-px h-8 bg-slate-100 mx-2" />
+        <button 
+          onClick={handleFinalSubmit}
+          className="bg-indigo-600 text-white p-3 rounded-2xl shadow-lg shadow-indigo-100 active:scale-95 transition-all"
+        >
+          <Save size={20} />
+        </button>
+      </div>
 
       {/* Task Creation Modal */}
       <AnimatePresence>
@@ -1279,12 +1684,12 @@ const SmartTracker: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Final Submit Button (Fixed at bottom) */}
-      <div className="fixed bottom-16 md:bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-slate-200 z-30 print:hidden">
+      {/* Final Submit Button (Fixed at bottom) - Desktop Only */}
+      <div className="hidden md:block fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-slate-200 z-30 print:hidden">
         <div className="max-w-5xl mx-auto flex justify-end gap-3">
           <button
             onClick={() => window.print()}
-            className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-semibold py-3 px-6 rounded-xl flex items-center gap-2 shadow-sm transition-colors hidden md:flex"
+            className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-semibold py-3 px-6 rounded-xl flex items-center gap-2 shadow-sm transition-colors"
           >
             <Printer size={18} />
             طباعة الكشف
@@ -1399,290 +1804,48 @@ const SmartTracker: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Mobile Grading Bottom Sheet */}
-      <AnimatePresence>
-        {mobileGradingStudentId !== null && (
-          <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 backdrop-blur-sm md:hidden" dir="rtl">
-            <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="w-full bg-white rounded-t-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
-            >
-              <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 sticky top-0 z-10">
-                <div className="flex items-center gap-3">
-                  <img 
-                    src={students.find(s => s.id === mobileGradingStudentId)?.avatar} 
-                    alt="Student" 
-                    className="w-10 h-10 rounded-full bg-slate-200" 
-                  />
-                  <div>
-                    <h3 className="font-bold text-slate-800">{students.find(s => s.id === mobileGradingStudentId)?.name}</h3>
-                    <p className="text-xs text-slate-500">رصد الدرجات - {
-                      { participation: 'المشاركة', homework: 'الواجبات', performance: 'المهام الأدائية', exams: 'اختبار الفترة' }[activeCategory]
-                    }</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => setMobileGradingStudentId(null)}
-                  className="p-2 text-slate-400 hover:text-slate-600 bg-white rounded-full shadow-sm"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-              
-              <div className="p-4 overflow-y-auto flex-1">
-                <div className="space-y-4">
-                  {tasks[activeCategory].map((task) => {
-                    const studentState = studentsState[mobileGradingStudentId];
-                    const val = studentState?.grades[task.id] ?? '';
-                    
-                    return (
-                      <div key={task.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                        <div className="flex justify-between items-center mb-3">
-                          <label className="font-bold text-slate-700 text-sm">{task.name}</label>
-                          <span className="text-xs font-bold text-teal-600 bg-teal-50 px-2 py-1 rounded-md">من {task.maxGrade}</span>
-                        </div>
-                        
-                        {task.type === 'number' ? (
-                          <div className="flex items-center gap-2">
-                            <button 
-                              onClick={() => {
-                                const current = Number(val) || 0;
-                                if (current > 0) handleGradeChange(mobileGradingStudentId, task.id, String(current - 1), task.maxGrade);
-                              }}
-                              className="w-12 h-12 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-600 font-bold text-xl shadow-sm active:bg-slate-100"
-                            >-</button>
-                            <input
-                              type="number"
-                              min="0"
-                              max={task.maxGrade}
-                              value={val}
-                              onChange={(e) => handleGradeChange(mobileGradingStudentId, task.id, e.target.value, task.maxGrade)}
-                              className="flex-1 h-12 text-center bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-600 focus:border-transparent outline-none text-xl font-black text-slate-800"
-                              placeholder="-"
-                            />
-                            <button 
-                              onClick={() => {
-                                const current = Number(val) || 0;
-                                if (current < task.maxGrade) handleGradeChange(mobileGradingStudentId, task.id, String(current + 1), task.maxGrade);
-                              }}
-                              className="w-12 h-12 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-600 font-bold text-xl shadow-sm active:bg-slate-100"
-                            >+</button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-center gap-2">
-                            <button
-                              onClick={() => handleGradeChange(mobileGradingStudentId, task.id, task.maxGrade, task.maxGrade)}
-                              className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all ${
-                                val === task.maxGrade 
-                                  ? 'bg-green-500 text-white shadow-sm ring-2 ring-green-200' 
-                                  : 'bg-white border border-slate-200 text-slate-400 hover:bg-green-50 hover:text-green-600'
-                              }`}
-                            >
-                              <div className="flex items-center justify-center gap-2">
-                                <Check size={16} />
-                                <span>نفذ</span>
-                              </div>
-                            </button>
-                            <button
-                              onClick={() => handleGradeChange(mobileGradingStudentId, task.id, 0, task.maxGrade)}
-                              className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all ${
-                                val === 0 
-                                  ? 'bg-red-500 text-white shadow-sm ring-2 ring-red-200' 
-                                  : 'bg-white border border-slate-200 text-slate-400 hover:bg-red-50 hover:text-red-600'
-                              }`}
-                            >
-                              <div className="flex items-center justify-center gap-2">
-                                <X size={16} />
-                                <span>لم ينفذ</span>
-                              </div>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {tasks[activeCategory].length === 0 && (
-                    <div className="text-center py-8 text-slate-400 text-sm">
-                      لا توجد مهام في هذا القسم. أضف مهام من جهاز الكمبيوتر.
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="p-4 border-t border-slate-100 bg-white sticky bottom-0 z-10">
-                <button
-                  onClick={() => {
-                    const currentIndex = students.findIndex(s => s.id === mobileGradingStudentId);
-                    if (currentIndex < students.length - 1) {
-                      setMobileGradingStudentId(students[currentIndex + 1].id);
-                    } else {
-                      setMobileGradingStudentId(null);
-                    }
-                  }}
-                  className="w-full py-4 rounded-2xl bg-teal-700 text-white font-bold text-lg shadow-lg active:bg-teal-800 transition-colors flex items-center justify-center gap-2"
-                >
-                  <Save size={20} />
-                  حفظ والتالي
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Mobile Filter Bottom Sheet */}
-      <AnimatePresence>
-        {isMobileFilterSheetOpen && (
-          <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 backdrop-blur-sm md:hidden" dir="rtl">
-            <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="w-full bg-white rounded-t-3xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]"
-            >
-              <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 sticky top-0 z-10">
-                <h3 className="font-bold text-slate-800">تصفية السجل</h3>
-                <button 
-                  onClick={() => setIsMobileFilterSheetOpen(false)}
-                  className="p-2 text-slate-400 hover:text-slate-600 bg-white rounded-full shadow-sm"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-              
-              <div className="p-4 overflow-y-auto flex-1 space-y-6">
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">المادة</label>
-                  <div className="flex flex-wrap gap-2">
-                    {availableSubjects.map(subj => (
-                      <button
-                        key={subj}
-                        onClick={() => setSubject(subj)}
-                        className={`px-4 py-2 rounded-xl text-sm font-bold transition-colors ${subject === subj ? 'bg-teal-600 text-white shadow-md' : 'bg-slate-100 text-slate-600'}`}
-                      >
-                        {subj}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">الصف</label>
-                  <div className="flex flex-wrap gap-2">
-                    {['الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس'].map(g => (
-                      <button
-                        key={g}
-                        onClick={() => setGrade(g)}
-                        className={`px-4 py-2 rounded-xl text-sm font-bold transition-colors ${grade === g ? 'bg-teal-600 text-white shadow-md' : 'bg-slate-100 text-slate-600'}`}
-                      >
-                        {g}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">الفصل</label>
-                  <div className="flex flex-wrap gap-2">
-                    {['أ', 'ب', 'ج', 'د'].map(sec => (
-                      <button
-                        key={sec}
-                        onClick={() => setSection(sec)}
-                        className={`px-4 py-2 rounded-xl text-sm font-bold transition-colors ${section === sec ? 'bg-teal-600 text-white shadow-md' : 'bg-slate-100 text-slate-600'}`}
-                      >
-                        {sec}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-4 border-t border-slate-100 bg-white sticky bottom-0 z-10">
-                <button
-                  onClick={() => setIsMobileFilterSheetOpen(false)}
-                  className="w-full py-4 rounded-2xl bg-slate-800 text-white font-bold text-lg shadow-lg active:bg-slate-900 transition-colors"
-                >
-                  تطبيق
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Mobile Bottom Navigation */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 pb-safe z-40 shadow-[0_-5px_15px_rgba(0,0,0,0.05)]">
-        <div className="flex justify-around items-center h-16 px-2">
-          <button
-            onClick={() => setActiveTab('attendance')}
-            className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition-colors ${activeTab === 'attendance' ? 'text-teal-600' : 'text-slate-400'}`}
-          >
-            <Users size={24} className={activeTab === 'attendance' ? 'fill-teal-100' : ''} />
-            <span className="text-[10px] font-bold">التحضير</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('grades')}
-            className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition-colors ${activeTab === 'grades' ? 'text-teal-600' : 'text-slate-400'}`}
-          >
-            <GraduationCap size={24} className={activeTab === 'grades' ? 'fill-teal-100' : ''} />
-            <span className="text-[10px] font-bold">الدرجات</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('behavior')}
-            className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition-colors ${activeTab === 'behavior' ? 'text-teal-600' : 'text-slate-400'}`}
-          >
-            <Star size={24} className={activeTab === 'behavior' ? 'fill-teal-100' : ''} />
-            <span className="text-[10px] font-bold">السلوك</span>
-          </button>
-        </div>
-      </div>
-
       {/* Confirmation Modal */}
       <AnimatePresence>
         {confirmModalState !== 'idle' && (
-          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm print:hidden" dir="rtl">
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm print:hidden" dir="rtl">
             <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
               className="max-w-md w-full bg-white rounded-2xl shadow-2xl overflow-hidden p-6 text-center"
             >
               {confirmModalState === 'confirm' ? (
                 <>
-                  <div className="w-16 h-16 bg-amber-100 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4">
                     <AlertTriangle size={32} />
                   </div>
-                  <h3 className="text-xl font-bold text-slate-800 mb-2">اعتماد السجل</h3>
-                  <p className="text-slate-500 mb-6">هل أنت متأكد من اعتماد كشف الحصة وإرساله للسجل الشامل؟ لا يمكن التراجع عن هذا الإجراء بسهولة.</p>
-                  <div className="flex justify-center gap-3">
+                  <h3 className="text-xl font-bold text-slate-800 mb-2">تأكيد الحفظ</h3>
+                  <p className="text-slate-600 mb-6">هل أنت متأكد من رغبتك في اعتماد وحفظ سجل المتابعة لهذا اليوم؟</p>
+                  <div className="flex gap-3">
                     <button
                       onClick={() => setConfirmModalState('idle')}
-                      className="px-6 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+                      className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors"
                     >
-                      إلغاء
+                      تراجع
                     </button>
                     <button
                       onClick={confirmSubmit}
-                      className="px-6 py-2.5 rounded-xl text-sm font-bold text-white bg-emerald-500 hover:bg-emerald-600 shadow-sm transition-colors"
+                      className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100"
                     >
-                      تأكيد الاعتماد
+                      تأكيد وحفظ
                     </button>
                   </div>
                 </>
               ) : (
                 <>
-                  <div className="w-16 h-16 bg-emerald-100 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
                     <CheckCircle2 size={32} />
                   </div>
-                  <h3 className="text-xl font-bold text-slate-800 mb-2">تم الاعتماد بنجاح!</h3>
-                  <p className="text-slate-500 mb-6">تم حفظ كشف الحصة وإرساله للسجل الشامل.</p>
+                  <h3 className="text-xl font-bold text-slate-800 mb-2">تم الحفظ بنجاح</h3>
+                  <p className="text-slate-600 mb-6">تم اعتماد سجل المتابعة وحفظه في النظام.</p>
                   <button
                     onClick={() => setConfirmModalState('idle')}
-                    className="px-8 py-2.5 rounded-xl text-sm font-bold text-white bg-slate-800 hover:bg-slate-900 shadow-sm transition-colors"
+                    className="w-full py-3 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-900 transition-colors"
                   >
                     إغلاق
                   </button>
