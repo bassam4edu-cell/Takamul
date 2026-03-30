@@ -39,31 +39,25 @@ export const PrintableTracker: React.FC<PrintableTrackerProps> = ({ students, st
 
       {/* Header */}
       <div className="hidden print:flex print:w-full print:justify-between print:items-start print:border-b-2 print:border-black print:pb-4 print:mb-6">
-        {/* اليمين - الكليشة الرسمية */}
-        <div className="flex flex-col text-sm font-bold leading-relaxed text-right text-black">
+        {/* اليمين */}
+        <div className="flex flex-col text-[11px] font-bold leading-relaxed text-right text-black">
           <span>المملكة العربية السعودية</span>
           <span>وزارة التعليم</span>
           <span>الإدارة العامة للتعليم بمنطقة الرياض</span>
           <span>ثانوية أم القرى بالخرج</span>
         </div>
 
-        {/* المنتصف - عنوان الكشف */}
-        <div className="flex flex-col items-center text-center">
-          <h2 className="text-2xl font-black text-black mb-2">كشف المتابعة الذكي</h2>
-          <div className="flex gap-4 text-sm font-bold text-black bg-gray-100 px-4 py-2 rounded-lg print:bg-transparent print:border print:border-black">
-            <span>المادة: {subject}</span>
-            <span>|</span>
-            <span>الصف: {grade}</span>
-            <span>|</span>
-            <span>الفصل: {section}</span>
-          </div>
+        {/* المنتصف */}
+        <div className="flex flex-col justify-center items-center mt-2 text-black">
+          <h2 className="text-xl font-bold">كشف درجات الطلاب التفصيلي</h2>
         </div>
 
-        {/* اليسار - معلومات المعلم والزمن */}
-        <div className="flex flex-col text-sm font-bold leading-relaxed text-left text-black">
-          <span>المعلم: {teacherName}</span>
-          <span>التاريخ: {new Date().toLocaleDateString('ar-SA')}</span>
-          <span>العام الدراسي: 1446 هـ</span>
+        {/* اليسار */}
+        <div className="flex flex-col text-[11px] leading-relaxed text-right border-r-2 border-gray-400 pr-4 text-black gap-1">
+          <span><span className="font-bold">المادة:</span> {subject}</span>
+          <span><span className="font-bold">الصف:</span> {grade}</span>
+          <span><span className="font-bold">الفصل:</span> {section}</span>
+          <span><span className="font-bold">المعلم:</span> {teacherName}</span>
         </div>
       </div>
 

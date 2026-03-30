@@ -887,8 +887,9 @@ const VPRadar: React.FC = () => {
           }
 
           .print-table { border-collapse: collapse; width: 100%; border: 1px solid #000; }
-          .print-table th, .print-table td { border: 1px solid #000; padding: 4px 8px; text-align: right; color: #000; }
+          .print-table th, .print-table td { border: 1px solid #000; padding: 2px 4px; text-align: right; color: #000; }
           .print-table th { background-color: #f3f4f6 !important; }
+          .print-table tr { page-break-inside: avoid; }
           .print-table tr:nth-child(even) { background-color: #f9fafb !important; }
           .print-table tr:nth-child(odd) { background-color: #ffffff !important; }
           .print\\:hidden { display: none !important; }
@@ -976,63 +977,54 @@ const VPRadar: React.FC = () => {
             </div>
           </div>
         ) : (
-          <div className="p-4" dir="rtl">
-            <div className="flex justify-between items-start border-b-2 border-black pb-4 mb-8">
+          <div className="p-2" dir="rtl">
+            <div className="flex justify-between items-start border-b-2 border-black pb-2 mb-4">
               <div className="text-right space-y-1">
-                <p className="text-sm font-black">المملكة العربية السعودية</p>
-                <p className="text-sm font-black">وزارة التعليم</p>
-                <p className="text-sm font-black">الإدارة العامة للتعليم بمنطقة الرياض</p>
-                <p className="text-sm font-black">مدرسة ثانوية أم القرى</p>
+                <p className="text-xs font-black">المملكة العربية السعودية</p>
+                <p className="text-xs font-black">وزارة التعليم</p>
+                <p className="text-xs font-black">الإدارة العامة للتعليم بمنطقة الرياض</p>
+                <p className="text-xs font-black">مدرسة ثانوية أم القرى</p>
               </div>
-              <div className="text-center">
-                <img src="https://upload.wikimedia.org/wikipedia/ar/thumb/a/a3/Ministry_of_Education_%28Saudi_Arabia%29_Logo.svg/1200px-Ministry_of_Education_%28Saudi_Arabia%29_Logo.svg.png" alt="شعار الوزارة" className="w-20 h-auto mx-auto grayscale opacity-80" />
-              </div>
-              <div className="text-right space-y-1 text-sm font-bold">
+              <div className="text-right space-y-1 text-xs font-bold">
                 <p>الرقم: {Math.floor(Math.random() * 10000)}</p>
-                <p>التاريخ: {date}</p>
+                <p>التاريخ: {formatHijriDate(date)}</p>
                 <p>المرفقات: ....................</p>
               </div>
             </div>
 
-            <h1 className="text-xl font-black text-center mb-8 underline underline-offset-8">
+            <h1 className="text-lg font-black text-center mb-4 underline underline-offset-4">
               {selectedReportType === 'daily' ? 'تقرير الغياب اليومي' :
                selectedReportType === 'warnings_3' ? 'تقرير إنذارات الغياب (3 أيام فأكثر)' :
                'تقرير إنذارات الغياب (5 أيام فأكثر)'}
             </h1>
 
-            <table className="print-table mb-12">
+            <table className="print-table mb-6 w-full text-sm">
               <thead>
                 <tr>
-                  <th className="w-[5%] text-center">م</th>
-                  <th className="w-[40%] whitespace-nowrap">اسم الطالب الرباعي</th>
-                  <th className="w-[20%] text-center whitespace-nowrap">الصف والفصل</th>
-                  <th className="w-[10%] text-center">الغياب</th>
-                  <th className="w-[25%]">ملاحظات</th>
+                  <th className="w-[5%] text-center py-1">م</th>
+                  <th className="w-[40%] whitespace-nowrap py-1">اسم الطالب الرباعي</th>
+                  <th className="w-[20%] text-center whitespace-nowrap py-1">الصف والفصل</th>
+                  <th className="w-[10%] text-center py-1">الغياب</th>
+                  <th className="w-[25%] py-1">ملاحظات</th>
                 </tr>
               </thead>
               <tbody>
                 {getReportStudents().map((student, index) => (
-                  <tr key={student.id}>
-                    <td className="text-center py-1 px-2">{index + 1}</td>
-                    <td className="font-bold whitespace-nowrap py-1 px-2">{student.name}</td>
-                    <td className="text-center whitespace-nowrap py-1 px-2">{student.grade} - {student.section}</td>
-                    <td className="text-center font-bold py-1 px-2">{student.total_absences || 0}</td>
-                    <td className="py-1 px-2"></td>
+                  <tr key={student.id} className="break-inside-avoid">
+                    <td className="text-center py-0.5 px-1">{index + 1}</td>
+                    <td className="font-bold whitespace-nowrap py-0.5 px-1">{student.name}</td>
+                    <td className="text-center whitespace-nowrap py-0.5 px-1">{student.grade} - {student.section}</td>
+                    <td className="text-center font-bold py-0.5 px-1">{student.total_absences || 0}</td>
+                    <td className="py-0.5 px-1"></td>
                   </tr>
                 ))}
               </tbody>
             </table>
 
-            <div className="mt-16 print-grid grid-cols-2 gap-8 text-center page-break-inside-avoid">
-              <div className="space-y-8">
-                <p className="print-label">وكيل شؤون الطلاب</p>
-                <div className="h-px bg-black w-3/4 mx-auto"></div>
-                <p className="text-sm font-bold">الاسم: {user?.name || 'غير محدد'}</p>
-              </div>
-              <div className="space-y-8">
-                <p className="print-label">مدير المدرسة</p>
-                <div className="h-px bg-black w-3/4 mx-auto"></div>
-                <p className="text-sm font-bold">الاسم: {principalName}</p>
+            <div className="mt-8 flex justify-end pl-12 page-break-inside-avoid">
+              <div className="text-center space-y-2">
+                <p className="font-bold text-sm">وكيل شؤون الطلاب</p>
+                <p className="text-sm font-bold">{user?.name || 'غير محدد'}</p>
               </div>
             </div>
           </div>
@@ -1393,161 +1385,167 @@ const VPRadar: React.FC = () => {
             </div>
           </AnimatePresence>
 
-          {/* Enhanced Student Cards View (Hidden on Print) */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 print:hidden">
-            {filteredStudents.map((student) => {
-              const absCount = student.total_absences || 0;
-              const isAbsent = getStudentStatus(student.id) === 'غائب';
-              
-              return (
-                <motion.div 
-                  key={student.id}
-                  layout
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ duration: 0.2 }}
-                  className={`bg-white p-5 rounded-3xl border transition-all shadow-sm flex flex-col sm:flex-row gap-4 items-center ${
-                    getStudentStatus(student.id) === 'حاضر' ? 'border-emerald-200 bg-emerald-50/10' :
-                    getStudentStatus(student.id) === 'غائب' ? 'border-rose-200 bg-rose-50/10' :
-                    'border-amber-200 bg-amber-50/10'
-                  }`}
-                >
-                  {/* Right: Info */}
-                  <div className="flex-1 w-full text-right">
-                    <span className="font-black text-slate-800 text-lg block mb-1">{student.name}</span>
-                    <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-lg inline-block">
-                      {student.grade} - {student.section}
-                    </span>
-                  </div>
+          {/* Enhanced Student Table View (Hidden on Print) */}
+          <div className="overflow-x-auto w-full bg-white rounded-xl shadow-sm border border-gray-100 print:hidden">
+            <table className="w-full text-right">
+              <thead className="sticky top-0 bg-white z-10 shadow-sm border-b border-gray-200">
+                <tr>
+                  <th className="px-6 py-4 text-sm font-bold text-gray-700">الطالب</th>
+                  <th className="px-6 py-4 text-sm font-bold text-gray-700">حالة التحضير</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredStudents.map((student) => {
+                  const absCount = student.total_absences || 0;
+                  const isAbsent = getStudentStatus(student.id) === 'غائب';
+                  
+                  return (
+                    <tr 
+                      key={student.id}
+                      className="border-b border-gray-50 hover:bg-gray-50 transition-colors"
+                    >
+                      {/* الخلية الأولى */}
+                      <td className="px-6 py-4">
+                        <span className="font-black text-slate-800 text-lg block mb-1">{student.name}</span>
+                        <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-lg inline-block">
+                          {student.grade} - {student.section}
+                        </span>
+                      </td>
 
-                  {/* Center: Toggles & Badges */}
-                  <div className="flex-[2] w-full flex flex-col gap-3">
-                    <div className="flex gap-2 w-full">
-                      <button
-                        onClick={() => handleStatusChange(student.id, 'حاضر')}
-                        className={`flex-1 min-h-[44px] rounded-xl text-sm font-bold flex items-center justify-center gap-1 transition-all ${
-                          getStudentStatus(student.id) === 'حاضر'
-                            ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-                            : 'bg-slate-50 text-slate-400 border border-slate-100 hover:bg-slate-100'
-                        }`}
-                      >
-                        <CheckCircle2 size={16} />
-                        حاضر
-                      </button>
-                      <button
-                        onClick={() => handleStatusChange(student.id, 'غائب')}
-                        className={`flex-1 min-h-[44px] rounded-xl text-sm font-bold flex items-center justify-center gap-1 transition-all ${
-                          getStudentStatus(student.id) === 'غائب'
-                            ? 'bg-rose-100 text-rose-700 border border-rose-200'
-                            : 'bg-slate-50 text-slate-400 border border-slate-100 hover:bg-slate-100'
-                        }`}
-                      >
-                        <XCircle size={16} />
-                        غائب
-                      </button>
-                      <button
-                        onClick={() => handleStatusChange(student.id, 'متأخر')}
-                        className={`flex-1 min-h-[44px] rounded-xl text-sm font-bold flex items-center justify-center gap-1 transition-all ${
-                          getStudentStatus(student.id) === 'متأخر'
-                            ? 'bg-amber-100 text-amber-700 border border-amber-200'
-                            : 'bg-slate-50 text-slate-400 border border-slate-100 hover:bg-slate-100'
-                        }`}
-                      >
-                        <Clock size={16} />
-                        متأخر
-                      </button>
-                    </div>
-                    
-                    {/* Smart Badges */}
-                    {isAbsent && absCount > 3 && (
-                      <button 
-                        onClick={() => handleStudentPrint(student, absCount > 5 ? 'warnings_5' : 'warnings_3')}
-                        className={`w-full py-2 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all hover:opacity-90 ${
-                          absCount > 5 
-                            ? 'bg-red-100 text-red-700 border border-red-200' 
-                            : 'bg-orange-100 text-orange-700 border border-orange-200'
-                        }`}
-                      >
-                        <AlertTriangle size={14} />
-                        {absCount > 5 ? ' تعهد واستدعاء: 5 أيام' : '️ إنذار أول: 3 أيام'}
-                      </button>
-                    )}
-
-                    {/* Excuse Status & Reason */}
-                    <AnimatePresence>
-                      {isAbsent && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="w-full flex flex-col gap-2 overflow-hidden"
-                        >
-                          <button
-                            onClick={() => handleExcuseChange(student.id, !getStudentExcuseStatus(student.id))}
-                            className={`w-full py-2 px-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${
-                              getStudentExcuseStatus(student.id)
-                                ? 'bg-green-100 text-green-700 border border-green-200'
-                                : 'bg-red-100 text-red-700 border border-red-200'
-                            }`}
-                          >
-                            {getStudentExcuseStatus(student.id) ? ' غياب بعذر' : ' غياب بدون عذر'}
-                          </button>
-                          
-                          <AnimatePresence>
-                            {getStudentExcuseStatus(student.id) && (
-                              <motion.div
-                                initial={{ opacity: 0, height: 0 }}
-                                animate={{ opacity: 1, height: 'auto' }}
-                                exit={{ opacity: 0, height: 0 }}
-                                className="w-full overflow-hidden"
+                      {/* الخلية الثانية */}
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                          {/* Center: Toggles & Badges */}
+                          <div className="flex-[2] w-full flex flex-col gap-3">
+                            <div className="flex gap-2 w-full">
+                              <button
+                                onClick={() => handleStatusChange(student.id, 'حاضر')}
+                                className={`flex-1 min-h-[44px] rounded-xl text-sm font-bold flex items-center justify-center gap-1 transition-all ${
+                                  getStudentStatus(student.id) === 'حاضر'
+                                    ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                                    : 'bg-slate-50 text-slate-400 border border-slate-100 hover:bg-slate-100'
+                                }`}
                               >
-                                <input
-                                  type="text"
-                                  placeholder="اكتب سبب العذر (مثال: تقرير طبي، مراجعة مستشفى)..."
-                                  value={getStudentExcuseReason(student.id)}
-                                  onChange={(e) => handleExcuseReasonChange(student.id, e.target.value)}
-                                  className="w-full bg-white border border-slate-200 rounded-xl p-3 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-green-500/20 outline-none transition-all"
-                                />
-                              </motion.div>
+                                <CheckCircle2 size={16} />
+                                حاضر
+                              </button>
+                              <button
+                                onClick={() => handleStatusChange(student.id, 'غائب')}
+                                className={`flex-1 min-h-[44px] rounded-xl text-sm font-bold flex items-center justify-center gap-1 transition-all ${
+                                  getStudentStatus(student.id) === 'غائب'
+                                    ? 'bg-rose-100 text-rose-700 border border-rose-200'
+                                    : 'bg-slate-50 text-slate-400 border border-slate-100 hover:bg-slate-100'
+                                }`}
+                              >
+                                <XCircle size={16} />
+                                غائب
+                              </button>
+                              <button
+                                onClick={() => handleStatusChange(student.id, 'متأخر')}
+                                className={`flex-1 min-h-[44px] rounded-xl text-sm font-bold flex items-center justify-center gap-1 transition-all ${
+                                  getStudentStatus(student.id) === 'متأخر'
+                                    ? 'bg-amber-100 text-amber-700 border border-amber-200'
+                                    : 'bg-slate-50 text-slate-400 border border-slate-100 hover:bg-slate-100'
+                                }`}
+                              >
+                                <Clock size={16} />
+                                متأخر
+                              </button>
+                            </div>
+                            
+                            {/* Smart Badges */}
+                            {isAbsent && absCount > 3 && (
+                              <button 
+                                onClick={() => handleStudentPrint(student, absCount > 5 ? 'warnings_5' : 'warnings_3')}
+                                className={`w-full py-2 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all hover:opacity-90 ${
+                                  absCount > 5 
+                                    ? 'bg-red-100 text-red-700 border border-red-200' 
+                                    : 'bg-orange-100 text-orange-700 border border-orange-200'
+                                }`}
+                              >
+                                <AlertTriangle size={14} />
+                                {absCount > 5 ? ' تعهد واستدعاء: 5 أيام' : '️ إنذار أول: 3 أيام'}
+                              </button>
                             )}
-                          </AnimatePresence>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
 
-                  {/* Left: Quick Actions */}
-                  <div className="flex sm:flex-col gap-2 w-full sm:w-auto shrink-0">
-                    {isAbsent && (
-                      <button
-                        onClick={() => handleSendWhatsApp(student)}
-                        disabled={!student.parent_phone || student.parent_phone.trim() === ''}
-                        className={`flex-1 sm:flex-none w-full sm:w-auto px-4 h-12 rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm font-bold text-sm ${
-                          (!student.parent_phone || student.parent_phone.trim() === '') 
-                            ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed' 
-                            : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200'
-                        }`}
-                        title={(!student.parent_phone || student.parent_phone.trim() === '') ? '️ رقم الجوال غير مسجل' : 'إرسال واتساب لولي الأمر'}
-                      >
-                        <MessageSquare size={18} />
-                        إرسال واتساب 
-                      </button>
-                    )}
-                    {isAbsent && absCount > 3 && (
-                      <button
-                        onClick={() => handleStudentPrint(student, 'excused_form')}
-                        className="flex-1 sm:flex-none w-full sm:w-auto px-4 h-12 rounded-xl bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200 flex items-center justify-center gap-2 transition-all shadow-sm font-bold text-sm"
-                        title="طباعة إنذار الغياب"
-                      >
-                        <Printer size={18} />
-                        طباعة
-                      </button>
-                    )}
-                  </div>
-                </motion.div>
-              );
-            })}
+                            {/* Excuse Status & Reason */}
+                            <AnimatePresence>
+                              {isAbsent && (
+                                <motion.div
+                                  initial={{ opacity: 0, height: 0 }}
+                                  animate={{ opacity: 1, height: 'auto' }}
+                                  exit={{ opacity: 0, height: 0 }}
+                                  className="w-full flex flex-col gap-2 overflow-hidden"
+                                >
+                                  <button
+                                    onClick={() => handleExcuseChange(student.id, !getStudentExcuseStatus(student.id))}
+                                    className={`w-full py-2 px-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${
+                                      getStudentExcuseStatus(student.id)
+                                        ? 'bg-green-100 text-green-700 border border-green-200'
+                                        : 'bg-red-100 text-red-700 border border-red-200'
+                                    }`}
+                                  >
+                                    {getStudentExcuseStatus(student.id) ? ' غياب بعذر' : ' غياب بدون عذر'}
+                                  </button>
+                                  
+                                  <AnimatePresence>
+                                    {getStudentExcuseStatus(student.id) && (
+                                      <motion.div
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        className="w-full overflow-hidden"
+                                      >
+                                        <input
+                                          type="text"
+                                          placeholder="اكتب سبب العذر (مثال: تقرير طبي، مراجعة مستشفى)..."
+                                          value={getStudentExcuseReason(student.id)}
+                                          onChange={(e) => handleExcuseReasonChange(student.id, e.target.value)}
+                                          className="w-full bg-white border border-slate-200 rounded-xl p-3 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-green-500/20 outline-none transition-all"
+                                        />
+                                      </motion.div>
+                                    )}
+                                  </AnimatePresence>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
+
+                          {/* Left: Quick Actions */}
+                          <div className="flex sm:flex-col gap-2 w-full sm:w-auto shrink-0">
+                            {isAbsent && (
+                              <button
+                                onClick={() => handleSendWhatsApp(student)}
+                                disabled={!student.parent_phone || student.parent_phone.trim() === ''}
+                                className={`flex-1 sm:flex-none w-full sm:w-auto px-4 h-12 rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm font-bold text-sm ${
+                                  (!student.parent_phone || student.parent_phone.trim() === '') 
+                                    ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed' 
+                                    : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200'
+                                }`}
+                                title={(!student.parent_phone || student.parent_phone.trim() === '') ? '️ رقم الجوال غير مسجل' : 'إرسال واتساب لولي الأمر'}
+                              >
+                                <MessageSquare size={18} />
+                                إرسال واتساب 
+                              </button>
+                            )}
+                            {isAbsent && absCount > 3 && (
+                              <button
+                                onClick={() => handleStudentPrint(student, 'excused_form')}
+                                className="flex-1 sm:flex-none w-full sm:w-auto px-4 h-12 rounded-xl bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200 flex items-center justify-center gap-2 transition-all shadow-sm font-bold text-sm"
+                                title="طباعة إنذار الغياب"
+                              >
+                                <Printer size={18} />
+                                طباعة
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </>
       ) : (

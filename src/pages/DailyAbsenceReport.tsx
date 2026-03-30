@@ -254,17 +254,14 @@ const DailyAbsenceReport: React.FC = React.memo(() => {
       <div className="max-w-4xl mx-auto bg-white p-8 md:p-12 shadow-sm border border-slate-200 rounded-2xl print:shadow-none print:border-none print:p-0 print-report font-sans" dir="rtl">
         
         {/* Print Header (الكليشة) */}
-        <div className="hidden print:flex justify-between items-start border-b-2 border-black pb-4 mb-8">
+        <div className="hidden print:flex justify-between items-start border-b-2 border-black pb-2 mb-4">
           <div className="text-right space-y-1">
-            <p className="text-sm font-black">المملكة العربية السعودية</p>
-            <p className="text-sm font-black">وزارة التعليم</p>
-            <p className="text-sm font-black">الإدارة العامة للتعليم بمنطقة الرياض</p>
-            <p className="text-sm font-black">مدرسة ثانوية أم القرى</p>
+            <p className="text-xs font-black">المملكة العربية السعودية</p>
+            <p className="text-xs font-black">وزارة التعليم</p>
+            <p className="text-xs font-black">الإدارة العامة للتعليم بمنطقة الرياض</p>
+            <p className="text-xs font-black">مدرسة ثانوية أم القرى</p>
           </div>
-          <div className="text-center">
-            <img src="https://upload.wikimedia.org/wikipedia/ar/thumb/a/a3/Ministry_of_Education_%28Saudi_Arabia%29_Logo.svg/1200px-Ministry_of_Education_%28Saudi_Arabia%29_Logo.svg.png" alt="شعار الوزارة" className="w-20 h-auto mx-auto grayscale opacity-80" />
-          </div>
-          <div className="text-right space-y-1 text-sm font-bold">
+          <div className="text-right space-y-1 text-xs font-bold">
             <p>الرقم: {reportNumber}</p>
             <p>التاريخ: {dateStr}</p>
             <p>المرفقات: ....................</p>
@@ -433,33 +430,33 @@ const DailyAbsenceReport: React.FC = React.memo(() => {
         <table className="hidden print:table w-full border-collapse border border-black text-sm text-black">
           <thead>
             <tr>
-              <th className="border border-black p-2 text-center w-12 font-bold">م</th>
-              <th className="border border-black p-2 text-right font-bold">اسم الطالب</th>
-              <th className="border border-black p-2 text-center font-bold">الصف</th>
-              <th className="border border-black p-2 text-center font-bold">الفصل</th>
-              <th className="border border-black p-2 text-center font-bold">الحصة</th>
-              <th className="border border-black p-2 text-center font-bold">حالة الحضور</th>
-              <th className="border border-black p-2 text-right font-bold w-48">ملاحظات الوكيل</th>
+              <th className="border border-black p-1 text-center w-12 font-bold">م</th>
+              <th className="border border-black p-1 text-right font-bold">اسم الطالب</th>
+              <th className="border border-black p-1 text-center font-bold">الصف</th>
+              <th className="border border-black p-1 text-center font-bold">الفصل</th>
+              <th className="border border-black p-1 text-center font-bold">الحصة</th>
+              <th className="border border-black p-1 text-center font-bold">حالة الحضور</th>
+              <th className="border border-black p-1 text-right font-bold w-48">ملاحظات الوكيل</th>
             </tr>
           </thead>
           <tbody>
             {data.length > 0 ? (
               data.map((row, idx) => (
                 <tr key={idx} className="break-inside-avoid">
-                  <td className="border border-black p-2 text-center">{idx + 1}</td>
-                  <td className="border border-black p-2 font-bold">{row.student_name}</td>
-                  <td className="border border-black p-2 text-center">{row.grade}</td>
-                  <td className="border border-black p-2 text-center">{row.section}</td>
-                  <td className="border border-black p-2 text-center font-bold">{row.period || '-'}</td>
-                  <td className="border border-black p-2 text-center font-bold">
+                  <td className="border border-black p-1 text-center">{idx + 1}</td>
+                  <td className="border border-black p-1 font-bold">{row.student_name}</td>
+                  <td className="border border-black p-1 text-center">{row.grade}</td>
+                  <td className="border border-black p-1 text-center">{row.section}</td>
+                  <td className="border border-black p-1 text-center font-bold">{row.period || '-'}</td>
+                  <td className="border border-black p-1 text-center font-bold">
                     {row.status}
                   </td>
-                  <td className="border border-black p-2"></td>
+                  <td className="border border-black p-1"></td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={6} className="border border-black p-4 text-center font-bold">
+                <td colSpan={7} className="border border-black p-2 text-center font-bold">
                   لا يوجد غياب أو تأخر مسجل لهذا اليوم
                 </td>
               </tr>
@@ -468,16 +465,10 @@ const DailyAbsenceReport: React.FC = React.memo(() => {
         </table>
 
         {/* Print Footer (التوقيعات الديناميكية) */}
-        <div className="hidden print:grid mt-16 print-grid grid-cols-2 gap-8 text-center page-break-inside-avoid">
-          <div className="space-y-8">
-            <p className="print-label">وكيل شؤون الطلاب</p>
-            <div className="h-px bg-black w-3/4 mx-auto"></div>
-            <p className="text-sm font-bold">الاسم: {user?.name || 'غير محدد'}</p>
-          </div>
-          <div className="space-y-8">
-            <p className="print-label">مدير المدرسة</p>
-            <div className="h-px bg-black w-3/4 mx-auto"></div>
-            <p className="text-sm font-bold">الاسم: {principalName}</p>
+        <div className="hidden print:flex justify-end mt-8 pl-12 page-break-inside-avoid">
+          <div className="text-center space-y-2">
+            <p className="font-bold text-sm">وكيل شؤون الطلاب</p>
+            <p className="text-sm font-bold">{user?.name || 'غير محدد'}</p>
           </div>
         </div>
 
