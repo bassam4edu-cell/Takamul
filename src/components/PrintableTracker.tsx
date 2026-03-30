@@ -1,6 +1,7 @@
 import React from 'react';
 import { Student, StudentState, TaskCategory, Task } from '../pages/SmartTracker';
 import { useSchoolSettings } from '../context/SchoolContext';
+import { formatHijriDate, formatShortHijriDate } from '../utils/dateUtils';
 
 interface PrintableTrackerProps {
   students: Student[];
@@ -37,29 +38,33 @@ export const PrintableTracker: React.FC<PrintableTrackerProps> = ({ students, st
       </style>
 
       {/* Header */}
-      <div className="flex justify-between items-start mb-2 border-b-2 border-black pb-1">
-        <div className="text-[10px] font-bold leading-relaxed text-black">
-          <p>المملكة العربية السعودية</p>
-          <p>وزارة التعليم</p>
-          <p>{settings.schoolName ? `مدرسة ${settings.schoolName}` : 'مدرسة ....................'}</p>
+      <div className="hidden print:flex print:w-full print:justify-between print:items-start print:border-b-2 print:border-black print:pb-4 print:mb-6">
+        {/* اليمين - الكليشة الرسمية */}
+        <div className="flex flex-col text-sm font-bold leading-relaxed text-right text-black">
+          <span>المملكة العربية السعودية</span>
+          <span>وزارة التعليم</span>
+          <span>الإدارة العامة للتعليم بمنطقة الرياض</span>
+          <span>ثانوية أم القرى بالخرج</span>
         </div>
 
-        <div className="flex flex-col items-center justify-center">
-          <div className="border-2 border-black text-black px-4 py-0.5 rounded-full font-bold text-base shadow-sm">
-            كشف درجات الطلاب التفصيلي
+        {/* المنتصف - عنوان الكشف */}
+        <div className="flex flex-col items-center text-center">
+          <h2 className="text-2xl font-black text-black mb-2">كشف المتابعة الذكي</h2>
+          <div className="flex gap-4 text-sm font-bold text-black bg-gray-100 px-4 py-2 rounded-lg print:bg-transparent print:border print:border-black">
+            <span>المادة: {subject}</span>
+            <span>|</span>
+            <span>الصف: {grade}</span>
+            <span>|</span>
+            <span>الفصل: {section}</span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Logos removed as requested */}
+        {/* اليسار - معلومات المعلم والزمن */}
+        <div className="flex flex-col text-sm font-bold leading-relaxed text-left text-black">
+          <span>المعلم: {teacherName}</span>
+          <span>التاريخ: {new Date().toLocaleDateString('ar-SA')}</span>
+          <span>العام الدراسي: 1446 هـ</span>
         </div>
-      </div>
-
-      {/* Meta-info Bar */}
-      <div className="flex justify-between border-2 border-black text-black px-2 py-1 text-[10px] font-bold mb-2 rounded-lg">
-        <div>المادة: {subject || '....................'}</div>
-        <div>الصف: {grade || '....................'} - الفصل: {section || '....................'}</div>
-        <div>المعلم: {teacherName || '....................'}</div>
       </div>
 
       {/* Master Table */}
@@ -88,25 +93,37 @@ export const PrintableTracker: React.FC<PrintableTrackerProps> = ({ students, st
             {tasks.participation?.map(t => (
               <th key={t.id} className="border border-black p-0.5 font-normal w-6" title={t.name}>
                 <div className="truncate max-w-[30px] mx-auto">{t.name}</div>
-                <div className="text-[6px] text-gray-600 mt-0.5">({t.maxGrade})</div>
+                <div className="flex flex-col items-center gap-0">
+                  <div className="text-[6px] text-gray-600 mt-0.5">({t.maxGrade})</div>
+                  {t.date && <div className="text-[5px] text-gray-500">{formatShortHijriDate(t.date)}</div>}
+                </div>
               </th>
             ))}
             {tasks.homework?.map(t => (
               <th key={t.id} className="border border-black p-0.5 font-normal w-6" title={t.name}>
                 <div className="truncate max-w-[30px] mx-auto">{t.name}</div>
-                <div className="text-[6px] text-gray-600 mt-0.5">({t.maxGrade})</div>
+                <div className="flex flex-col items-center gap-0">
+                  <div className="text-[6px] text-gray-600 mt-0.5">({t.maxGrade})</div>
+                  {t.date && <div className="text-[5px] text-gray-500">{formatShortHijriDate(t.date)}</div>}
+                </div>
               </th>
             ))}
             {tasks.performance?.map(t => (
               <th key={t.id} className="border border-black p-0.5 font-normal w-6" title={t.name}>
                 <div className="truncate max-w-[30px] mx-auto">{t.name}</div>
-                <div className="text-[6px] text-gray-600 mt-0.5">({t.maxGrade})</div>
+                <div className="flex flex-col items-center gap-0">
+                  <div className="text-[6px] text-gray-600 mt-0.5">({t.maxGrade})</div>
+                  {t.date && <div className="text-[5px] text-gray-500">{formatShortHijriDate(t.date)}</div>}
+                </div>
               </th>
             ))}
             {tasks.exams?.map(t => (
               <th key={t.id} className="border border-black p-0.5 font-normal w-6" title={t.name}>
                 <div className="truncate max-w-[30px] mx-auto">{t.name}</div>
-                <div className="text-[6px] text-gray-600 mt-0.5">({t.maxGrade})</div>
+                <div className="flex flex-col items-center gap-0">
+                  <div className="text-[6px] text-gray-600 mt-0.5">({t.maxGrade})</div>
+                  {t.date && <div className="text-[5px] text-gray-500">{formatShortHijriDate(t.date)}</div>}
+                </div>
               </th>
             ))}
           </tr>

@@ -11,6 +11,18 @@ export const formatHijriDate = (dateInput: string | Date | undefined | null): st
   }).format(date);
 };
 
+export const formatShortHijriDate = (dateInput: string | Date | undefined | null): string => {
+  if (!dateInput) return '';
+  const date = new Date(dateInput);
+  if (isNaN(date.getTime())) return '';
+
+  return new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura', {
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+  }).format(date);
+};
+
 export const formatHijriDateTime = (dateInput: string | Date | undefined | null): string => {
   if (!dateInput) return '';
   const date = new Date(dateInput);

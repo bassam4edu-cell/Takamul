@@ -22,7 +22,9 @@ import {
   Grid,
   Settings,
   Upload,
-  Save
+  Save,
+  PlusCircle,
+  BookOpen
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { User, Subject, TeacherAssignment } from '../types';
@@ -46,12 +48,18 @@ const SchoolUsers: React.FC = React.memo(() => {
   
   // New State for Subjects, Classes, and Assignments
   const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [selectedSubjects, setSelectedSubjects] = useState<number[]>([]);
-  const [selectedClasses, setSelectedClasses] = useState<(string | number)[]>([]);
+  interface PendingAssignment {
+    id: string;
+    subject: { id: number; name: string; grade: string };
+    grade: string;
+    sections: string[];
+  }
+
+  const [pendingAssignments, setPendingAssignments] = useState<PendingAssignment[]>([]);
+  const [builderSubjectId, setBuilderSubjectId] = useState<number | ''>('');
+  const [builderGrade, setBuilderGrade] = useState<string>('');
+  const [builderSections, setBuilderSections] = useState<string[]>([]);
   const [availableSections, setAvailableSections] = useState<string[]>([]);
-  const [modalSubjectTab, setModalSubjectTab] = useState<'all' | 'الفصل الأول' | 'الفصل الثاني'>('all');
-  const [modalSubjectGrade, setModalSubjectGrade] = useState<string>('all');
-  const [modalSubjectSearch, setModalSubjectSearch] = useState('');
 
   useEffect(() => {
     fetchUsers();
@@ -59,9 +67,9 @@ const SchoolUsers: React.FC = React.memo(() => {
   }, []);
 
   useEffect(() => {
-    if (modalSubjectGrade && modalSubjectGrade !== 'all') {
-      console.log("Fetching sections for grade:", modalSubjectGrade);
-      apiFetch(`/api/admin/sections?grade=${encodeURIComponent(modalSubjectGrade)}`)
+    if (builderGrade) {
+      console.log("Fetching sections for grade:", builderGrade);
+      apiFetch(`/api/admin/sections?grade=${encodeURIComponent(builderGrade)}`)
         .then(res => {
           if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
           return res.json();
@@ -83,7 +91,7 @@ const SchoolUsers: React.FC = React.memo(() => {
     } else {
       setAvailableSections([]);
     }
-  }, [modalSubjectGrade]);
+  }, [builderGrade]);
 
   const fetchSubjects = async () => {
     try {
@@ -212,6 +220,13 @@ const SchoolUsers: React.FC = React.memo(() => {
   const handleAssignSubjects = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const assignments = pendingAssignments.flatMap(pa => 
+        pa.sections.map(section => ({
+          subject_id: pa.subject.id,
+          class_id: `${pa.grade}|${section}`
+        }))
+      );
+
       const res = await apiFetch(`/api/admin/users/${assignUserForm.id}/update`, {
         method: 'POST',
         headers: { 
@@ -222,8 +237,7 @@ const SchoolUsers: React.FC = React.memo(() => {
           email: assignUserForm.email, 
           phone_number: assignUserForm.phone_number, 
           whatsapp_enabled: assignUserForm.whatsapp_enabled,
-          subjects: selectedSubjects,
-          classes: selectedClasses
+          assignments: assignments
         }),
       });
       if (res.ok) {
@@ -303,15 +317,47 @@ const SchoolUsers: React.FC = React.memo(() => {
     }
   };
 
-  const toggleSubjectSelection = (subjectId: number) => {
-    setSelectedSubjects(prev => 
-      prev.includes(subjectId) ? prev.filter(id => id !== subjectId) : [...prev, subjectId]
-    );
+  const handleAddPendingAssignment = () => {
+    if (!builderSubjectId || !builderGrade || builderSections.length === 0) return;
+    
+    const subject = subjects.find(s => s.id === builderSubjectId);
+    if (!subject) return;
+
+    setPendingAssignments(prev => {
+      const existingIndex = prev.findIndex(a => a.subject.id === subject.id && a.grade === builderGrade);
+      if (existingIndex >= 0) {
+        const updated = [...prev];
+        const existingSections = updated[existingIndex].sections;
+        const newSections = [...new Set([...existingSections, ...builderSections])];
+        updated[existingIndex] = {
+          ...updated[existingIndex],
+          sections: newSections
+        };
+        return updated;
+      } else {
+        const newAssignment: PendingAssignment = {
+          id: `${subject.id}-${builderGrade}-${Date.now()}`,
+          subject: { id: subject.id, name: subject.name, grade: subject.grade },
+          grade: builderGrade,
+          sections: [...builderSections]
+        };
+        return [...prev, newAssignment];
+      }
+    });
+    
+    // Reset builder
+    setBuilderSubjectId('');
+    setBuilderGrade('');
+    setBuilderSections([]);
   };
 
-  const toggleClassSelection = (classId: string | number) => {
-    setSelectedClasses(prev => 
-      prev.includes(classId) ? prev.filter(id => id !== classId) : [...prev, classId]
+  const handleRemovePendingAssignment = (id: string) => {
+    setPendingAssignments(prev => prev.filter(a => a.id !== id));
+  };
+
+  const toggleBuilderSection = (section: string) => {
+    setBuilderSections(prev => 
+      prev.includes(section) ? prev.filter(s => s !== section) : [...prev, section]
     );
   };
 
@@ -574,14 +620,35 @@ const SchoolUsers: React.FC = React.memo(() => {
                                   setAssignUserForm({ id: u.id, name: u.name, email: u.email || '', role: u.role, phone_number: u.phone_number || '', whatsapp_enabled: u.whatsapp_enabled !== false });
                                   
                                   // Reset modal state
-                                  setModalSubjectGrade('all');
+                                  setBuilderSubjectId('');
+                                  setBuilderGrade('');
+                                  setBuilderSections([]);
                                   setAvailableSections([]);
-                                  setModalSubjectSearch('');
                                   
                                   // Pre-fill assignment selections if teacher
                                   const assignments = u.assignments || [];
-                                  setSelectedSubjects([...new Set(assignments.map(ta => ta.subject_id))]);
-                                  setSelectedClasses([...new Set(assignments.map(ta => ta.class_id))]);
+                                  const groupedAssignments = assignments.reduce((acc: any, curr: any) => {
+                                    const subject = subjects.find(s => s.id === curr.subject_id);
+                                    if (!subject) return acc;
+                                    
+                                    const [grade, section] = curr.class_id.split('|');
+                                    const key = `${curr.subject_id}-${grade}`;
+                                    
+                                    if (!acc[key]) {
+                                      acc[key] = {
+                                        id: key,
+                                        subject: { id: subject.id, name: subject.name, grade: subject.grade },
+                                        grade: grade,
+                                        sections: []
+                                      };
+                                    }
+                                    if (section && !acc[key].sections.includes(section)) {
+                                      acc[key].sections.push(section);
+                                    }
+                                    return acc;
+                                  }, {});
+                                  
+                                  setPendingAssignments(Object.values(groupedAssignments));
                                   
                                   setShowAssignModal(true);
                                 }}
@@ -753,14 +820,35 @@ const SchoolUsers: React.FC = React.memo(() => {
                             setAssignUserForm({ id: u.id, name: u.name, email: u.email || '', role: u.role, phone_number: u.phone_number || '', whatsapp_enabled: u.whatsapp_enabled !== false });
                             
                             // Reset modal state
-                            setModalSubjectGrade('all');
+                            setBuilderSubjectId('');
+                            setBuilderGrade('');
+                            setBuilderSections([]);
                             setAvailableSections([]);
-                            setModalSubjectSearch('');
                             
                             // Pre-fill assignment selections if teacher
                             const assignments = u.assignments || [];
-                            setSelectedSubjects([...new Set(assignments.map(ta => ta.subject_id))]);
-                            setSelectedClasses([...new Set(assignments.map(ta => ta.class_id))]);
+                            const groupedAssignments = assignments.reduce((acc: any, curr: any) => {
+                              const subject = subjects.find(s => s.id === curr.subject_id);
+                              if (!subject) return acc;
+                              
+                              const [grade, section] = curr.class_id.split('|');
+                              const key = `${curr.subject_id}-${grade}`;
+                              
+                              if (!acc[key]) {
+                                acc[key] = {
+                                  id: key,
+                                  subject: { id: subject.id, name: subject.name, grade: subject.grade },
+                                  grade: grade,
+                                  sections: []
+                                };
+                              }
+                              if (section && !acc[key].sections.includes(section)) {
+                                acc[key].sections.push(section);
+                              }
+                              return acc;
+                            }, {});
+                            
+                            setPendingAssignments(Object.values(groupedAssignments));
                             
                             setShowAssignModal(true);
                           }}
@@ -1001,229 +1089,139 @@ const SchoolUsers: React.FC = React.memo(() => {
                 <X size={24} />
               </button>
             </div>
-            <div className="overflow-y-auto p-6">
-              <form id="assignUserForm" onSubmit={handleAssignSubjects} className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="space-y-6">
+            <div className="overflow-y-auto p-6 space-y-6">
+              {/* 1. Assignment Builder Section */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-4">
+                <h4 className="font-bold text-slate-800 flex items-center gap-2">
+                  <PlusCircle size={18} className="text-primary" />
+                  بناء إسناد جديد
+                </h4>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Subject Dropdown */}
                   <div>
-                    <h4 className="font-bold text-slate-800 mb-3 flex items-center gap-2">
-                      <Book size={18} className="text-primary" />
-                      اختيار المادة
-                    </h4>
-                    
-                    {/* Filters */}
-                    <div className="space-y-3 mb-4">
-                      <div className="flex bg-slate-100 p-1 rounded-xl">
-                        <button
-                          type="button"
-                          onClick={() => setModalSubjectTab('all')}
-                          className={`flex-1 py-1.5 text-sm font-bold rounded-lg transition-colors ${modalSubjectTab === 'all' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                        >
-                          الكل
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setModalSubjectTab('الفصل الأول')}
-                          className={`flex-1 py-1.5 text-sm font-bold rounded-lg transition-colors ${modalSubjectTab === 'الفصل الأول' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                        >
-                          الفصل الأول
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setModalSubjectTab('الفصل الثاني')}
-                          className={`flex-1 py-1.5 text-sm font-bold rounded-lg transition-colors ${modalSubjectTab === 'الفصل الثاني' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                        >
-                          الفصل الثاني
-                        </button>
-                      </div>
-                      
-                      <div className="flex gap-2">
-                        <select
-                          value={modalSubjectGrade}
-                          onChange={(e) => {
-                            setModalSubjectGrade(e.target.value);
-                          }}
-                          className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-                        >
-                          <option value="all">جميع الصفوف</option>
-                          <option value="الصف الأول">الصف الأول</option>
-                          <option value="الصف الثاني">الصف الثاني</option>
-                          <option value="الصف الثالث">الصف الثالث</option>
-                        </select>
-                        <input
-                          type="text"
-                          placeholder="بحث باسم المادة..."
-                          value={modalSubjectSearch}
-                          onChange={(e) => setModalSubjectSearch(e.target.value)}
-                          className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-4 max-h-60 overflow-y-auto pr-2">
-                      <div>
-                        <h5 className="text-sm font-bold text-slate-600 mb-2">المواد الأساسية</h5>
-                        <div className="grid grid-cols-2 gap-3">
-                          {subjects
-                            .filter(s => !s.is_elective)
-                            .filter(s => modalSubjectTab === 'all' || s.semester === modalSubjectTab)
-                            .filter(s => modalSubjectGrade === 'all' || s.grade === modalSubjectGrade)
-                            .filter(s => s.name.includes(modalSubjectSearch))
-                            .map(subject => (
-                            <label key={subject.id} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${selectedSubjects.includes(subject.id) ? 'border-primary bg-primary/5' : 'border-slate-200 hover:border-primary/30'}`}>
-                              <input
-                                type="checkbox"
-                                checked={selectedSubjects.includes(subject.id)}
-                                onChange={() => toggleSubjectSelection(subject.id)}
-                                className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary"
-                              />
-                              <div className="flex flex-col">
-                                <span className="font-bold text-slate-700 text-sm">{subject.name}</span>
-                                <span className="text-xs text-slate-500">{subject.grade} - {subject.semester}</span>
-                              </div>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <h5 className="text-sm font-bold text-slate-600 mb-2">المجال الاختياري</h5>
-                        <div className="grid grid-cols-2 gap-3">
-                          {subjects
-                            .filter(s => s.is_elective)
-                            .filter(s => s.name.includes(modalSubjectSearch))
-                            .map(subject => (
-                            <label key={subject.id} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${selectedSubjects.includes(subject.id) ? 'border-primary bg-primary/5' : 'border-slate-200 hover:border-primary/30'}`}>
-                              <input
-                                type="checkbox"
-                                checked={selectedSubjects.includes(subject.id)}
-                                onChange={() => toggleSubjectSelection(subject.id)}
-                                className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary"
-                              />
-                              <span className="font-bold text-slate-700 text-sm">{subject.name}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                      
-                      {subjects.length === 0 && (
-                        <div className="text-sm text-slate-500 text-center py-4 bg-slate-50 rounded-xl border border-slate-100">
-                          لا توجد مواد مضافة. يرجى إضافة مواد أولاً.
-                        </div>
-                      )}
-                      
-                      {/* Selection Summary for Subjects */}
-                      {selectedSubjects.length > 0 && (
-                        <div className="pt-4 border-t border-slate-100 mt-4">
-                          <h5 className="text-sm font-bold text-slate-700 mb-2">المواد المحددة:</h5>
-                          <div className="flex flex-wrap gap-2">
-                            {selectedSubjects.map(subId => {
-                              const sub = subjects.find(s => s.id === subId);
-                              if (!sub) return null;
-                              return (
-                                <span key={subId} className="inline-flex items-center gap-1 bg-primary/10 text-primary px-2 py-1 rounded-lg text-xs font-bold border border-primary/20">
-                                  {sub.name}
-                                  <button 
-                                    type="button" 
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      toggleSubjectSelection(subId);
-                                    }}
-                                    className="hover:bg-primary/20 p-0.5 rounded-full transition-colors"
-                                  >
-                                    <X size={12} />
-                                  </button>
-                                </span>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    <label className="block text-sm font-bold text-slate-700 mb-1">المادة</label>
+                    <select
+                      value={builderSubjectId}
+                      onChange={(e) => setBuilderSubjectId(e.target.value ? Number(e.target.value) : '')}
+                      className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                    >
+                      <option value="">اختر المادة</option>
+                      {subjects.map(s => (
+                        <option key={s.id} value={s.id}>{s.name} ({s.grade} - {s.semester})</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  {/* Grade Dropdown */}
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-1">الصف</label>
+                    <select
+                      value={builderGrade}
+                      onChange={(e) => {
+                        setBuilderGrade(e.target.value);
+                        setBuilderSections([]); // Reset sections when grade changes
+                      }}
+                      className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                    >
+                      <option value="">اختر الصف</option>
+                      <option value="الصف الأول">الصف الأول</option>
+                      <option value="الصف الثاني">الصف الثاني</option>
+                      <option value="الصف الثالث">الصف الثالث</option>
+                    </select>
                   </div>
                 </div>
 
-                <div>
-                  <h4 className="font-bold text-slate-800 mb-3 flex items-center gap-2">
-                    <Grid size={18} className="text-primary" />
-                    {modalSubjectGrade === 'all' ? 'اختيار الفصول' : `فصول ${modalSubjectGrade}`}
-                  </h4>
-                  
-                  <div className="space-y-4 max-h-80 overflow-y-auto pr-2">
-                    {modalSubjectGrade === 'all' ? (
-                      <div className="text-sm text-slate-500 text-center py-4 bg-slate-50 rounded-xl border border-slate-100">
-                        يرجى تحديد صف دراسي من الفلتر بالأعلى لاختيار الشعب/الفصول
-                      </div>
-                    ) : availableSections.length === 0 ? (
-                      <div className="text-sm text-slate-500 text-center py-4 bg-slate-50 rounded-xl border border-slate-100">
-                        لا توجد فصول مسجلة لهذا الصف.
+                {/* Sections Pills */}
+                {builderGrade && (
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-2">الفصول المتاحة</label>
+                    {availableSections.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {availableSections.map(section => (
+                          <button
+                            key={section}
+                            type="button"
+                            onClick={() => toggleBuilderSection(section)}
+                            className={`px-4 py-1.5 rounded-full text-sm font-bold transition-colors border ${
+                              builderSections.includes(section)
+                                ? 'bg-primary text-white border-primary shadow-sm'
+                                : 'bg-white text-slate-600 border-slate-200 hover:border-primary/30'
+                            }`}
+                          >
+                            {section}
+                          </button>
+                        ))}
                       </div>
                     ) : (
-                      <div className="grid grid-cols-3 gap-3">
-                        {availableSections.map(section => {
-                          const classId = `${modalSubjectGrade}|${section}`;
-                          const isSelected = selectedClasses.includes(classId);
-                          return (
-                            <label 
-                              key={classId} 
-                              className={`flex items-center justify-center p-3 rounded-xl border cursor-pointer transition-all duration-200 select-none
-                                ${isSelected 
-                                  ? 'border-teal-600 bg-teal-50 text-teal-700 shadow-sm' 
-                                  : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:bg-slate-50'
-                                }`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => toggleClassSelection(classId)}
-                                className="hidden"
-                              />
-                              <span className="font-bold text-sm">فصل {section}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    )}
-                    
-                    {/* Selection Summary */}
-                    {selectedClasses.length > 0 && (
-                      <div className="pt-4 border-t border-slate-100 mt-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <h5 className="text-sm font-bold text-slate-700">الفصول المحددة:</h5>
-                          <button 
-                            type="button"
-                            onClick={() => setSelectedClasses([])}
-                            className="text-[10px] text-red-500 hover:text-red-700 font-bold"
-                          >
-                            مسح الكل
-                          </button>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {selectedClasses.map(cls => (
-                            <span key={cls} className="inline-flex items-center gap-1 bg-teal-50 text-teal-700 px-2 py-1 rounded-lg text-xs font-bold border border-teal-100">
-                              {String(cls).replace('|', ' - ')}
-                              <button 
-                                type="button" 
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  toggleClassSelection(cls);
-                                }}
-                                className="hover:bg-teal-200 p-0.5 rounded-full transition-colors"
-                              >
-                                <X size={12} />
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                      </div>
+                      <p className="text-sm text-slate-500 italic">لا توجد فصول متاحة لهذا الصف.</p>
                     )}
                   </div>
+                )}
+
+                {/* Add Button */}
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="button"
+                    onClick={handleAddPendingAssignment}
+                    disabled={!builderSubjectId || !builderGrade || builderSections.length === 0}
+                    className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-bold text-sm transition-colors flex items-center gap-2"
+                  >
+                    <PlusCircle size={16} />
+                    إضافة للإسناد
+                  </button>
                 </div>
-              </form>
+              </div>
+
+              {/* 2. Current Assignments Cart */}
+              <div>
+                <h4 className="font-bold text-slate-800 mb-3 flex items-center gap-2">
+                  <BookOpen size={18} className="text-primary" />
+                  الإسنادات الحالية
+                </h4>
+                
+                {pendingAssignments.length > 0 ? (
+                  <div className="space-y-2">
+                    {pendingAssignments.map(assignment => (
+                      <div key={assignment.id} className="flex justify-between items-center p-3 border border-slate-200 rounded-lg bg-white shadow-sm">
+                        <div className="flex items-center gap-4">
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePendingAssignment(assignment.id)}
+                            className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors"
+                            title="حذف الإسناد"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                          <div>
+                            <div className="font-bold text-slate-800">{assignment.subject.name}</div>
+                            <div className="text-sm text-slate-500 mb-1">{assignment.grade}</div>
+                            <div className="flex flex-wrap gap-1">
+                              {assignment.sections.map(sec => (
+                                <span key={sec} className="bg-slate-100 text-slate-600 text-xs px-2 py-0.5 rounded-md font-medium border border-slate-200">
+                                  {sec}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                    <Book className="mx-auto h-8 w-8 text-slate-300 mb-2" />
+                    <p className="text-slate-500 text-sm">لم يتم إضافة أي إسنادات بعد.</p>
+                  </div>
+                )}
+              </div>
             </div>
+
+            {/* 3. Footer Actions */}
             <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex gap-3 shrink-0">
               <button 
-                type="submit"
-                form="assignUserForm"
+                type="button" 
+                onClick={handleAssignSubjects}
                 className="flex-1 bg-primary hover:bg-primary/90 text-white py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
               >
                 <Save size={20} />
@@ -1233,17 +1231,21 @@ const SchoolUsers: React.FC = React.memo(() => {
                 type="button" 
                 onClick={() => {
                   if (window.confirm('هل أنت متأكد من رغبتك في تفريغ جميع الإسنادات لهذا المعلم؟')) {
-                    setSelectedSubjects([]);
-                    setSelectedClasses([]);
+                    setPendingAssignments([]);
                   }
                 }}
-                className="px-6 bg-red-50 hover:bg-red-100 text-red-600 py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
+                disabled={pendingAssignments.length === 0}
+                className="px-6 bg-red-50 hover:bg-red-100 text-red-600 disabled:opacity-50 disabled:cursor-not-allowed py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
                 title="تفريغ جميع الإسنادات"
               >
                 <Trash2 size={20} />
-                تفريغ الإسناد
+                تفريغ الكل
               </button>
-              <button type="button" onClick={() => setShowAssignModal(false)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-xl font-bold transition-colors">
+              <button 
+                type="button" 
+                onClick={() => setShowAssignModal(false)} 
+                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-xl font-bold transition-colors"
+              >
                 إلغاء
               </button>
             </div>

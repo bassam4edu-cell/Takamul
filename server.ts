@@ -276,9 +276,16 @@ async function initDb() {
         category TEXT,
         name TEXT,
         max_grade INTEGER,
-        type TEXT
+        type TEXT,
+        date DATE
       )
     `;
+
+    try {
+      await sql`ALTER TABLE smart_tracker_tasks ADD COLUMN date DATE`;
+    } catch (e) {
+      // Ignore if column already exists
+    }
 
     await sql`
       CREATE TABLE IF NOT EXISTS smart_tracker_student_states (
@@ -2552,11 +2559,19 @@ async function startServer() {
   });
 
   app.post("/api/admin/users/:id/update", async (req, res) => {
-    const { name, email, phone_number, whatsapp_enabled, subjects, classes } = req.body;
+    const { name, email, phone_number, whatsapp_enabled, subjects, classes, assignments } = req.body;
     try {
       await sql`UPDATE users SET name = ${name}, email = ${email}, phone_number = ${phone_number || null}, whatsapp_enabled = ${whatsapp_enabled !== undefined ? whatsapp_enabled : true} WHERE id = ${req.params.id}`;
       
-      if (subjects && Array.isArray(subjects) && classes && Array.isArray(classes)) {
+      if (assignments && Array.isArray(assignments)) {
+        await sql`DELETE FROM teacher_assignments WHERE teacher_id = ${req.params.id}`;
+        for (const assignment of assignments) {
+          await sql`
+            INSERT INTO teacher_assignments (teacher_id, subject_id, class_id)
+            VALUES (${req.params.id}, ${assignment.subject_id}, ${assignment.class_id})
+          `;
+        }
+      } else if (subjects && Array.isArray(subjects) && classes && Array.isArray(classes)) {
         await sql`DELETE FROM teacher_assignments WHERE teacher_id = ${req.params.id}`;
         
         // Fetch subjects to check their grades
@@ -2578,7 +2593,7 @@ async function startServer() {
             }
           }
         }
-      } else if (subjects !== undefined || classes !== undefined) {
+      } else if (subjects !== undefined || classes !== undefined || assignments !== undefined) {
         // If they are explicitly passed as empty arrays, clear assignments
         await sql`DELETE FROM teacher_assignments WHERE teacher_id = ${req.params.id}`;
       }
@@ -3539,6 +3554,7 @@ async function startServer() {
           t.category,
           t.max_grade,
           t.type,
+          t.date,
           s.id as session_id,
           s.date as session_date
         FROM smart_tracker_tasks t
@@ -3615,13 +3631,14 @@ async function startServer() {
       for (const category in tasks) {
         for (const task of tasks[category]) {
           await sql`
-            INSERT INTO smart_tracker_tasks (id, session_id, category, name, max_grade, type)
-            VALUES (${task.id}, ${sessionId}, ${category}, ${task.name}, ${task.maxGrade}, ${task.type})
+            INSERT INTO smart_tracker_tasks (id, session_id, category, name, max_grade, type, date)
+            VALUES (${task.id}, ${sessionId}, ${category}, ${task.name}, ${task.maxGrade}, ${task.type}, ${task.date || null})
             ON CONFLICT (id) DO UPDATE SET
               category = EXCLUDED.category,
               name = EXCLUDED.name,
               max_grade = EXCLUDED.max_grade,
-              type = EXCLUDED.type
+              type = EXCLUDED.type,
+              date = EXCLUDED.date
           `;
         }
       }
@@ -3667,6 +3684,47 @@ async function startServer() {
     } catch (err) {
       console.error("[SAVE TRACKER SESSION] Error:", err);
       res.status(500).json({ error: "Failed to save tracker session" });
+    }
+  });
+
+  app.post("/api/tracker/session/bulk-template", async (req, res) => {
+    const { teacher_id, grade, sections, subject, date, tasks } = req.body;
+    try {
+      for (const section of sections) {
+        // Upsert session for this section
+        const sessions = await sql`
+          INSERT INTO smart_tracker_sessions (teacher_id, grade, section, subject, date)
+          VALUES (${teacher_id}, ${grade}, ${section}, ${subject}, ${date})
+          ON CONFLICT (teacher_id, grade, section, subject, date) 
+          DO UPDATE SET created_at = CURRENT_TIMESTAMP
+          RETURNING id
+        `;
+        const sessionId = sessions[0].id;
+
+        // Upsert tasks for this session
+        for (const category in tasks) {
+          for (const task of tasks[category]) {
+            // Generate a unique ID for the task in this session to avoid conflicts
+            // We use the original task ID as a base but append the session ID
+            const uniqueTaskId = `${task.id}-${sessionId}`;
+            await sql`
+              INSERT INTO smart_tracker_tasks (id, session_id, category, name, max_grade, type, date)
+              VALUES (${uniqueTaskId}, ${sessionId}, ${category}, ${task.name}, ${task.maxGrade}, ${task.type}, ${task.date || null})
+              ON CONFLICT (id) DO UPDATE SET
+                category = EXCLUDED.category,
+                name = EXCLUDED.name,
+                max_grade = EXCLUDED.max_grade,
+                type = EXCLUDED.type,
+                date = EXCLUDED.date
+            `;
+          }
+        }
+      }
+
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[BULK TEMPLATE] Error:", err);
+      res.status(500).json({ error: "Failed to apply bulk template" });
     }
   });
 

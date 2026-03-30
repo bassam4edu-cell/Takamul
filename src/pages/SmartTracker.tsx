@@ -25,8 +25,9 @@ import { apiFetch } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { useAuditLog } from '../context/AuditLogContext';
 import { logAction as globalLogAction } from '../services/auditLogger';
-import { formatHijriDate } from '../utils/dateUtils';
+import { formatHijriDate, formatShortHijriDate } from '../utils/dateUtils';
 import HijriDatePicker from '../components/HijriDatePicker';
+import toast from 'react-hot-toast';
 
 // --- Types ---
 export interface Student {
@@ -50,6 +51,7 @@ export interface Task {
   name: string;
   maxGrade: number;
   type: 'number' | 'binary';
+  date?: string;
 }
 
 export interface TeacherAssignment {
@@ -139,7 +141,9 @@ const FilterBottomSheet: React.FC<FilterSheetProps> = ({
                 <button
                   key={g}
                   onClick={() => onSelectGrade(g)}
+                  disabled={!selectedSubject}
                   className={`py-3 px-4 rounded-xl text-sm font-bold transition-all border ${
+                    !selectedSubject ? 'opacity-50 cursor-not-allowed bg-slate-100 text-slate-400 border-slate-200' :
                     selectedGrade === g 
                       ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-100' 
                       : 'bg-slate-50 text-slate-600 border-slate-100 hover:border-slate-200'
@@ -161,7 +165,9 @@ const FilterBottomSheet: React.FC<FilterSheetProps> = ({
                 <button
                   key={s}
                   onClick={() => onSelectSection(s)}
+                  disabled={!selectedGrade}
                   className={`py-3 px-4 rounded-xl text-sm font-bold transition-all border ${
+                    !selectedGrade ? 'opacity-50 cursor-not-allowed bg-slate-100 text-slate-400 border-slate-200' :
                     selectedSection === s 
                       ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-100' 
                       : 'bg-slate-50 text-slate-600 border-slate-100 hover:border-slate-200'
@@ -286,52 +292,44 @@ const SmartTracker: React.FC = () => {
   const [adminSubjects, setAdminSubjects] = useState<string[]>([]);
 
   // --- Derived State (Cascading Filters) ---
-  const availableGrades = useMemo(() => {
-    // If we have teacher assignments, they are the primary source of truth
+  const availableSubjects = useMemo(() => {
     if (teacherAssignments.length > 0) {
-      // Use the grade from class_id to ensure we only show grades where the teacher actually has classes
-      const grades = [...new Set(teacherAssignments.map(a => a.class_id.split('|')[0]))];
-      console.log("[DEBUG] Teacher available grades (from class_id):", grades);
+      const subjects = [...new Set(teacherAssignments.map(a => a.subject_name))];
+      console.log("[DEBUG] Teacher available subjects:", subjects);
+      return subjects;
+    }
+    if (user?.role === 'teacher') return [];
+    console.log("[DEBUG] No teacher assignments, using admin subjects:", adminSubjects);
+    return adminSubjects;
+  }, [teacherAssignments, adminSubjects, user?.role]);
+
+  const availableGrades = useMemo(() => {
+    if (!subject) return [];
+    if (teacherAssignments.length > 0) {
+      const grades = [...new Set(teacherAssignments
+        .filter(a => a.subject_name === subject)
+        .map(a => a.class_id.split('|')[0]))];
+      console.log(`[DEBUG] Teacher available grades for subject ${subject}:`, grades);
       return grades;
     }
-    // If teacher role, don't fall back to admin data
     if (user?.role === 'teacher') return [];
-    // Fallback to admin grades only if no teacher assignments exist
     console.log("[DEBUG] No teacher assignments, using admin grades:", adminGrades);
     return adminGrades;
-  }, [teacherAssignments, adminGrades, user?.role]);
+  }, [subject, teacherAssignments, adminGrades, user?.role]);
 
   const availableSections = useMemo(() => {
+    if (!subject || !grade) return [];
     if (teacherAssignments.length > 0) {
-      if (!grade) return [];
-      // Filter assignments by the grade part of class_id
       const sections = [...new Set(teacherAssignments
-        .filter(a => a.class_id.startsWith(grade + '|'))
+        .filter(a => a.subject_name === subject && a.class_id.startsWith(grade + '|'))
         .map(a => a.class_id.split('|')[1]))];
-      console.log(`[DEBUG] Teacher available sections for grade ${grade}:`, sections);
+      console.log(`[DEBUG] Teacher available sections for subject ${subject} and grade ${grade}:`, sections);
       return sections;
     }
-    // If teacher role, don't fall back to admin data
     if (user?.role === 'teacher') return [];
     console.log(`[DEBUG] No teacher assignments, using admin sections for grade ${grade}:`, adminSections);
     return adminSections;
-  }, [grade, teacherAssignments, adminSections, user?.role]);
-
-  const availableSubjects = useMemo(() => {
-    if (teacherAssignments.length > 0) {
-      if (!grade || !section) return [];
-      const fullClassId = `${grade}|${section}`;
-      const subjects = [...new Set(teacherAssignments
-        .filter(a => a.class_id === fullClassId)
-        .map(a => a.subject_name))];
-      console.log(`[DEBUG] Teacher available subjects for class ${fullClassId}:`, subjects);
-      return subjects;
-    }
-    // If teacher role, don't fall back to admin data
-    if (user?.role === 'teacher') return [];
-    console.log(`[DEBUG] No teacher assignments, using admin subjects:`, adminSubjects);
-    return adminSubjects;
-  }, [grade, section, teacherAssignments, adminSubjects, user?.role]);
+  }, [subject, grade, teacherAssignments, adminSections, user?.role]);
 
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(false);
@@ -347,9 +345,21 @@ const SmartTracker: React.FC = () => {
 
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
-  const [newTask, setNewTask] = useState<{name: string, maxGrade: number, type: 'number' | 'binary'}>({
-    name: '', maxGrade: 5, type: 'number'
+  const [newTask, setNewTask] = useState<{name: string, maxGrade: number, type: 'number' | 'binary', date?: string}>({
+    name: '', maxGrade: 5, type: 'number', date: new Date().toISOString().split('T')[0]
   });
+
+  // --- Bulk Setup Modal State ---
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [bulkTemplateTasks, setBulkTemplateTasks] = useState<Record<TaskCategory, Task[]>>({
+    participation: [], homework: [], performance: [], exams: []
+  });
+  const [bulkSelectedSections, setBulkSelectedSections] = useState<string[]>([]);
+  const [bulkActiveCategory, setBulkActiveCategory] = useState<TaskCategory>('participation');
+  const [bulkNewTask, setBulkNewTask] = useState<{name: string, maxGrade: number, type: 'number' | 'binary', date?: string}>({
+    name: '', maxGrade: 5, type: 'number', date: new Date().toISOString().split('T')[0]
+  });
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // --- Students State ---
   const [studentsState, setStudentsState] = useState<Record<number, StudentState>>({});
@@ -371,24 +381,13 @@ const SmartTracker: React.FC = () => {
 
   // --- Auto-Reset Effect (Cascading Logic) ---
   useEffect(() => {
-    if (grade && availableSections.length > 0) {
-      if (!section || !availableSections.includes(section)) {
-        setSection(availableSections[0]);
-      }
-    } else {
-      setSection('');
-    }
-  }, [grade, availableSections]);
+    setGrade('');
+    setSection('');
+  }, [subject]);
 
   useEffect(() => {
-    if (grade && section && availableSubjects.length > 0) {
-      if (!subject || !availableSubjects.includes(subject)) {
-        setSubject(availableSubjects[0]);
-      }
-    } else {
-      setSubject('');
-    }
-  }, [grade, section, availableSubjects]);
+    setSection('');
+  }, [grade]);
 
   // --- Fetch Data ---
   useEffect(() => {
@@ -549,7 +548,7 @@ const SmartTracker: React.FC = () => {
     };
 
     fetchData();
-  }, [grade, section, subject, date, user?.id]);
+  }, [grade, section, subject, date, user?.id, refreshTrigger]);
 
   // --- Handlers ---
   const handleMarkAllPresent = () => {
@@ -679,7 +678,7 @@ const SmartTracker: React.FC = () => {
         ...prev,
         [activeCategory]: prev[activeCategory].map(t => 
           t.id === editingTaskId 
-            ? { ...t, name: newTask.name, maxGrade: newTask.maxGrade, type: newTask.type }
+            ? { ...t, name: newTask.name, maxGrade: newTask.maxGrade, type: newTask.type, date: newTask.date }
             : t
         )
       }));
@@ -688,7 +687,8 @@ const SmartTracker: React.FC = () => {
         id: Date.now().toString(),
         name: newTask.name,
         maxGrade: newTask.maxGrade,
-        type: newTask.type
+        type: newTask.type,
+        date: newTask.date
       };
       setTasks(prev => ({
         ...prev,
@@ -700,7 +700,7 @@ const SmartTracker: React.FC = () => {
   };
 
   const handleEditTask = (task: Task) => {
-    setNewTask({ name: task.name, maxGrade: task.maxGrade, type: task.type });
+    setNewTask({ name: task.name, maxGrade: task.maxGrade, type: task.type, date: task.date || new Date().toISOString().split('T')[0] });
     setEditingTaskId(task.id);
     setIsTaskModalOpen(true);
   };
@@ -708,7 +708,7 @@ const SmartTracker: React.FC = () => {
   const closeTaskModal = () => {
     setIsTaskModalOpen(false);
     setEditingTaskId(null);
-    setNewTask({ name: '', maxGrade: 5, type: 'number' });
+    setNewTask({ name: '', maxGrade: 5, type: 'number', date: new Date().toISOString().split('T')[0] });
   };
 
   const updateTask = (taskId: string, updates: Partial<Task>) => {
@@ -863,6 +863,61 @@ const SmartTracker: React.FC = () => {
     }
   };
 
+  const handleAddBulkTask = () => {
+    if (!bulkNewTask.name) return;
+    const task: Task = {
+      id: Date.now().toString(),
+      name: bulkNewTask.name,
+      maxGrade: bulkNewTask.maxGrade,
+      type: bulkNewTask.type,
+      date: bulkNewTask.date
+    };
+    setBulkTemplateTasks(prev => ({
+      ...prev,
+      [bulkActiveCategory]: [...prev[bulkActiveCategory], task]
+    }));
+    setBulkNewTask({ name: '', maxGrade: 5, type: 'number', date: new Date().toISOString().split('T')[0] });
+  };
+
+  const handleBulkApply = async () => {
+    if (bulkSelectedSections.length === 0) {
+      toast.error("الرجاء تحديد فصل واحد على الأقل");
+      return;
+    }
+    
+    const hasTasks = Object.values(bulkTemplateTasks).some(tasks => tasks.length > 0);
+    if (!hasTasks) {
+      toast.error("الرجاء إضافة مهمة واحدة على الأقل");
+      return;
+    }
+
+    try {
+      const res = await apiFetch('/api/tracker/session/bulk-template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          teacher_id: user?.id,
+          grade,
+          sections: bulkSelectedSections,
+          subject,
+          date,
+          tasks: bulkTemplateTasks
+        })
+      });
+
+      if (res.ok) {
+        setIsBulkModalOpen(false);
+        setRefreshTrigger(prev => prev + 1);
+        toast.success("تم اعتماد التوزيع للفصول المحددة بنجاح");
+      } else {
+        toast.error("حدث خطأ أثناء تطبيق التوزيع");
+      }
+    } catch (err) {
+      console.error("Failed to apply bulk template", err);
+      toast.error("حدث خطأ أثناء تطبيق التوزيع");
+    }
+  };
+
   return (
     <>
     <div className="min-h-screen bg-slate-50 pb-32 font-sans print:hidden" dir="rtl">
@@ -915,9 +970,12 @@ const SmartTracker: React.FC = () => {
                   {availableSubjects.length === 0 ? (
                     <option value="">لا توجد مواد مسندة</option>
                   ) : (
-                    availableSubjects.map(subj => (
-                      <option key={subj} value={subj}>{subj}</option>
-                    ))
+                    <>
+                      <option value="" disabled>اختر المادة</option>
+                      {availableSubjects.map(subj => (
+                        <option key={subj} value={subj}>{subj}</option>
+                      ))}
+                    </>
                   )}
                 </select>
               </div>
@@ -927,16 +985,21 @@ const SmartTracker: React.FC = () => {
                 <GraduationCap size={16} className="text-slate-400 absolute right-3 pointer-events-none" />
                 <select 
                   value={grade} onChange={e => setGrade(e.target.value)}
-                  className="appearance-none bg-transparent border-none text-slate-700 font-medium text-sm focus:ring-0 cursor-pointer pr-10 pl-8 py-2.5 w-full outline-none"
+                  className={`appearance-none bg-transparent border-none text-slate-700 font-medium text-sm focus:ring-0 cursor-pointer pr-10 pl-8 py-2.5 w-full outline-none ${!subject ? 'opacity-50 cursor-not-allowed bg-gray-100' : ''}`}
                   style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: 'left 0.5rem center', backgroundRepeat: 'no-repeat', backgroundSize: '1.5em 1.5em' }}
-                  disabled={availableGrades.length === 0}
+                  disabled={!subject || availableGrades.length === 0}
                 >
-                  {availableGrades.length === 0 ? (
+                  {!subject ? (
+                    <option value="">اختر المادة أولاً</option>
+                  ) : availableGrades.length === 0 ? (
                     <option value="">لا توجد صفوف</option>
                   ) : (
-                    availableGrades.map(g => (
-                      <option key={g} value={g}>{g}</option>
-                    ))
+                    <>
+                      <option value="" disabled>اختر الصف</option>
+                      {availableGrades.map(g => (
+                        <option key={g} value={g}>{g}</option>
+                      ))}
+                    </>
                   )}
                 </select>
               </div>
@@ -946,16 +1009,21 @@ const SmartTracker: React.FC = () => {
                 <Users size={16} className="text-slate-400 absolute right-3 pointer-events-none" />
                 <select 
                   value={section} onChange={e => setSection(e.target.value)}
-                  className="appearance-none bg-transparent border-none text-slate-700 font-medium text-sm focus:ring-0 cursor-pointer pr-10 pl-8 py-2.5 w-full outline-none"
+                  className={`appearance-none bg-transparent border-none text-slate-700 font-medium text-sm focus:ring-0 cursor-pointer pr-10 pl-8 py-2.5 w-full outline-none ${!grade ? 'opacity-50 cursor-not-allowed bg-gray-100' : ''}`}
                   style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: 'left 0.5rem center', backgroundRepeat: 'no-repeat', backgroundSize: '1.5em 1.5em' }}
-                  disabled={availableSections.length === 0}
+                  disabled={!grade || availableSections.length === 0}
                 >
-                  {availableSections.length === 0 ? (
+                  {!grade ? (
+                    <option value="">اختر الصف أولاً</option>
+                  ) : availableSections.length === 0 ? (
                     <option value="">لا توجد فصول</option>
                   ) : (
-                    availableSections.map(s => (
-                      <option key={s} value={s}>{s}</option>
-                    ))
+                    <>
+                      <option value="" disabled>اختر الفصل</option>
+                      {availableSections.map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </>
                   )}
                 </select>
               </div>
@@ -1081,7 +1149,10 @@ const SmartTracker: React.FC = () => {
                             </button>
                             <div className="flex flex-col items-center justify-center gap-0.5">
                               <span className="truncate w-full text-center">{task.name}</span>
-                              <span className="text-[10px] text-slate-500 font-normal">({task.maxGrade})</span>
+                              <div className="flex items-center gap-1">
+                                <span className="text-[10px] text-slate-500 font-normal">({task.maxGrade})</span>
+                                {task.date && <span className="text-[9px] text-slate-400 font-normal">{formatShortHijriDate(task.date)}</span>}
+                              </div>
                             </div>
                           </th>
                         ))}
@@ -1230,17 +1301,25 @@ const SmartTracker: React.FC = () => {
                 </button>
               ))}
             </div>
-            <button
-              onClick={() => {
-                setEditingTaskId(null);
-                setNewTask({ name: '', maxGrade: 5, type: 'number' });
-                setIsTaskModalOpen(true);
-              }}
-              className="w-full bg-teal-700 text-white hover:bg-teal-800 px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors shadow-sm"
-            >
-              <Plus size={16} />
-              إضافة مهمة جديدة
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setEditingTaskId(null);
+                  setNewTask({ name: '', maxGrade: 5, type: 'number', date: new Date().toISOString().split('T')[0] });
+                  setIsTaskModalOpen(true);
+                }}
+                className="flex-1 bg-teal-700 text-white hover:bg-teal-800 px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors shadow-sm"
+              >
+                <Plus size={16} />
+                إضافة مهمة جديدة
+              </button>
+              <button
+                onClick={() => setIsBulkModalOpen(true)}
+                className="flex-1 bg-indigo-600 text-white hover:bg-indigo-700 px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors shadow-sm"
+              >
+                إعداد التوزيع السريع
+              </button>
+            </div>
           </div>
         )}
 
@@ -1334,7 +1413,10 @@ const SmartTracker: React.FC = () => {
                         <div key={task.id} className={`flex justify-between items-center bg-slate-50 p-2 rounded-xl border border-slate-100 ${isError ? 'bg-red-50 border-red-100' : ''}`}>
                           <div className="flex flex-col">
                             <span className="text-xs font-bold text-slate-700">{task.name}</span>
-                            <span className="text-[10px] text-slate-400">الدرجة العظمى: {task.maxGrade}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] text-slate-400">الدرجة العظمى: {task.maxGrade}</span>
+                              {task.date && <span className="text-[10px] text-slate-400">| {formatShortHijriDate(task.date)}</span>}
+                            </div>
                           </div>
                           
                           <div className="flex items-center gap-2">
@@ -1475,7 +1557,10 @@ const SmartTracker: React.FC = () => {
                   return (
                     <div key={task.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-3">
                       <div className="flex justify-between items-center">
-                        <span className="font-bold text-slate-700 text-sm">{task.name}</span>
+                        <div className="flex flex-col">
+                          <span className="font-bold text-slate-700 text-sm">{task.name}</span>
+                          {task.date && <span className="text-[10px] text-slate-400">{formatShortHijriDate(task.date)}</span>}
+                        </div>
                         <span className="text-[10px] text-slate-400 font-bold">الدرجة العظمى: {task.maxGrade}</span>
                       </div>
                       
@@ -1622,15 +1707,26 @@ const SmartTracker: React.FC = () => {
                     className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 focus:ring-2 focus:ring-teal-700 focus:bg-white outline-none transition-all"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">الدرجة العظمى</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={newTask.maxGrade}
-                    onChange={e => setNewTask({...newTask, maxGrade: Number(e.target.value)})}
-                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 focus:ring-2 focus:ring-teal-700 focus:bg-white outline-none transition-all"
-                  />
+                <div className="flex gap-4">
+                  <div className="flex-1">
+                    <label className="block text-sm font-bold text-slate-700 mb-1">الدرجة العظمى</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={newTask.maxGrade}
+                      onChange={e => setNewTask({...newTask, maxGrade: Number(e.target.value)})}
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 focus:ring-2 focus:ring-teal-700 focus:bg-white outline-none transition-all"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-sm font-bold text-slate-700 mb-1">تاريخ المهمة</label>
+                    <input
+                      type="date"
+                      value={newTask.date || ''}
+                      onChange={e => setNewTask({...newTask, date: e.target.value})}
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 focus:ring-2 focus:ring-teal-700 focus:bg-white outline-none transition-all"
+                    />
+                  </div>
                 </div>
                 {editingTaskId && (
                   <div className="bg-amber-50 border border-amber-200 text-amber-800 p-3 rounded-xl text-xs font-semibold flex items-start gap-2">
@@ -1686,7 +1782,13 @@ const SmartTracker: React.FC = () => {
 
       {/* Final Submit Button (Fixed at bottom) - Desktop Only */}
       <div className="hidden md:block fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-slate-200 z-30 print:hidden">
-        <div className="max-w-5xl mx-auto flex justify-end gap-3">
+        <div className="max-w-5xl mx-auto flex flex-wrap justify-end gap-3">
+          <button
+            onClick={() => setIsBulkModalOpen(true)}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-xl flex items-center gap-2 shadow-sm transition-colors"
+          >
+            إعداد التوزيع السريع
+          </button>
           <button
             onClick={() => window.print()}
             className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-semibold py-3 px-6 rounded-xl flex items-center gap-2 shadow-sm transition-colors"
@@ -1883,6 +1985,216 @@ const SmartTracker: React.FC = () => {
         teacherName={user?.name || ''}
       />
     )}
+
+    {/* Bulk Setup Modal */}
+    <AnimatePresence>
+      {isBulkModalOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm print:hidden" dir="rtl">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+          >
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center gap-3">
+                <div className="bg-indigo-100 text-indigo-600 p-2 rounded-lg">
+                  <Dices size={24} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800 text-lg">إعداد التوزيع السريع</h3>
+                  <p className="text-xs text-slate-500">قم ببناء قالب المهام وتطبيقه على عدة فصول دفعة واحدة</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsBulkModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 transition-colors p-2 rounded-full hover:bg-slate-200"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* القسم الأول: بناء القالب */}
+              <div className="space-y-6">
+                <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+                  <Book size={18} className="text-slate-400" />
+                  <h4 className="font-bold text-slate-700">1. بناء قالب المهام</h4>
+                </div>
+                
+                {/* Tabs */}
+                <div className="flex bg-slate-100 p-1 rounded-xl">
+                  {(['participation', 'homework', 'performance', 'exams'] as TaskCategory[]).map(cat => (
+                    <button
+                      key={cat}
+                      onClick={() => setBulkActiveCategory(cat)}
+                      className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                        bulkActiveCategory === cat ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      {cat === 'participation' ? 'مشاركة' : cat === 'homework' ? 'واجبات' : cat === 'performance' ? 'مهام' : 'اختبارات'}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Add Task Form */}
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">اسم المهمة</label>
+                    <input
+                      type="text"
+                      value={bulkNewTask.name}
+                      onChange={e => setBulkNewTask({...bulkNewTask, name: e.target.value})}
+                      placeholder="مثال: واجب الدرس الأول"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div className="flex flex-col md:flex-row gap-4">
+                    <div className="flex-1">
+                      <label className="block text-xs font-bold text-slate-600 mb-1">الدرجة القصوى</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={bulkNewTask.maxGrade}
+                        onChange={e => setBulkNewTask({...bulkNewTask, maxGrade: Number(e.target.value)})}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-xs font-bold text-slate-600 mb-1">نوع التقييم</label>
+                      <select
+                        value={bulkNewTask.type}
+                        onChange={e => setBulkNewTask({...bulkNewTask, type: e.target.value as 'number' | 'binary'})}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      >
+                        <option value="number">درجة رقمية</option>
+                        <option value="binary">إنجاز (صح/خطأ)</option>
+                      </select>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleAddBulkTask}
+                    disabled={!bulkNewTask.name}
+                    className="w-full py-2 bg-indigo-100 text-indigo-700 hover:bg-indigo-200 rounded-lg text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    <Plus size={16} />
+                    إضافة للمهمة
+                  </button>
+                </div>
+
+                {/* Task List Preview */}
+                <div className="space-y-2">
+                  <h5 className="text-xs font-bold text-slate-500">المهام المضافة في ({bulkActiveCategory === 'participation' ? 'المشاركة' : bulkActiveCategory === 'homework' ? 'الواجبات' : bulkActiveCategory === 'performance' ? 'المهام' : 'الاختبارات'}):</h5>
+                  {bulkTemplateTasks[bulkActiveCategory].length === 0 ? (
+                    <div className="text-center py-4 text-xs text-slate-400 bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                      لا توجد مهام مضافة في هذا القسم
+                    </div>
+                  ) : (
+                    <ul className="space-y-2">
+                      {bulkTemplateTasks[bulkActiveCategory].map((task, idx) => (
+                        <li key={idx} className="flex items-center justify-between bg-white p-2 rounded-lg border border-slate-200 text-sm">
+                          <div className="flex flex-col">
+                            <span className="font-medium text-slate-700">{task.name}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded-md">{task.maxGrade} درجات</span>
+                            <button
+                              onClick={() => setBulkTemplateTasks(prev => ({
+                                ...prev,
+                                [bulkActiveCategory]: prev[bulkActiveCategory].filter((_, i) => i !== idx)
+                              }))}
+                              className="text-red-400 hover:text-red-600"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+
+              {/* القسم الثاني: تحديد المستهدفين */}
+              <div className="space-y-6">
+                <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+                  <Users size={18} className="text-slate-400" />
+                  <h4 className="font-bold text-slate-700">2. تحديد الفصول المستهدفة</h4>
+                </div>
+                
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                  <p className="text-xs text-slate-500 mb-4 leading-relaxed">
+                    اختر الفصول التي تريد تطبيق هذا القالب عليها. سيتم إنشاء هذه المهام في سجلات الفصول المحددة دفعة واحدة.
+                  </p>
+                  
+                  {availableSections.length === 0 ? (
+                    <div className="text-center py-6 text-sm text-slate-400">
+                      لا توجد فصول متاحة لهذه المادة والصف.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3">
+                      {availableSections.map(sec => (
+                        <label key={sec} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${bulkSelectedSections.includes(sec) ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-200 hover:border-indigo-100'}`}>
+                          <input
+                            type="checkbox"
+                            className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
+                            checked={bulkSelectedSections.includes(sec)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setBulkSelectedSections(prev => [...prev, sec]);
+                              } else {
+                                setBulkSelectedSections(prev => prev.filter(s => s !== sec));
+                              }
+                            }}
+                          />
+                          <span className={`text-sm font-bold ${bulkSelectedSections.includes(sec) ? 'text-indigo-700' : 'text-slate-600'}`}>
+                            فصل {sec}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                
+                {/* Summary */}
+                <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100">
+                  <h5 className="text-xs font-bold text-indigo-800 mb-2">ملخص القالب:</h5>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(bulkTemplateTasks).map(([cat, tasks]) => (
+                      tasks.length > 0 && (
+                        <span key={cat} className="text-xs bg-white text-indigo-600 px-2 py-1 rounded-md border border-indigo-100 font-medium">
+                          {cat === 'participation' ? 'مشاركة' : cat === 'homework' ? 'واجبات' : cat === 'performance' ? 'مهام' : 'اختبارات'}: {tasks.length}
+                        </span>
+                      )
+                    ))}
+                    {Object.values(bulkTemplateTasks).every(tasks => tasks.length === 0) && (
+                      <span className="text-xs text-indigo-400">القالب فارغ حالياً</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+              <button
+                onClick={() => setIsBulkModalOpen(false)}
+                className="px-6 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={handleBulkApply}
+                disabled={bulkSelectedSections.length === 0 || Object.values(bulkTemplateTasks).every(tasks => tasks.length === 0)}
+                className="px-6 py-2.5 text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <CheckCircle2 size={16} />
+                اعتماد التوزيع للفصول المحددة
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
     </>
   );
 };

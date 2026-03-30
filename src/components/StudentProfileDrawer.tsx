@@ -279,7 +279,7 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
                         <div key={task.id} className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-100">
                           <div className="flex flex-col">
                             <span className="text-sm font-medium text-slate-700">{task.name}</span>
-                            <span className="text-xs text-slate-400">{formatHijriDate(new Date())}</span>
+                            <span className="text-xs text-slate-400">{task.date ? formatHijriDate(new Date(task.date)) : formatHijriDate(new Date(date))}</span>
                           </div>
                           <div className="flex items-baseline gap-1 bg-white px-3 py-1 rounded-md border border-slate-200 shadow-sm">
                             <span className="text-sm font-bold text-slate-800">{grade !== undefined && grade !== '' ? grade : '-'}</span>
@@ -308,7 +308,7 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
                         <div key={task.id} className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-100">
                           <div className="flex flex-col">
                             <span className="text-sm font-medium text-slate-700">{task.name}</span>
-                            <span className="text-xs text-slate-400">{formatHijriDate(new Date())}</span>
+                            <span className="text-xs text-slate-400">{task.date ? formatHijriDate(new Date(task.date)) : formatHijriDate(new Date(date))}</span>
                           </div>
                           <div className="flex items-baseline gap-1 bg-white px-3 py-1 rounded-md border border-slate-200 shadow-sm">
                             <span className="text-sm font-bold text-slate-800">{grade !== undefined && grade !== '' ? grade : '-'}</span>
@@ -337,7 +337,7 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
                         <div key={task.id} className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-100">
                           <div className="flex flex-col">
                             <span className="text-sm font-medium text-slate-700">{task.name}</span>
-                            <span className="text-xs text-slate-400">{formatHijriDate(new Date())}</span>
+                            <span className="text-xs text-slate-400">{task.date ? formatHijriDate(new Date(task.date)) : formatHijriDate(new Date(date))}</span>
                           </div>
                           <div className="flex items-baseline gap-1 bg-white px-3 py-1 rounded-md border border-slate-200 shadow-sm">
                             <span className="text-sm font-bold text-slate-800">{grade !== undefined && grade !== '' ? grade : '-'}</span>
@@ -366,7 +366,7 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
                         <div key={task.id} className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-100">
                           <div className="flex flex-col">
                             <span className="text-sm font-medium text-slate-700">{task.name}</span>
-                            <span className="text-xs text-slate-400">{formatHijriDate(new Date())}</span>
+                            <span className="text-xs text-slate-400">{task.date ? formatHijriDate(new Date(task.date)) : formatHijriDate(new Date(date))}</span>
                           </div>
                           <div className="flex items-baseline gap-1 bg-white px-3 py-1 rounded-md border border-slate-200 shadow-sm">
                             <span className="text-sm font-bold text-slate-800">{grade !== undefined && grade !== '' ? grade : '-'}</span>
