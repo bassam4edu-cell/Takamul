@@ -15,10 +15,13 @@ import { Referral } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'motion/react';
 
+import TeacherPassManagement from '../components/TeacherPassManagement';
+
 const TeacherDashboard: React.FC = () => {
   const { user } = useAuth();
   const [referrals, setReferrals] = useState<Referral[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'referrals' | 'smart-pass'>('referrals');
 
   useEffect(() => {
     const fetchReferrals = async () => {
@@ -68,18 +71,27 @@ const TeacherDashboard: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">مرحباً بك، {user?.name}</h1>
-          <p className="text-sm md:text-base text-slate-500 mt-1">إليك نظرة عامة على تحويلات الطلاب الخاصة بك.</p>
+          <p className="text-sm md:text-base text-slate-500 mt-1">إليك نظرة عامة على مهامك اليومية.</p>
         </div>
-        <Link 
-          to="/dashboard/referral/new"
-          className="sts-button-accent px-6 md:px-8 py-3 md:py-4 flex items-center justify-center gap-3 shadow-xl shadow-accent/20 w-full md:w-auto"
-        >
-          <Plus size={22} />
-          <span>تحويل جديد</span>
-        </Link>
+        <div className="flex items-center gap-3 bg-slate-100 p-1 rounded-2xl border border-slate-200">
+          <button 
+            onClick={() => setActiveTab('referrals')}
+            className={`px-6 py-2.5 rounded-xl text-sm font-black transition-all ${activeTab === 'referrals' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            التحويلات
+          </button>
+          <button 
+            onClick={() => setActiveTab('smart-pass')}
+            className={`px-6 py-2.5 rounded-xl text-sm font-black transition-all ${activeTab === 'smart-pass' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            نظام الأذونات
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
+      {activeTab === 'referrals' ? (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
         {stats.map((stat, i) => (
           <motion.div 
             key={stat.label}
@@ -244,7 +256,11 @@ const TeacherDashboard: React.FC = () => {
           </div>
         </div>
       </div>
-    </div>
+    </>
+  ) : (
+    <TeacherPassManagement />
+  )}
+</div>
   );
 };
 

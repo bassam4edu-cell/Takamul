@@ -299,6 +299,16 @@ async function initDb() {
     `;
 
     await sql`
+      CREATE TABLE IF NOT EXISTS smart_tracker_templates (
+        id SERIAL PRIMARY KEY,
+        teacher_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        tasks JSONB NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+
+    await sql`
       CREATE TABLE IF NOT EXISTS smart_tracker_student_grades (
         id SERIAL PRIMARY KEY,
         student_state_id INTEGER REFERENCES smart_tracker_student_states(id) ON DELETE CASCADE,
@@ -320,6 +330,25 @@ async function initDb() {
     } catch (e) {
       // Ignore if column already exists
     }
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS passes (
+        id TEXT PRIMARY KEY,
+        student_id TEXT,
+        student_name TEXT NOT NULL,
+        teacher_id TEXT,
+        teacher_name TEXT NOT NULL,
+        teacher_phone TEXT,
+        period TEXT,
+        type TEXT NOT NULL,
+        reason TEXT,
+        timestamp TEXT NOT NULL,
+        status TEXT DEFAULT 'pending',
+        agent_name TEXT,
+        school_id INTEGER REFERENCES schools(id),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
 
     // Seed data if empty
     const usersCount = await sql`SELECT COUNT(*) as count FROM users`;
@@ -1700,6 +1729,39 @@ async function startServer() {
         FROM student_score_logs s
         LEFT JOIN users u ON s.created_by_user_id = u.id
         WHERE s.student_id = ${id}
+
+        UNION ALL
+
+        SELECT 
+          'smart_grade' as event_type,
+          sg.id as event_id,
+          COALESCE(sg.updated_at, s.created_at) as event_date,
+          COALESCE(u.name, 'مستخدم محذوف') as actor_name,
+          t.name || ': ' || sg.grade || ' / ' || t.max_grade as description,
+          t.category as category,
+          'completed' as status
+        FROM smart_tracker_student_grades sg
+        JOIN smart_tracker_tasks t ON sg.task_id = t.id
+        JOIN smart_tracker_student_states ss ON sg.student_state_id = ss.id
+        JOIN smart_tracker_sessions s ON ss.session_id = s.id
+        LEFT JOIN users u ON s.teacher_id = u.id
+        WHERE ss.student_id = ${id}
+
+        UNION ALL
+
+        SELECT 
+          'smart_behavior' as event_type,
+          ss.id as event_id,
+          s.created_at as event_date,
+          COALESCE(u.name, 'مستخدم محذوف') as actor_name,
+          chip as description,
+          'behavior' as category,
+          'completed' as status
+        FROM smart_tracker_student_states ss
+        CROSS JOIN LATERAL jsonb_array_elements_text(ss.behavior_chips) as chip
+        JOIN smart_tracker_sessions s ON ss.session_id = s.id
+        LEFT JOIN users u ON s.teacher_id = u.id
+        WHERE ss.student_id = ${id} AND jsonb_array_length(ss.behavior_chips) > 0
 
         ORDER BY event_date DESC
       `;
@@ -3543,6 +3605,86 @@ async function startServer() {
     }
   });
 
+  // --- Smart Pass Endpoints ---
+  app.get("/api/passes", async (req, res) => {
+    try {
+      const passes = await sql`SELECT * FROM passes ORDER BY created_at DESC`;
+      // Map database fields to camelCase for frontend
+      const mappedPasses = passes.map((p: any) => ({
+        id: p.id,
+        studentId: p.student_id,
+        studentName: p.student_name,
+        teacherId: p.teacher_id,
+        teacherName: p.teacher_name,
+        teacherPhone: p.teacher_phone,
+        period: p.period,
+        type: p.type,
+        reason: p.reason,
+        timestamp: p.timestamp,
+        status: p.status,
+        agentName: p.agent_name
+      }));
+      res.json(mappedPasses);
+    } catch (err) {
+      console.error("Failed to fetch passes:", err);
+      res.status(500).json({ error: "Failed to fetch passes" });
+    }
+  });
+
+  app.get("/api/passes/:id", async (req, res) => {
+    try {
+      const pass = await sql`SELECT * FROM passes WHERE id = ${req.params.id}`;
+      if (pass.length === 0) {
+        return res.status(404).json({ error: "Pass not found" });
+      }
+      const p = pass[0];
+      res.json({
+        id: p.id,
+        studentId: p.student_id,
+        studentName: p.student_name,
+        teacherId: p.teacher_id,
+        teacherName: p.teacher_name,
+        teacherPhone: p.teacher_phone,
+        period: p.period,
+        type: p.type,
+        reason: p.reason,
+        timestamp: p.timestamp,
+        status: p.status,
+        agentName: p.agent_name
+      });
+    } catch (err) {
+      console.error("Failed to fetch pass:", err);
+      res.status(500).json({ error: "Failed to fetch pass" });
+    }
+  });
+
+  app.post("/api/passes", async (req, res) => {
+    const { id, studentId, studentName, teacherId, teacherName, teacherPhone, period, type, reason, timestamp, status, agentName } = req.body;
+    try {
+      await sql`
+        INSERT INTO passes (id, student_id, student_name, teacher_id, teacher_name, teacher_phone, period, type, reason, timestamp, status, agent_name)
+        VALUES (${id}, ${studentId}, ${studentName}, ${teacherId}, ${teacherName}, ${teacherPhone}, ${period}, ${type}, ${reason}, ${timestamp}, ${status || 'pending'}, ${agentName})
+      `;
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Failed to create pass:", err);
+      res.status(500).json({ error: "Failed to create pass" });
+    }
+  });
+
+  app.patch("/api/passes/:id", async (req, res) => {
+    const { status } = req.body;
+    try {
+      await sql`
+        UPDATE passes SET status = ${status} WHERE id = ${req.params.id}
+      `;
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Failed to update pass status:", err);
+      res.status(500).json({ error: "Failed to update pass status" });
+    }
+  });
+
   // --- Smart Tracker Endpoints ---
   app.get("/api/tracker/history", async (req, res) => {
     const { teacher_id, grade, section, subject } = req.query;
@@ -3725,6 +3867,46 @@ async function startServer() {
     } catch (err) {
       console.error("[BULK TEMPLATE] Error:", err);
       res.status(500).json({ error: "Failed to apply bulk template" });
+    }
+  });
+
+  app.get("/api/tracker/templates", async (req, res) => {
+    const { teacher_id } = req.query;
+    try {
+      const templates = await sql`
+        SELECT * FROM smart_tracker_templates 
+        WHERE teacher_id = ${teacher_id} 
+        ORDER BY created_at DESC
+      `;
+      res.json(templates);
+    } catch (err) {
+      console.error("[GET TEMPLATES] Error:", err);
+      res.status(500).json({ error: "Failed to fetch templates" });
+    }
+  });
+
+  app.post("/api/tracker/templates", async (req, res) => {
+    const { teacher_id, name, tasks } = req.body;
+    try {
+      await sql`
+        INSERT INTO smart_tracker_templates (teacher_id, name, tasks)
+        VALUES (${teacher_id}, ${name}, ${JSON.stringify(tasks)})
+      `;
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[SAVE TEMPLATE] Error:", err);
+      res.status(500).json({ error: "Failed to save template" });
+    }
+  });
+
+  app.delete("/api/tracker/templates/:id", async (req, res) => {
+    const { id } = req.params;
+    try {
+      await sql`DELETE FROM smart_tracker_templates WHERE id = ${id}`;
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[DELETE TEMPLATE] Error:", err);
+      res.status(500).json({ error: "Failed to delete template" });
     }
   });
 

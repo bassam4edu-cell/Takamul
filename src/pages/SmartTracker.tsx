@@ -14,10 +14,13 @@ import {
   AlertTriangle,
   Edit2,
   Trash2,
+  Copy,
   Book,
   Users,
   GraduationCap,
-  Calendar
+  Calendar,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 import { PrintableTracker } from '../components/PrintableTracker';
 import { StudentProfileDrawer } from '../components/StudentProfileDrawer';
@@ -286,6 +289,9 @@ const SmartTracker: React.FC = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [startX, setStartX] = useState(0);
   const [scrollLeft, setScrollLeft] = useState(0);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [printReportType, setPrintReportType] = useState<'all' | 'single'>('all');
+  const [selectedPrintTaskId, setSelectedPrintTaskId] = useState<string>('');
 
   // --- Drag Handlers ---
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -370,6 +376,10 @@ const SmartTracker: React.FC = () => {
     participation: [], homework: [], performance: [], exams: []
   });
 
+  const allTasks = useMemo(() => {
+    return Object.values(tasks).flat();
+  }, [tasks]);
+
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [newTask, setNewTask] = useState<{name: string, maxGrade: number, type: 'number' | 'binary', date?: string}>({
@@ -387,6 +397,89 @@ const SmartTracker: React.FC = () => {
     name: '', maxGrade: 5, type: 'number', date: new Date().toISOString().split('T')[0]
   });
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  // --- Template Management State ---
+  const [savedTemplates, setSavedTemplates] = useState<any[]>([]);
+  const [focusedColumnId, setFocusedColumnId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setFocusedColumnId(null);
+  }, [activeTab, activeCategory]);
+
+  const [isSaveTemplateModalOpen, setIsSaveTemplateModalOpen] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+
+  const fetchTemplates = async () => {
+    if (!user?.id) return;
+    try {
+      const res = await apiFetch(`/api/tracker/templates?teacher_id=${user.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSavedTemplates(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch templates", err);
+    }
+  };
+
+  useEffect(() => {
+    if (isBulkModalOpen) {
+      fetchTemplates();
+    }
+  }, [isBulkModalOpen]);
+
+  const handleSaveTemplate = async () => {
+    if (!templateName) {
+      toast.error("الرجاء إدخال اسم للقالب");
+      return;
+    }
+    const hasTasks = Object.values(bulkTemplateTasks).some(tasks => tasks.length > 0);
+    if (!hasTasks) {
+      toast.error("لا يمكن حفظ قالب فارغ");
+      return;
+    }
+
+    try {
+      const res = await apiFetch('/api/tracker/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          teacher_id: user?.id,
+          name: templateName,
+          tasks: bulkTemplateTasks
+        })
+      });
+
+      if (res.ok) {
+        toast.success("تم حفظ القالب بنجاح");
+        setIsSaveTemplateModalOpen(false);
+        setTemplateName('');
+        fetchTemplates();
+      } else {
+        toast.error("حدث خطأ أثناء حفظ القالب");
+      }
+    } catch (err) {
+      console.error("Failed to save template", err);
+      toast.error("حدث خطأ أثناء حفظ القالب");
+    }
+  };
+
+  const handleLoadTemplate = (template: any) => {
+    setBulkTemplateTasks(template.tasks);
+    toast.success(`تم تحميل القالب: ${template.name}`);
+  };
+
+  const handleDeleteTemplate = async (id: number) => {
+    try {
+      const res = await apiFetch(`/api/tracker/templates/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        toast.success("تم حذف القالب");
+        fetchTemplates();
+      }
+    } catch (err) {
+      console.error("Failed to delete template", err);
+    }
+  };
 
   // --- Students State ---
   const [studentsState, setStudentsState] = useState<Record<number, StudentState>>({});
@@ -748,6 +841,9 @@ const SmartTracker: React.FC = () => {
   };
 
   const deleteTask = (taskId: string) => {
+    if (focusedColumnId === taskId) {
+      setFocusedColumnId(null);
+    }
     setTasks(prev => ({
       ...prev,
       [activeCategory]: prev[activeCategory].filter(t => t.id !== taskId)
@@ -906,6 +1002,54 @@ const SmartTracker: React.FC = () => {
     setBulkNewTask({ name: '', maxGrade: 5, type: 'number', date: new Date().toISOString().split('T')[0] });
   };
 
+  const handleDuplicateTask = (taskToClone: Task) => {
+    // 1. استخراج الاسم الأساسي بدون الأرقام في النهاية (مثال: "مشاركة 1" تصبح "مشاركة")
+    const baseName = taskToClone.name.replace(/\s*\d+$/, '').trim() || taskToClone.name;
+
+    // 2. البحث عن أعلى رقم مستخدم لهذا الاسم الأساسي في كامل المصفوفة الحالية للقسم النشط
+    let maxNumber = 0;
+    const currentTasks = bulkTemplateTasks[bulkActiveCategory];
+    
+    currentTasks.forEach(t => {
+      // التحقق مما إذا كان اسم المهمة يبدأ بالاسم الأساسي متبوعاً برقم
+      // نحتاج لهروب الأحرف الخاصة في الاسم الأساسي لاستخدامه في RegExp
+      const escapedBaseName = baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const match = t.name.match(new RegExp(`^${escapedBaseName}\\s*(\\d+)$`));
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxNumber) maxNumber = num;
+      } else if (t.name.trim() === baseName) {
+        // إذا كانت المهمة بدون رقم (مثل "مشاركة")، نعتبرها رقم 1
+        if (maxNumber < 1) maxNumber = 1;
+      }
+    });
+
+    // 3. توليد الاسم الجديد الذكي
+    const newName = `${baseName} ${maxNumber + 1}`;
+
+    // 4. إنشاء الكائن الجديد وإضافته للـ State
+    const newTask: Task = {
+      ...taskToClone,
+      id: (Date.now() + Math.random()).toString(),
+      name: newName
+    };
+
+    setBulkTemplateTasks(prev => {
+      const currentTasks = prev[bulkActiveCategory];
+      const index = currentTasks.findIndex(t => t.id === taskToClone.id);
+      const newTasks = [...currentTasks];
+      if (index !== -1) {
+        newTasks.splice(index + 1, 0, newTask);
+      } else {
+        newTasks.push(newTask);
+      }
+      return {
+        ...prev,
+        [bulkActiveCategory]: newTasks
+      };
+    });
+  };
+
   const handleBulkApply = async () => {
     if (bulkSelectedSections.length === 0) {
       toast.error("الرجاء تحديد فصل واحد على الأقل");
@@ -945,6 +1089,10 @@ const SmartTracker: React.FC = () => {
     }
   };
 
+  const visibleTasks = focusedColumnId 
+    ? tasks[activeCategory].filter(task => task.id === focusedColumnId) 
+    : tasks[activeCategory];
+
   return (
     <>
     <div className="min-h-screen bg-slate-50 pb-32 font-sans print:hidden" dir="rtl">
@@ -958,12 +1106,20 @@ const SmartTracker: React.FC = () => {
             <span className="bg-teal-50 text-teal-700 px-2 py-0.5 rounded-full">{currentSubjectLabel}</span>
           </div>
         </div>
-        <button 
-          onClick={() => setIsMobileFilterSheetOpen(true)}
-          className="p-2 bg-slate-100 rounded-xl text-slate-600 hover:bg-slate-200 transition-colors"
-        >
-          <Dices size={20} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => setIsPrintModalOpen(true)}
+            className="p-2 bg-indigo-50 rounded-xl text-indigo-600 hover:bg-indigo-100 transition-colors"
+          >
+            <Printer size={20} />
+          </button>
+          <button 
+            onClick={() => setIsMobileFilterSheetOpen(true)}
+            className="p-2 bg-slate-100 rounded-xl text-slate-600 hover:bg-slate-200 transition-colors"
+          >
+            <Dices size={20} />
+          </button>
+        </div>
       </div>
 
       <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6 md:space-y-8">
@@ -1060,6 +1216,13 @@ const SmartTracker: React.FC = () => {
           
           {/* Action Buttons */}
           <div className="flex flex-wrap justify-center gap-2">
+            <button
+              onClick={() => setIsPrintModalOpen(true)}
+              className="rounded-full bg-white hover:bg-slate-50 text-indigo-700 border border-slate-200 px-4 py-2 text-sm font-bold shadow-sm transition-colors flex items-center gap-2"
+            >
+              <Printer size={16} />
+              مركز الطباعة 🖨️
+            </button>
             {activeTab === 'attendance' && (
               <button
                 onClick={handleMarkAllPresent}
@@ -1163,46 +1326,67 @@ const SmartTracker: React.FC = () => {
               <table className="w-full text-right border-collapse">
                 <thead className="bg-slate-100 text-slate-700 font-bold">
                   <tr>
-                    <th className="sticky right-0 z-20 bg-white shadow-[1px_0_5px_rgba(0,0,0,0.1)] border border-slate-300 p-2 text-sm h-10 whitespace-nowrap min-w-[200px]">
+                    <th className="sticky right-0 z-20 bg-white shadow-[1px_0_5px_rgba(0,0,0,0.1)] border border-slate-300 p-2 text-sm h-auto py-2 whitespace-nowrap min-w-[200px]">
                       الطالب
                     </th>
                     {activeTab === 'grades' && (
                       <>
-                        {tasks[activeCategory].map((task, tIdx) => (
+                        {visibleTasks.map((task, tIdx) => (
                           <th 
                             key={task.id} 
                             onClick={() => handleEditTask(task)}
-                            className="border border-slate-300 bg-slate-100 p-2 text-sm h-10 whitespace-nowrap min-w-[100px] cursor-pointer hover:bg-slate-200 transition-colors relative group"
+                            className="border border-slate-300 bg-slate-100 p-2 text-sm h-auto py-2 whitespace-nowrap min-w-[100px] cursor-pointer hover:bg-slate-200 transition-colors relative group"
                             title="انقر لتعديل المهمة"
                           >
-                            <button
-                              onClick={(e) => { e.stopPropagation(); deleteTask(task.id); }}
-                              className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 transition-opacity"
-                              title="حذف المهمة"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                            <div className="flex flex-col items-center justify-center gap-0.5">
-                              <span className="truncate w-full text-center">{task.name}</span>
-                              <div className="flex items-center gap-1">
-                                <span className="text-[10px] text-slate-500 font-normal">({task.maxGrade})</span>
-                                {task.date && <span className="text-[9px] text-slate-400 font-normal">{formatShortHijriDate(task.date)}</span>}
+                            <div className="absolute top-1 left-1 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={(e) => { 
+                                  e.stopPropagation(); 
+                                  setFocusedColumnId(focusedColumnId === task.id ? null : task.id); 
+                                }}
+                                className={`p-1 rounded-md transition-colors ${focusedColumnId === task.id ? 'bg-amber-100 text-amber-700' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}
+                                title={focusedColumnId === task.id ? "إنهاء التركيز" : "تركيز على هذه المهمة"}
+                              >
+                                {focusedColumnId === task.id ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); deleteTask(task.id); }}
+                                className="p-1 bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 rounded-md transition-colors"
+                                title="حذف المهمة"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                            <div className="flex flex-col items-center justify-center gap-1 font-bold text-slate-800">
+                              {/* اسم المهمة */}
+                              <span className="text-sm truncate w-full text-center">{task.name}</span>
+                              
+                              {/* تفاصيل المهمة (التاريخ والدرجة) */}
+                              <div className="flex flex-col items-center text-[11px] text-slate-500 font-normal leading-tight mt-1">
+                                <span>
+                                  <span className="font-semibold text-slate-600">التاريخ: </span> 
+                                  {task.date ? new Date(task.date).toLocaleDateString('ar-SA', { year: 'numeric', month: '2-digit', day: '2-digit' }) : 'بدون تاريخ'}
+                                </span>
+                                <span>
+                                  <span className="font-semibold text-slate-600">الدرجة: </span> 
+                                  {task.maxGrade}
+                                </span>
                               </div>
                             </div>
                           </th>
                         ))}
-                        {tasks[activeCategory].length === 0 && (
-                          <th className="border border-slate-300 bg-slate-100 p-2 text-sm h-10 whitespace-nowrap text-slate-400 font-normal text-center">
+                        {visibleTasks.length === 0 && (
+                          <th className="border border-slate-300 bg-slate-100 p-2 text-sm h-auto py-2 whitespace-nowrap text-slate-400 font-normal text-center">
                             لا توجد مهام مضافة
                           </th>
                         )}
-                        <th className="sticky left-0 z-20 bg-slate-50 shadow-[-1px_0_5px_rgba(0,0,0,0.1)] border border-slate-300 p-2 text-sm h-10 whitespace-nowrap min-w-[80px] text-center">
+                        <th className="sticky left-0 z-20 bg-slate-50 shadow-[-1px_0_5px_rgba(0,0,0,0.1)] border border-slate-300 p-2 text-sm h-auto py-2 whitespace-nowrap min-w-[80px] text-center">
                           المجموع
                         </th>
                       </>
                     )}
                     {activeTab === 'attendance' && (
-                      <th className="border border-slate-300 bg-slate-100 p-2 text-sm h-10 whitespace-nowrap w-full">
+                      <th className="border border-slate-300 bg-slate-100 p-2 text-sm h-auto py-2 whitespace-nowrap w-full">
                         التحضير
                       </th>
                     )}
@@ -1227,7 +1411,7 @@ const SmartTracker: React.FC = () => {
                         
                         {activeTab === 'grades' && (
                           <>
-                            {tasks[activeCategory].map((task, tIdx) => {
+                            {visibleTasks.map((task, tIdx) => {
                               const val = state.grades[task.id] ?? '';
                               const isError = val !== '' && Number(val) > task.maxGrade;
                               return (
@@ -1269,7 +1453,7 @@ const SmartTracker: React.FC = () => {
                                 </td>
                               );
                             })}
-                            {tasks[activeCategory].length === 0 && (
+                            {visibleTasks.length === 0 && (
                               <td className="p-0 border border-slate-300 h-10 bg-slate-50/50"></td>
                             )}
                             <td className="sticky left-0 z-10 bg-slate-50 shadow-[-1px_0_5px_rgba(0,0,0,0.1)] border border-slate-300 p-0 h-10 text-center font-black text-teal-700">
@@ -1440,7 +1624,7 @@ const SmartTracker: React.FC = () => {
 
                 {activeTab === 'grades' && (
                   <div className="space-y-3">
-                    {tasks[activeCategory].map((task) => {
+                    {visibleTasks.map((task) => {
                       const val = state.grades[task.id] ?? '';
                       const isError = val !== '' && Number(val) > task.maxGrade;
                       
@@ -1587,7 +1771,7 @@ const SmartTracker: React.FC = () => {
               </div>
 
               <div className="space-y-6">
-                {tasks[activeCategory].map((task) => {
+                {visibleTasks.map((task) => {
                   const val = studentsState[mobileGradingStudentId]?.grades[task.id] ?? '';
                   return (
                     <div key={task.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-3">
@@ -1825,11 +2009,11 @@ const SmartTracker: React.FC = () => {
             إعداد التوزيع السريع
           </button>
           <button
-            onClick={() => window.print()}
+            onClick={() => setIsPrintModalOpen(true)}
             className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-semibold py-3 px-6 rounded-xl flex items-center gap-2 shadow-sm transition-colors"
           >
             <Printer size={18} />
-            طباعة الكشف
+            مركز الطباعة 🖨️
           </button>
           <button
             onClick={handleFinalSubmit}
@@ -2009,7 +2193,7 @@ const SmartTracker: React.FC = () => {
       )}
     </AnimatePresence>
 
-    {!selectedStudentId && (
+    {!selectedStudentId && printReportType === 'all' && (
       <PrintableTracker 
         students={students} 
         studentsState={studentsState} 
@@ -2020,6 +2204,221 @@ const SmartTracker: React.FC = () => {
         teacherName={user?.name || ''}
       />
     )}
+
+    {!selectedStudentId && printReportType === 'single' && selectedPrintTaskId && (
+      <div className="hidden print:block print:w-full print:bg-white" dir="rtl">
+        <style>
+          {`
+            @media print {
+              @page { size: A4 portrait; margin: 1.5cm; }
+              body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            }
+          `}
+        </style>
+        {/* Single Task Template */}
+        {(() => {
+          const task = allTasks.find(t => t.id === selectedPrintTaskId);
+          if (!task) return null;
+
+          const completedCount = students.filter(s => {
+            const val = studentsState[s.id]?.grades?.[task.id];
+            return task.type === 'binary' 
+              ? Number(val) === task.maxGrade 
+              : (val !== undefined && val !== null && val !== '');
+          }).length;
+          const notCompletedCount = students.length - completedCount;
+
+          return (
+            <div className="p-8 text-black">
+              {/* Header */}
+              <div className="flex justify-between items-start mb-8">
+                <div className="text-right">
+                  <p className="font-bold">المملكة العربية السعودية</p>
+                  <p className="font-bold">وزارة التعليم</p>
+                  <p className="font-bold">إدارة التعليم بمحافظة ............</p>
+                  <p className="font-bold">مدرسة ............................</p>
+                </div>
+                <div className="text-left">
+                  <p><span className="font-bold">المادة:</span> {subject}</p>
+                  <p><span className="font-bold">الصف:</span> {grade} - {section}</p>
+                  <p><span className="font-bold">المعلم:</span> {user?.name}</p>
+                  <p><span className="font-bold">التاريخ:</span> {formatHijriDate(date)}</p>
+                </div>
+              </div>
+
+              {/* Title */}
+              <div className="text-center mb-6">
+                <h2 className="text-2xl font-black border-b-4 border-black inline-block pb-2">
+                  تقرير إنجاز مهمة: {task.name}
+                </h2>
+              </div>
+
+              {/* Stats */}
+              <div className="flex justify-center gap-8 mb-8 bg-slate-50 p-4 border-2 border-black rounded-xl">
+                <div className="text-center">
+                  <p className="text-sm font-bold text-slate-600">إجمالي الطلاب</p>
+                  <p className="text-xl font-black">{students.length}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-bold text-green-600">أنجز</p>
+                  <p className="text-xl font-black text-green-700">{completedCount}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-bold text-red-600">لم ينجز</p>
+                  <p className="text-xl font-black text-red-700">{notCompletedCount}</p>
+                </div>
+              </div>
+
+              {/* Table */}
+              <table className="w-full border-collapse border-2 border-black text-center">
+                <thead>
+                  <tr className="bg-slate-100 border-b-2 border-black">
+                    <th className="border border-black p-2 w-16">م</th>
+                    <th className="border border-black p-2 text-right">اسم الطالب</th>
+                    <th className="border border-black p-2 w-48">حالة الإنجاز / الدرجة</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {students.map((student, idx) => {
+                    const val = studentsState[student.id]?.grades?.[task.id];
+                    let displayVal = '-';
+                    if (task.type === 'number') {
+                      displayVal = (val !== undefined && val !== null && val !== '') ? val.toString() : '-';
+                    } else if (task.type === 'binary') {
+                      if (Number(val) === task.maxGrade) displayVal = `نفذ (${task.maxGrade})`;
+                      else if (Number(val) === 0 && val !== '' && val !== undefined && val !== null) displayVal = "لم ينفذ";
+                    }
+
+                    return (
+                      <tr key={student.id} className="border-b border-black">
+                        <td className="border border-black p-2">{idx + 1}</td>
+                        <td className="border border-black p-2 text-right font-bold">{student.name}</td>
+                        <td className={`border border-black p-2 ${displayVal !== '-' ? 'font-black' : ''}`}>
+                          {displayVal}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              {/* Footer */}
+              <div className="mt-12 flex justify-between px-8">
+                <div className="text-center">
+                  <p className="font-bold mb-8">توقيع المعلم</p>
+                  <p>................................</p>
+                </div>
+                <div className="text-center">
+                  <p className="font-bold mb-8">ختم المدرسة</p>
+                  <p>................................</p>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+    )}
+
+    {/* Print Center Modal */}
+    <AnimatePresence>
+      {isPrintModalOpen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm print:hidden" dir="rtl">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            className="max-w-md w-full bg-white rounded-3xl shadow-2xl overflow-hidden"
+          >
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-indigo-50">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-600 text-white rounded-xl">
+                  <Printer size={20} />
+                </div>
+                <h3 className="font-black text-indigo-900 text-xl">مركز الطباعة والتقارير</h3>
+              </div>
+              <button
+                onClick={() => setIsPrintModalOpen(false)}
+                className="text-indigo-400 hover:text-indigo-600 transition-colors p-2 rounded-full hover:bg-indigo-100"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">نوع التقرير</label>
+                <select
+                  value={printReportType}
+                  onChange={(e) => setPrintReportType(e.target.value as 'all' | 'single')}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-slate-700 font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                >
+                  <option value="all">كشف المتابعة التفصيلي الشامل</option>
+                  <option value="single">تقرير إنجاز مهمة مفردة</option>
+                </select>
+              </div>
+
+              {printReportType === 'single' && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  className="space-y-2"
+                >
+                  <label className="block text-sm font-bold text-slate-700 mb-2">اختر المهمة</label>
+                  <select
+                    value={selectedPrintTaskId}
+                    onChange={(e) => setSelectedPrintTaskId(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-slate-700 font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  >
+                    <option value="" disabled>-- اختر المهمة من القائمة --</option>
+                    {Object.entries(tasks).map(([cat, catTasks]) => (
+                      catTasks.length > 0 && (
+                        <optgroup key={cat} label={CATEGORY_NAMES[cat as TaskCategory]}>
+                          {catTasks.map(t => (
+                            <option key={t.id} value={t.id}>{t.name}</option>
+                          ))}
+                        </optgroup>
+                      )
+                    ))}
+                  </select>
+                </motion.div>
+              )}
+
+              <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 flex gap-3">
+                <AlertTriangle size={20} className="text-amber-600 shrink-0" />
+                <p className="text-xs text-amber-800 leading-relaxed font-medium">
+                  سيتم فتح نافذة الطباعة الخاصة بالمتصفح. تأكد من اختيار وضع "Landscape" (عرضي) للكشف الشامل، ووضع "Portrait" (طولي) لتقرير المهمة المفردة للحصول على أفضل نتيجة.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-6 bg-slate-50 flex gap-3">
+              <button
+                onClick={() => setIsPrintModalOpen(false)}
+                className="flex-1 py-3 text-slate-600 font-bold hover:bg-slate-200 rounded-2xl transition-colors"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={() => {
+                  if (printReportType === 'single' && !selectedPrintTaskId) {
+                    toast.error("الرجاء اختيار المهمة أولاً");
+                    return;
+                  }
+                  setTimeout(() => {
+                    window.print();
+                    setIsPrintModalOpen(false);
+                  }, 100);
+                }}
+                className="flex-[2] py-3 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2"
+              >
+                <Printer size={20} />
+                بدء الطباعة الآن
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
 
     {/* Bulk Setup Modal */}
     <AnimatePresence>
@@ -2049,9 +2448,40 @@ const SmartTracker: React.FC = () => {
               </button>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* القسم الأول: بناء القالب */}
-              <div className="space-y-6">
+            <div className="flex-1 overflow-y-auto p-6 space-y-8">
+              {/* قسم القوالب المحفوظة */}
+              {savedTemplates.length > 0 && (
+                <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-black text-indigo-900 flex items-center gap-2">
+                      <Star size={16} className="text-indigo-600" />
+                      القوالب المحفوظة
+                    </h4>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {savedTemplates.map(tpl => (
+                      <div key={tpl.id} className="group relative">
+                        <button
+                          onClick={() => handleLoadTemplate(tpl)}
+                          className="px-3 py-1.5 bg-white border border-indigo-200 text-indigo-700 text-xs font-bold rounded-lg hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
+                        >
+                          {tpl.name}
+                        </button>
+                        <button
+                          onClick={() => handleDeleteTemplate(tpl.id)}
+                          className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                        >
+                          <X size={10} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* القسم الأول: بناء القالب */}
+                <div className="space-y-6">
                 <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
                   <Book size={18} className="text-slate-400" />
                   <h4 className="font-bold text-slate-700">1. بناء قالب المهام</h4>
@@ -2126,17 +2556,26 @@ const SmartTracker: React.FC = () => {
                     </div>
                   ) : (
                     <ul className="space-y-2">
-                      {bulkTemplateTasks[bulkActiveCategory].map((task, idx) => (
-                        <li key={idx} className="flex items-center justify-between bg-white p-2 rounded-lg border border-slate-200 text-sm">
+                      {[...bulkTemplateTasks[bulkActiveCategory]]
+                        .sort((a, b) => a.name.localeCompare(b.name, 'ar', { numeric: true, sensitivity: 'base' }))
+                        .map((task) => (
+                        <li key={task.id} className="flex items-center justify-between bg-white p-2 rounded-lg border border-slate-200 text-sm">
                           <div className="flex flex-col">
                             <span className="font-medium text-slate-700">{task.name}</span>
                           </div>
                           <div className="flex items-center gap-3">
                             <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded-md">{task.maxGrade} درجات</span>
                             <button
+                              onClick={() => handleDuplicateTask(task)}
+                              className="text-slate-400 hover:text-blue-600 transition-colors"
+                              title="تكرار المهمة"
+                            >
+                              <Copy size={14} />
+                            </button>
+                            <button
                               onClick={() => setBulkTemplateTasks(prev => ({
                                 ...prev,
-                                [bulkActiveCategory]: prev[bulkActiveCategory].filter((_, i) => i !== idx)
+                                [bulkActiveCategory]: prev[bulkActiveCategory].filter(t => t.id !== task.id)
                               }))}
                               className="text-red-400 hover:text-red-600"
                             >
@@ -2209,21 +2648,69 @@ const SmartTracker: React.FC = () => {
                 </div>
               </div>
             </div>
+          </div>
             
-            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+          <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-between items-center">
               <button
-                onClick={() => setIsBulkModalOpen(false)}
-                className="px-6 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors"
+                onClick={() => setIsSaveTemplateModalOpen(true)}
+                disabled={Object.values(bulkTemplateTasks).every(tasks => tasks.length === 0)}
+                className="px-4 py-2 text-xs font-bold text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors flex items-center gap-2 disabled:opacity-50"
+              >
+                <Save size={16} />
+                حفظ كقالب جديد
+              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setIsBulkModalOpen(false)}
+                  className="px-6 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors"
+                >
+                  إلغاء
+                </button>
+                <button
+                  onClick={handleBulkApply}
+                  disabled={bulkSelectedSections.length === 0 || Object.values(bulkTemplateTasks).every(tasks => tasks.length === 0)}
+                  className="px-6 py-2.5 text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  <CheckCircle2 size={16} />
+                  اعتماد التوزيع للفصول المحددة
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+
+    {/* Save Template Modal */}
+    <AnimatePresence>
+      {isSaveTemplateModalOpen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" dir="rtl">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm"
+          >
+            <h3 className="text-lg font-bold text-slate-800 mb-4">حفظ التوزيع كقالب</h3>
+            <input
+              type="text"
+              value={templateName}
+              onChange={e => setTemplateName(e.target.value)}
+              placeholder="اسم القالب (مثال: توزيع الشهر الأول)"
+              className="w-full px-4 py-2 border border-slate-200 rounded-xl mb-6 focus:ring-2 focus:ring-indigo-500 outline-none"
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={() => setIsSaveTemplateModalOpen(false)}
+                className="flex-1 py-2 text-slate-600 font-bold hover:bg-slate-100 rounded-xl transition-colors"
               >
                 إلغاء
               </button>
               <button
-                onClick={handleBulkApply}
-                disabled={bulkSelectedSections.length === 0 || Object.values(bulkTemplateTasks).every(tasks => tasks.length === 0)}
-                className="px-6 py-2.5 text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                onClick={handleSaveTemplate}
+                className="flex-1 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors"
               >
-                <CheckCircle2 size={16} />
-                اعتماد التوزيع للفصول المحددة
+                حفظ
               </button>
             </div>
           </motion.div>

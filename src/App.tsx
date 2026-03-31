@@ -8,6 +8,8 @@ import LoadingSpinner from './components/LoadingSpinner';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SchoolProvider } from './context/SchoolContext';
 
+import { PassProvider } from './context/PassContext';
+
 export { useAuth };
 
 const Landing = lazy(() => import('./pages/Landing'));
@@ -41,6 +43,8 @@ const AuditLogs = lazy(() => import('./pages/AuditLogs'));
 const SmartTracker = lazy(() => import('./pages/SmartTracker'));
 const SchoolSettings = lazy(() => import('./pages/SchoolSettings'));
 const ExtensionSetup = lazy(() => import('./pages/ExtensionSetup'));
+const SmartPassSystem = lazy(() => import('./pages/SmartPassSystem'));
+const TeacherQuickConfirmPage = lazy(() => import('./pages/TeacherQuickConfirmPage'));
 
 
 
@@ -68,13 +72,16 @@ const App: React.FC = () => {
       <MessageLogProvider>
         <AuditLogProvider>
           <SchoolProvider>
-            <Router>
-              <Suspense fallback={<LoadingSpinner />}>
-                <Routes>
+            <PassProvider>
+              <Router>
+                <Suspense fallback={<LoadingSpinner />}>
+                  <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/parent-login" element={<ParentLogin />} />
+            <Route path="/smart-pass" element={<SmartPassSystem />} />
+            <Route path="/quick-confirm/:passId" element={<TeacherQuickConfirmPage />} />
             <Route path="/parent-portal" element={
               <ProtectedRoute allowedRoles={['parent']}>
                 <ParentPortal />
@@ -177,8 +184,9 @@ const App: React.FC = () => {
           </Routes>
           </Suspense>
           </Router>
-          </SchoolProvider>
-        </AuditLogProvider>
+        </PassProvider>
+      </SchoolProvider>
+    </AuditLogProvider>
       </MessageLogProvider>
     </AuthProvider>
   );

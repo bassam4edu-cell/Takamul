@@ -25,6 +25,16 @@ interface AttendanceRecord {
   is_excused: boolean;
 }
 
+interface TimelineEvent {
+  event_type: 'referral' | 'attendance' | 'score_log' | 'smart_grade' | 'smart_behavior';
+  event_id: number | string;
+  event_date: string;
+  actor_name: string;
+  description: string;
+  category: string;
+  status: string;
+}
+
 interface StudentProfileDrawerProps {
   student: Student;
   state: StudentState;
@@ -39,6 +49,7 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
   const { user: currentUser } = useAuth();
   if (!state) return null; // إضافة فحص أمان
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
+  const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
   const [selectedSubject, setSelectedSubject] = useState<any | null>(null);
   const drawerRef = useRef<HTMLDivElement>(null);
   const [isSharing, setIsSharing] = useState(false);
@@ -90,18 +101,19 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
       'الملف الشخصي للطالب',
       `قام بعرض الملف الشخصي للطالب ${student.name}`
     );
-    const fetchAttendance = async () => {
+    const fetchProfileData = async () => {
       try {
         const res = await apiFetch(`/api/student-profile/${student.id}`);
         if (res.ok) {
           const data = await res.json();
           setAttendanceRecords(data.attendanceRecords || []);
+          setTimeline(data.timeline || []);
         }
       } catch (err) {
-        console.error('Failed to fetch attendance', err);
+        console.error('Failed to fetch student profile data', err);
       }
     };
-    fetchAttendance();
+    fetchProfileData();
   }, [student.id]);
 
   const combinedAttendance = React.useMemo(() => {
@@ -212,6 +224,71 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
         </div>
 
         <div className="px-6 pb-8">
+          {/* 1. Comprehensive Log Section */}
+          <div className="mb-8">
+            <h3 className="text-lg font-bold text-slate-800 border-b border-slate-200 pb-2 mb-4">سجل المتابعة الشامل</h3>
+            <div className="space-y-4">
+              {timeline.length > 0 ? (
+                timeline.map((event, idx) => {
+                  const dateObj = new Date(event.event_date);
+                  const isBehavior = event.event_type === 'referral' && event.category === 'behavior' || event.event_type === 'smart_behavior';
+                  const isGrade = event.event_type === 'smart_grade' || event.event_type === 'score_log';
+                  const isAttendance = event.event_type === 'attendance';
+
+                  let iconColor = 'bg-slate-100 text-slate-600';
+                  let typeLabel = 'حدث';
+                  
+                  if (isBehavior) {
+                    iconColor = 'bg-amber-50 text-amber-700 border-amber-100';
+                    typeLabel = 'سلوك';
+                  } else if (isGrade) {
+                    iconColor = 'bg-emerald-50 text-emerald-700 border-emerald-100';
+                    typeLabel = 'درجة/متابعة';
+                  } else if (isAttendance) {
+                    iconColor = 'bg-red-50 text-red-700 border-red-100';
+                    typeLabel = 'حضور';
+                  }
+
+                  return (
+                    <div key={`${event.event_type}-${event.event_id}-${idx}`} className="relative pr-6 border-r-2 border-slate-100 pb-4 last:pb-0">
+                      <div className={`absolute top-0 -right-[9px] w-4 h-4 rounded-full border-2 border-white shadow-sm ${
+                        isBehavior ? 'bg-amber-500' : isGrade ? 'bg-emerald-500' : isAttendance ? 'bg-red-500' : 'bg-slate-400'
+                      }`} />
+                      
+                      <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${iconColor}`}>
+                              {typeLabel}
+                            </span>
+                            <span className="text-xs text-slate-400 font-medium">
+                              {formatHijriDate(dateObj)}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-slate-400">بواسطة: {event.actor_name}</span>
+                        </div>
+                        
+                        <p className="text-sm text-slate-700 font-bold mb-1">
+                          {event.description}
+                        </p>
+                        
+                        {event.category && event.category !== 'completed' && (
+                          <span className="text-[10px] text-slate-500 bg-slate-50 px-2 py-0.5 rounded">
+                            التصنيف: {event.category}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="text-center py-10 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+                  <p className="text-slate-500 text-sm">لا توجد مدخلات مسجلة في السجل الشامل</p>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* 2. Attendance Section */}
           <div className="mb-8">
             <h3 className="text-lg font-bold text-slate-800 border-b border-slate-200 pb-2 mb-4">سجل الغياب والتأخر</h3>
@@ -568,6 +645,29 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
             <p className="text-gray-700 print:text-xs leading-relaxed whitespace-pre-wrap print:text-black">
               {state.behaviorChips?.length > 0 ? state.behaviorChips.join('\n') : 'لا توجد ملاحظات مسجلة.'}
             </p>
+          </div>
+
+          {/* 4.5 Comprehensive Log (Print) */}
+          <div className="mt-4 print:block hidden print:break-inside-avoid">
+            <h3 className="text-lg print:text-sm font-bold text-gray-800 mb-2 print:mb-1 print:text-black print:border-b print:border-gray-300 print:pb-1">
+              السجل التاريخي للمتابعة:
+            </h3>
+            <div className="space-y-1">
+              {timeline.length > 0 ? (
+                timeline.slice(0, 15).map((event, idx) => (
+                  <div key={idx} className="flex justify-between items-start print:text-[8pt] border-b border-gray-100 pb-0.5">
+                    <div className="flex gap-2">
+                      <span className="font-bold min-w-[60px]">{formatHijriDate(new Date(event.event_date))}</span>
+                      <span>{event.description}</span>
+                    </div>
+                    <span className="text-gray-500 italic">{event.actor_name}</span>
+                  </div>
+                ))
+              ) : (
+                <p className="print:text-xs text-gray-500">لا توجد مدخلات تاريخية مسجلة.</p>
+              )}
+              {timeline.length > 15 && <p className="text-[7pt] text-gray-400 text-center mt-1">... تم عرض آخر 15 مدخلاً فقط في التقرير المطبوع ...</p>}
+            </div>
           </div>
 
           {/* 5. Teacher Footer */}
