@@ -12,10 +12,12 @@ import {
   ExternalLink,
   RefreshCw,
   Filter,
-  Printer
+  Printer,
+  QrCode
 } from 'lucide-react';
 import { usePasses, PassStatus, PassType } from '../context/PassContext';
 import { motion, AnimatePresence } from 'motion/react';
+import { QRCodeSVG } from 'qrcode.react';
 
 // --- Pass Types ---
 const PASS_TYPES = [
@@ -180,15 +182,18 @@ ${confirmUrl}
       {/* Print Styles */}
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
-          body * { visibility: hidden; }
-          #printable-pass, #printable-pass * { visibility: visible; }
+          body { visibility: hidden !important; background: white !important; }
           #printable-pass { 
-            position: absolute; 
-            left: 0; 
-            top: 0; 
-            width: 100%; 
-            padding: 20px;
+            visibility: visible !important; 
+            display: block !important;
+            position: absolute !important; 
+            left: 0 !important; 
+            top: 0 !important; 
+            width: 100% !important; 
+            margin: 0 !important;
+            padding: 0 !important;
           }
+          #printable-pass * { visibility: visible !important; }
           .no-print { display: none !important; }
         }
       `}} />
@@ -219,19 +224,26 @@ ${confirmUrl}
                       <span className="text-[10px] font-bold text-slate-400 uppercase">اسم الطالب</span>
                       <p className="text-lg font-black text-slate-800">{lastIssuedPass.studentName}</p>
                     </div>
-                    <div className={`px-3 py-1 rounded-full text-[10px] font-black ${PASS_TYPES.find(p => p.id === lastIssuedPass.type)?.bgColor} ${PASS_TYPES.find(p => p.id === lastIssuedPass.type)?.textColor}`}>
-                      {PASS_TYPES.find(p => p.id === lastIssuedPass.type)?.label}
+                    <div className={`px-3 py-1 rounded-full text-[10px] font-black ${PASS_TYPES.find(p => p.id === lastIssuedPass?.type)?.bgColor} ${PASS_TYPES.find(p => p.id === lastIssuedPass?.type)?.textColor}`}>
+                      {PASS_TYPES.find(p => p.id === lastIssuedPass?.type)?.label}
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <span className="text-[10px] font-bold text-slate-400 uppercase">المعلم</span>
-                      <p className="text-sm font-bold text-slate-700">{lastIssuedPass.teacherName}</p>
+                      <p className="text-sm font-bold text-slate-700">{lastIssuedPass?.teacherName}</p>
                     </div>
                     <div className="space-y-1 text-left">
                       <span className="text-[10px] font-bold text-slate-400 uppercase">الوقت</span>
-                      <p className="text-sm font-bold text-slate-700 tabular-nums">{lastIssuedPass.timestamp}</p>
+                      <p className="text-sm font-bold text-slate-700 tabular-nums">{lastIssuedPass?.timestamp}</p>
                     </div>
+                  </div>
+                  <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400">
+                      <QrCode className="w-3 h-3" />
+                      <span>يتضمن رمز QR للتحقق</span>
+                    </div>
+                    <span className="text-[10px] font-bold text-indigo-600">#{lastIssuedPass?.id}</span>
                   </div>
                 </div>
 
@@ -257,7 +269,7 @@ ${confirmUrl}
       </AnimatePresence>
 
       {/* Hidden Printable Pass */}
-      <div id="printable-pass" className="hidden">
+      <div id="printable-pass" className="hidden print:block">
         <div className="border-4 border-double border-slate-900 p-8 rounded-3xl space-y-8 bg-white max-w-2xl mx-auto">
           <div className="flex justify-between items-center border-b-2 border-slate-900 pb-6">
             <div className="text-right">
@@ -304,8 +316,15 @@ ${confirmUrl}
 
           <div className="flex justify-between items-end pt-8">
             <div className="text-center space-y-4">
-              <div className="w-32 h-32 bg-slate-100 border-2 border-slate-200 rounded-xl flex items-center justify-center">
-                <span className="text-[10px] text-slate-400 font-bold">QR CODE</span>
+              <div className="w-32 h-32 bg-white border-2 border-slate-200 rounded-xl flex items-center justify-center p-2">
+                {lastIssuedPass && (
+                  <QRCodeSVG 
+                    value={`${window.location.origin}/verify-pass/${lastIssuedPass.id}`}
+                    size={110}
+                    level="H"
+                    includeMargin={false}
+                  />
+                )}
               </div>
               <p className="text-xs font-black text-slate-400">تحقق من صحة الإذن</p>
             </div>
@@ -552,6 +571,15 @@ ${confirmUrl}
                           >
                             <Printer className="w-4 h-4" />
                           </button>
+                          <a 
+                            href={`${window.location.origin}/verify-pass/${pass.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-2 text-slate-400 hover:text-emerald-600 transition-colors"
+                            title="رابط التحقق"
+                          >
+                            <QrCode className="w-4 h-4" />
+                          </a>
                           <a 
                             href={`${window.location.origin}/quick-confirm/${pass.id}`}
                             target="_blank"

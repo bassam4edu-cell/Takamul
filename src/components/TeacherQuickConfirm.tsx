@@ -88,6 +88,45 @@ const TeacherQuickConfirm: React.FC = () => {
     );
   }
 
+  const getWording = () => {
+    switch (pass.type) {
+      case 'entry':
+        return {
+          title: 'تأكيد دخول طالب للفصل',
+          buttonConfirm: 'تأكيد دخول الطالب ✅',
+          buttonReject: 'الطالب لم يدخل ❌',
+          successConfirm: 'تم تأكيد الدخول بنجاح',
+          successReject: 'تم تسجيل عدم دخول الطالب'
+        };
+      case 'call':
+        return {
+          title: 'تأكيد وصول طالب للوكيل',
+          buttonConfirm: 'تأكيد وصول الطالب ✅',
+          buttonReject: 'الطالب لم يصل ❌',
+          successConfirm: 'تم تأكيد الوصول بنجاح',
+          successReject: 'تم تسجيل عدم وصول الطالب'
+        };
+      case 'exit':
+        return {
+          title: 'تأكيد خروج طالب من المدرسة',
+          buttonConfirm: 'تأكيد خروج الطالب ✅',
+          buttonReject: 'الطالب لم يخرج ❌',
+          successConfirm: 'تم تأكيد الخروج بنجاح',
+          successReject: 'تم تسجيل عدم خروج الطالب'
+        };
+      default:
+        return {
+          title: 'تأكيد حالة طالب',
+          buttonConfirm: 'تأكيد الحالة ✅',
+          buttonReject: 'رفض الحالة ❌',
+          successConfirm: 'تم التأكيد بنجاح',
+          successReject: 'تم تسجيل الرفض'
+        };
+    }
+  };
+
+  const wording = getWording();
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 font-sans" dir="rtl">
       <motion.div 
@@ -104,7 +143,7 @@ const TeacherQuickConfirm: React.FC = () => {
           </div>
           
           <div className="space-y-2">
-            <h1 className="text-3xl font-black text-slate-900">تأكيد وصول طالب</h1>
+            <h1 className="text-3xl font-black text-slate-900">{wording.title}</h1>
             <p className="text-slate-500 font-medium">الرجاء تأكيد حالة الطالب المذكور أدناه</p>
           </div>
         </div>
@@ -156,7 +195,7 @@ const TeacherQuickConfirm: React.FC = () => {
                   className="group flex items-center justify-center gap-3 bg-emerald-500 hover:bg-emerald-600 text-white py-5 rounded-3xl font-black text-xl shadow-xl shadow-emerald-100 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50"
                 >
                   {actionLoading === 'confirmed' ? <Loader2 className="w-6 h-6 animate-spin" /> : <CheckCircle2 className="w-6 h-6" />}
-                  تأكيد وصول الطالب ✅
+                  {wording.buttonConfirm}
                 </button>
                 <button 
                   disabled={!!actionLoading}
@@ -164,7 +203,7 @@ const TeacherQuickConfirm: React.FC = () => {
                   className="flex items-center justify-center gap-3 bg-white border-2 border-rose-100 text-rose-500 py-5 rounded-3xl font-black text-xl hover:bg-rose-50 transition-all active:scale-95 disabled:opacity-50"
                 >
                   {actionLoading === 'rejected' ? <Loader2 className="w-6 h-6 animate-spin" /> : <XCircle className="w-6 h-6" />}
-                  الطالب لم يصل ❌
+                  {wording.buttonReject}
                 </button>
               </motion.div>
             ) : (
@@ -182,7 +221,7 @@ const TeacherQuickConfirm: React.FC = () => {
                   {pass.status === 'confirmed' ? <CheckCircle2 className="w-8 h-8" /> : <XCircle className="w-8 h-8" />}
                 </div>
                 <h3 className={`text-xl font-black ${pass.status === 'confirmed' ? 'text-emerald-800' : 'text-rose-800'}`}>
-                  {pass.status === 'confirmed' ? 'تم تأكيد الوصول بنجاح' : 'تم تسجيل عدم وصول الطالب'}
+                  {pass.status === 'confirmed' ? wording.successConfirm : wording.successReject}
                 </h3>
                 <p className="text-slate-500 text-sm font-medium">شكراً لك، تم تحديث الحالة في نظام الوكيل.</p>
               </motion.div>

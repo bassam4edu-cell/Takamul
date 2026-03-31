@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowRight, MessageSquare } from 'lucide-react';
+import { ArrowRight, MessageSquare, User } from 'lucide-react';
 import { motion } from 'motion/react';
 import { formatHijriDate } from '../utils/dateUtils';
 
@@ -11,6 +11,7 @@ interface LogEntry {
   score: number;
   maxScore: number;
   teacherNote?: string;
+  teacherName?: string;
 }
 
 interface Props {
@@ -52,6 +53,12 @@ export const SubjectDetailedLogView: React.FC<Props> = ({ subject, studentName, 
         </span>
       </div>
       <p className="text-[10px] text-slate-500 font-bold">{log.date}</p>
+      {log.teacherName && (
+        <p className="text-[10px] text-primary font-bold mt-1 flex items-center gap-1">
+          <User size={12} />
+          <span>المعلم الراصد: {log.teacherName}</span>
+        </p>
+      )}
       {log.teacherNote && (
         <div className="flex gap-2 text-xs text-slate-600 mt-2 bg-white p-2 rounded-lg border border-slate-100">
           <MessageSquare size={14} className="text-teal-600 shrink-0 mt-0.5" />
@@ -142,10 +149,15 @@ export const SubjectDetailedLogView: React.FC<Props> = ({ subject, studentName, 
           {localLogs.filter(log => log.category === 'سلوك').length > 0 ? (
             localLogs.filter(log => log.category === 'سلوك').map(log => (
               <div key={log.id} className="p-3 mb-3 bg-blue-50/50 rounded-lg border border-blue-100">
-                 <div className="flex justify-between items-center mb-2">
+                  <div className="flex justify-between items-center mb-2">
                     <span className="font-bold text-sm text-blue-800">{log.taskName}</span>
-                    <span className="text-xs text-slate-500">{log.date}</span>
-                 </div>
+                    <div className="text-right">
+                      <span className="text-xs text-slate-500 block">{log.date}</span>
+                      {log.teacherName && (
+                        <span className="text-[10px] text-primary font-bold block">بواسطة: {log.teacherName}</span>
+                      )}
+                    </div>
+                  </div>
                  {log.teacherNote && (
                     <div className="text-sm text-slate-700 bg-white p-3 rounded border border-slate-200 shadow-sm">
                       <span className="font-semibold text-slate-500 mr-1">ملاحظة المعلم:</span> 

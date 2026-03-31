@@ -45,8 +45,7 @@ const SchoolSettings = lazy(() => import('./pages/SchoolSettings'));
 const ExtensionSetup = lazy(() => import('./pages/ExtensionSetup'));
 const SmartPassSystem = lazy(() => import('./pages/SmartPassSystem'));
 const TeacherQuickConfirmPage = lazy(() => import('./pages/TeacherQuickConfirmPage'));
-
-
+const PassVerificationPage = lazy(() => import('./pages/PassVerificationPage'));
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: string[] }> = ({ children, allowedRoles }) => {
   const { user } = useAuth();
@@ -82,6 +81,7 @@ const App: React.FC = () => {
             <Route path="/parent-login" element={<ParentLogin />} />
             <Route path="/smart-pass" element={<SmartPassSystem />} />
             <Route path="/quick-confirm/:passId" element={<TeacherQuickConfirmPage />} />
+            <Route path="/verify-pass/:passId" element={<PassVerificationPage />} />
             <Route path="/parent-portal" element={
               <ProtectedRoute allowedRoles={['parent']}>
                 <ParentPortal />

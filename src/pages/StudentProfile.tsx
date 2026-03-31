@@ -42,6 +42,7 @@ interface AttendanceRecord {
   date: string;
   status: string;
   is_excused: boolean;
+  teacher_name: string;
 }
 
 interface BehaviorRecord {
@@ -51,6 +52,7 @@ interface BehaviorRecord {
   created_at: string;
   remedial_plan: string | null;
   status: string;
+  teacher_name: string;
 }
 
 interface StudentProfileProps {
@@ -353,10 +355,11 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly =
                       <table className="w-full text-right border-collapse">
                         <thead>
                           <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 text-sm font-bold">
-                            <th className="p-4">التاريخ</th>
-                            <th className="p-4">نوع المخالفة</th>
-                            <th className="p-4">الدرجة</th>
-                            <th className="p-4">الإجراء المتخذ</th>
+                            <th className="p-4 text-right">التاريخ</th>
+                            <th className="p-4 text-right">نوع المخالفة</th>
+                            <th className="p-4 text-right">الدرجة</th>
+                            <th className="p-4 text-right">المعلم الراصد</th>
+                            <th className="p-4 text-right">الإجراء المتخذ</th>
                           </tr>
                         </thead>
                         <tbody className="text-sm font-bold text-slate-700">
@@ -372,6 +375,7 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly =
                                   الدرجة {record.degree}
                                 </span>
                               </td>
+                              <td className="p-4">{record.teacher_name}</td>
                               <td className="p-4 max-w-xs truncate">
                                 {record.remedial_plan || getStatusText(record.status)}
                               </td>
@@ -395,6 +399,10 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly =
                             }`}>
                               الدرجة {record.degree}
                             </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-[10px] text-slate-500 font-bold">
+                            <UserCircle size={14} className="text-slate-400" />
+                            <span>المعلم الراصد: {record.teacher_name}</span>
                           </div>
                           <p className="text-xs text-slate-600 font-bold line-clamp-2">
                             <span className="text-slate-400 ml-1">الإجراء:</span>
@@ -427,9 +435,10 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly =
                       <table className="w-full text-right border-collapse">
                         <thead>
                           <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 text-sm font-bold">
-                            <th className="p-4">اليوم</th>
-                            <th className="p-4">التاريخ</th>
-                            <th className="p-4">حالة الحضور</th>
+                            <th className="p-4 text-right">اليوم</th>
+                            <th className="p-4 text-right">التاريخ</th>
+                            <th className="p-4 text-right">المعلم الراصد</th>
+                            <th className="p-4 text-right">حالة الحضور</th>
                           </tr>
                         </thead>
                         <tbody className="text-sm font-bold text-slate-700">
@@ -454,6 +463,7 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly =
                               <tr key={record.id} className="border-b border-slate-50 last:border-0">
                                 <td className="p-4">{getDayName(record.date)}</td>
                                 <td className="p-4">{formatHijriDate(record.date)}</td>
+                                <td className="p-4">{record.teacher_name}</td>
                                 <td className={`p-4 font-black ${statusColor}`}>
                                   {statusText}
                                 </td>
@@ -496,6 +506,7 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly =
                               <div>
                                 <p className="text-sm font-bold text-slate-800">{getDayName(record.date)}</p>
                                 <p className="text-[10px] text-slate-400 font-bold">{formatHijriDate(record.date)}</p>
+                                <p className="text-[10px] text-primary font-bold mt-1">المعلم: {record.teacher_name}</p>
                               </div>
                             </div>
                             <span className={`text-xs font-black px-3 py-1 rounded-lg ${statusBg} ${statusColor}`}>
