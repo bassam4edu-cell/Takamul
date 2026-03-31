@@ -65,28 +65,28 @@ export const PrintableTracker: React.FC<PrintableTrackerProps> = ({ students, st
       <table className="w-full border-collapse border-2 border-black text-center text-[9px]">
         <thead>
           <tr className="bg-white text-black border-b-2 border-black print:break-inside-avoid">
-            <th rowSpan={2} className="w-6 border border-black p-0.5 font-bold print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap">م</th>
-            <th rowSpan={2} className="w-32 border border-black p-0.5 font-bold text-right pr-1 print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap">اسم الطالب</th>
+            <th rowSpan={2} className="w-6 print:w-auto border border-black p-0.5 font-bold print:text-[8px] print:p-0.5">م</th>
+            <th rowSpan={2} className="w-32 print:w-auto print:min-w-[80px] border border-black p-0.5 font-bold text-right pr-1 print:text-[9px] print:p-0.5">اسم الطالب</th>
             
             {(tasks.participation?.length || 0) > 0 && (
-              <th colSpan={tasks.participation?.length} className="border border-black p-0.5 font-bold print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap">المشاركة</th>
+              <th colSpan={tasks.participation?.length} className="border border-black p-0.5 font-bold print:text-[8px] print:p-0.5">المشاركة</th>
             )}
             {(tasks.homework?.length || 0) > 0 && (
-              <th colSpan={tasks.homework?.length} className="border border-black p-0.5 font-bold print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap">الواجبات</th>
+              <th colSpan={tasks.homework?.length} className="border border-black p-0.5 font-bold print:text-[8px] print:p-0.5">الواجبات</th>
             )}
             {(tasks.performance?.length || 0) > 0 && (
-              <th colSpan={tasks.performance?.length} className="border border-black p-0.5 font-bold print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap">المهام الأدائية</th>
+              <th colSpan={tasks.performance?.length} className="border border-black p-0.5 font-bold print:text-[8px] print:p-0.5">المهام الأدائية</th>
             )}
             {(tasks.exams?.length || 0) > 0 && (
-              <th colSpan={tasks.exams?.length} className="border border-black p-0.5 font-bold print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap">الاختبارات</th>
+              <th colSpan={tasks.exams?.length} className="border border-black p-0.5 font-bold print:text-[8px] print:p-0.5">الاختبارات</th>
             )}
             
-            <th rowSpan={2} className="w-12 border border-black p-0.5 font-bold print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap">المجموع</th>
+            <th rowSpan={2} className="w-12 print:w-auto border border-black p-0.5 font-bold print:text-[8px] print:p-0.5">المجموع</th>
           </tr>
           <tr className="bg-white text-black text-[7px] border-b-2 border-black print:break-inside-avoid">
             {tasks.participation?.map(t => (
-              <th key={t.id} className="border border-black p-0.5 font-normal w-6 print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap" title={t.name}>
-                <div className="truncate max-w-[30px] mx-auto">{t.name}</div>
+              <th key={t.id} className="border border-black p-0.5 font-normal w-6 print:w-auto print:text-[7px] print:p-0.5" title={t.name}>
+                <div className="truncate max-w-[30px] print:max-w-[20px] mx-auto">{t.name}</div>
                 <div className="flex flex-col items-center gap-0">
                   <div className="text-[6px] text-gray-600 mt-0.5">({t.maxGrade})</div>
                   {t.date && <div className="text-[5px] text-gray-500">{formatShortHijriDate(t.date)}</div>}
@@ -94,8 +94,8 @@ export const PrintableTracker: React.FC<PrintableTrackerProps> = ({ students, st
               </th>
             ))}
             {tasks.homework?.map(t => (
-              <th key={t.id} className="border border-black p-0.5 font-normal w-6 print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap" title={t.name}>
-                <div className="truncate max-w-[30px] mx-auto">{t.name}</div>
+              <th key={t.id} className="border border-black p-0.5 font-normal w-6 print:w-auto print:text-[7px] print:p-0.5" title={t.name}>
+                <div className="truncate max-w-[30px] print:max-w-[20px] mx-auto">{t.name}</div>
                 <div className="flex flex-col items-center gap-0">
                   <div className="text-[6px] text-gray-600 mt-0.5">({t.maxGrade})</div>
                   {t.date && <div className="text-[5px] text-gray-500">{formatShortHijriDate(t.date)}</div>}
@@ -103,8 +103,8 @@ export const PrintableTracker: React.FC<PrintableTrackerProps> = ({ students, st
               </th>
             ))}
             {tasks.performance?.map(t => (
-              <th key={t.id} className="border border-black p-0.5 font-normal w-6 print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap" title={t.name}>
-                <div className="truncate max-w-[30px] mx-auto">{t.name}</div>
+              <th key={t.id} className="border border-black p-0.5 font-normal w-6 print:w-auto print:text-[7px] print:p-0.5" title={t.name}>
+                <div className="truncate max-w-[30px] print:max-w-[20px] mx-auto">{t.name}</div>
                 <div className="flex flex-col items-center gap-0">
                   <div className="text-[6px] text-gray-600 mt-0.5">({t.maxGrade})</div>
                   {t.date && <div className="text-[5px] text-gray-500">{formatShortHijriDate(t.date)}</div>}
@@ -112,8 +112,8 @@ export const PrintableTracker: React.FC<PrintableTrackerProps> = ({ students, st
               </th>
             ))}
             {tasks.exams?.map(t => (
-              <th key={t.id} className="border border-black p-0.5 font-normal w-6 print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap" title={t.name}>
-                <div className="truncate max-w-[30px] mx-auto">{t.name}</div>
+              <th key={t.id} className="border border-black p-0.5 font-normal w-6 print:w-auto print:text-[7px] print:p-0.5" title={t.name}>
+                <div className="truncate max-w-[30px] print:max-w-[20px] mx-auto">{t.name}</div>
                 <div className="flex flex-col items-center gap-0">
                   <div className="text-[6px] text-gray-600 mt-0.5">({t.maxGrade})</div>
                   {t.date && <div className="text-[5px] text-gray-500">{formatShortHijriDate(t.date)}</div>}
@@ -134,31 +134,31 @@ export const PrintableTracker: React.FC<PrintableTrackerProps> = ({ students, st
 
             return (
               <tr key={student.id} className="bg-white print:break-inside-avoid">
-                <td className="border border-black p-0.5 font-bold text-black print:text-[10px] print:px-1 print:py-1">{index + 1}</td>
-                <td className="border border-black p-0.5 text-right pr-1 font-bold text-black text-[10px] print:text-xs print:px-2 print:py-1 print:whitespace-nowrap">{student.name}</td>
+                <td className="border border-black p-0.5 font-bold text-black print:text-[8px] print:p-0.5">{index + 1}</td>
+                <td className="border border-black p-0.5 text-right pr-1 font-bold text-black text-[10px] print:text-[9px] print:p-0.5">{student.name}</td>
                 
                 {tasks.participation?.map(t => (
-                  <td key={t.id} className="border border-black p-0.5 text-black print:text-[10px] print:px-1 print:py-1">
+                  <td key={t.id} className="border border-black p-0.5 text-black print:text-[8px] print:p-0.5">
                     {studentState?.grades?.[t.id] || '-'}
                   </td>
                 ))}
                 {tasks.homework?.map(t => (
-                  <td key={t.id} className="border border-black p-0.5 text-black print:text-[10px] print:px-1 print:py-1">
+                  <td key={t.id} className="border border-black p-0.5 text-black print:text-[8px] print:p-0.5">
                     {studentState?.grades?.[t.id] || '-'}
                   </td>
                 ))}
                 {tasks.performance?.map(t => (
-                  <td key={t.id} className="border border-black p-0.5 text-black print:text-[10px] print:px-1 print:py-1">
+                  <td key={t.id} className="border border-black p-0.5 text-black print:text-[8px] print:p-0.5">
                     {studentState?.grades?.[t.id] || '-'}
                   </td>
                 ))}
                 {tasks.exams?.map(t => (
-                  <td key={t.id} className="border border-black p-0.5 text-black print:text-[10px] print:px-1 print:py-1">
+                  <td key={t.id} className="border border-black p-0.5 text-black print:text-[8px] print:p-0.5">
                     {studentState?.grades?.[t.id] || '-'}
                   </td>
                 ))}
 
-                <td className="border border-black p-0.5 font-black text-[10px] text-black print:text-[10px] print:px-1 print:py-1">{overall}</td>
+                <td className="border border-black p-0.5 font-black text-[10px] text-black print:text-[9px] print:p-0.5">{overall}</td>
               </tr>
             );
           })}
