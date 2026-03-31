@@ -13,7 +13,8 @@ import {
   RefreshCw,
   Filter,
   Printer,
-  QrCode
+  QrCode,
+  Calendar
 } from 'lucide-react';
 import { usePasses, PassStatus, PassType } from '../context/PassContext';
 import { motion, AnimatePresence } from 'motion/react';
@@ -78,6 +79,18 @@ const AgentPassDashboard: React.FC = () => {
   const [loadingData, setLoadingData] = useState(true);
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [lastIssuedPass, setLastIssuedPass] = useState<any>(null);
+  
+  // Get local date YYYY-MM-DD
+  const getLocalDate = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const [selectedDate, setSelectedDate] = useState(getLocalDate());
+  const [isPrintingReport, setIsPrintingReport] = useState(false);
 
   // Derived data for filters
   const grades = Array.from(new Set(students.map(s => s.grade))).filter(Boolean).sort();
@@ -86,6 +99,10 @@ const AgentPassDashboard: React.FC = () => {
     (!selectedGrade || s.grade === selectedGrade) && 
     (!selectedSection || s.section === selectedSection)
   );
+
+  // If pass has no date, it's considered "old" and won't match unless we handle it
+  // We'll show passes that match the selected date, OR all passes if selectedDate is empty
+  const filteredPasses = passes.filter(p => !selectedDate || p.date === selectedDate);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -177,13 +194,21 @@ ${confirmUrl}
     }, 100);
   };
 
+  const handlePrintReport = () => {
+    setIsPrintingReport(true);
+    setTimeout(() => {
+      window.print();
+      setIsPrintingReport(false);
+    }, 100);
+  };
+
   return (
     <div className="space-y-8" dir="rtl">
       {/* Print Styles */}
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
           body { visibility: hidden !important; background: white !important; }
-          #printable-pass { 
+          #printable-pass, #printable-report { 
             visibility: visible !important; 
             display: block !important;
             position: absolute !important; 
@@ -193,10 +218,66 @@ ${confirmUrl}
             margin: 0 !important;
             padding: 0 !important;
           }
-          #printable-pass * { visibility: visible !important; }
+          #printable-pass *, #printable-report * { visibility: visible !important; }
           .no-print { display: none !important; }
         }
       `}} />
+
+      {/* Printable Report */}
+      {isPrintingReport && (
+        <div id="printable-report" className="hidden print:block p-8 bg-white">
+          <div className="text-center space-y-4 border-b-2 border-slate-900 pb-6 mb-8">
+            <h1 className="text-3xl font-black text-slate-900">تقرير أذونات الطلاب</h1>
+            <div className="flex justify-center gap-8 text-lg font-bold text-slate-600">
+              <p>التاريخ: {selectedDate || 'جميع التواريخ'}</p>
+              <p>إجمالي الأذونات: {filteredPasses.length}</p>
+            </div>
+            <p className="text-sm text-slate-500">ثانوية أم القرى - نظام تكامل</p>
+          </div>
+
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="bg-slate-100 border-2 border-slate-900">
+                <th className="border border-slate-900 p-3 text-right">التاريخ</th>
+                <th className="border border-slate-900 p-3 text-right">رقم الإذن</th>
+                <th className="border border-slate-900 p-3 text-right">اسم الطالب</th>
+                <th className="border border-slate-900 p-3 text-right">نوع الإذن</th>
+                <th className="border border-slate-900 p-3 text-right">المعلم</th>
+                <th className="border border-slate-900 p-3 text-right">الوقت</th>
+                <th className="border border-slate-900 p-3 text-right">الحالة</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredPasses.map((pass) => (
+                <tr key={pass.id} className="border border-slate-900">
+                  <td className="border border-slate-900 p-3 tabular-nums">{pass.date || 'قديم'}</td>
+                  <td className="border border-slate-900 p-3 tabular-nums">#{pass.id}</td>
+                  <td className="border border-slate-900 p-3 font-bold">{pass.studentName}</td>
+                  <td className="border border-slate-900 p-3">
+                    {PASS_TYPES.find(p => p.id === pass.type)?.label}
+                  </td>
+                  <td className="border border-slate-900 p-3">{pass.teacherName}</td>
+                  <td className="border border-slate-900 p-3 tabular-nums">{pass.timestamp}</td>
+                  <td className="border border-slate-900 p-3">
+                    {pass.status === 'confirmed' ? 'تم التأكيد ✅' : pass.status === 'rejected' ? 'مرفوض ❌' : 'بانتظار التأكيد ⏳'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div className="mt-12 flex justify-between items-start pt-8 border-t border-slate-200">
+            <div className="text-center space-y-2">
+              <p className="font-black">ختم الوكيل</p>
+              <div className="w-40 h-20 border-2 border-dashed border-slate-300 rounded-2xl" />
+            </div>
+            <div className="text-center space-y-2">
+              <p className="font-black">توقيع مدير المدرسة</p>
+              <div className="w-40 h-20 border-2 border-dashed border-slate-300 rounded-2xl" />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Print Modal */}
       <AnimatePresence>
@@ -482,31 +563,62 @@ ${confirmUrl}
       </div>
 
       {/* Live Tracking Log */}
-      <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+      <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden no-print">
+        <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center">
               <History className="w-5 h-5" />
             </div>
-            <h3 className="text-xl font-black text-slate-800">سجل الأذونات المباشر</h3>
+            <h3 className="text-xl font-black text-slate-800">سجل الأذونات</h3>
           </div>
-          <span className="text-xs font-bold text-slate-400 bg-white px-3 py-1 rounded-full border border-slate-100">
-            تحديث لحظي
-          </span>
+          
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-2xl border border-slate-200 shadow-sm group">
+              <Calendar className="w-4 h-4 text-slate-400" />
+              <input 
+                type="date" 
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="bg-transparent border-none outline-none text-sm font-bold text-slate-700"
+              />
+              {selectedDate && (
+                <button 
+                  onClick={() => setSelectedDate('')}
+                  className="text-[10px] font-black text-rose-500 hover:text-rose-600 transition-colors"
+                >
+                  إلغاء التصفية
+                </button>
+              )}
+            </div>
+            
+            <button 
+              onClick={handlePrintReport}
+              disabled={filteredPasses.length === 0}
+              className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-2xl border border-slate-200 shadow-sm font-bold text-sm transition-all disabled:opacity-50"
+            >
+              <Printer className="w-4 h-4 text-indigo-600" />
+              {selectedDate ? 'طباعة تقرير اليوم' : 'طباعة السجل الكامل'}
+            </button>
+            
+            <span className="text-xs font-bold text-slate-400 bg-white px-3 py-1 rounded-full border border-slate-100">
+              تحديث لحظي
+            </span>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
-          {passes.length === 0 ? (
+          {filteredPasses.length === 0 ? (
             <div className="p-12 text-center space-y-3">
               <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto text-slate-300">
                 <FileText className="w-8 h-8" />
               </div>
-              <p className="text-slate-400 font-bold">لا توجد أذونات مصدرة اليوم</p>
+              <p className="text-slate-400 font-bold">لا توجد أذونات في هذا التاريخ</p>
             </div>
           ) : (
             <table className="w-full text-right">
               <thead>
                 <tr className="bg-slate-50/50 text-slate-500 text-xs font-black uppercase tracking-wider border-b border-slate-100">
+                  <th className="px-6 py-4">التاريخ</th>
                   <th className="px-6 py-4">الطالب</th>
                   <th className="px-6 py-4">المعلم والحصة</th>
                   <th className="px-6 py-4">نوع الإذن</th>
@@ -517,13 +629,16 @@ ${confirmUrl}
               </thead>
               <tbody className="divide-y divide-slate-50">
                 <AnimatePresence initial={false}>
-                  {passes.map((pass) => (
+                  {filteredPasses.map((pass) => (
                     <motion.tr 
                       key={pass.id}
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: 'auto' }}
                       className="hover:bg-slate-50/50 transition-colors group"
                     >
+                      <td className="px-6 py-4">
+                        <span className="text-xs font-bold text-slate-500 tabular-nums">{pass.date || 'قديم'}</span>
+                      </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center text-xs font-black">

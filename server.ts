@@ -343,12 +343,19 @@ async function initDb() {
         type TEXT NOT NULL,
         reason TEXT,
         timestamp TEXT NOT NULL,
+        date TEXT,
         status TEXT DEFAULT 'pending',
         agent_name TEXT,
         school_id INTEGER REFERENCES schools(id),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `;
+
+    try {
+      await sql`ALTER TABLE passes ADD COLUMN IF NOT EXISTS date TEXT`;
+    } catch (e) {
+      // Ignore if column already exists
+    }
 
     // Seed data if empty
     const usersCount = await sql`SELECT COUNT(*) as count FROM users`;
@@ -3621,6 +3628,7 @@ async function startServer() {
         type: p.type,
         reason: p.reason,
         timestamp: p.timestamp,
+        date: p.date || (p.created_at ? new Date(p.created_at).toISOString().split('T')[0] : null),
         status: p.status,
         agentName: p.agent_name
       }));
@@ -3649,6 +3657,7 @@ async function startServer() {
         type: p.type,
         reason: p.reason,
         timestamp: p.timestamp,
+        date: p.date || (p.created_at ? new Date(p.created_at).toISOString().split('T')[0] : null),
         status: p.status,
         agentName: p.agent_name
       });
@@ -3659,11 +3668,11 @@ async function startServer() {
   });
 
   app.post("/api/passes", async (req, res) => {
-    const { id, studentId, studentName, teacherId, teacherName, teacherPhone, period, type, reason, timestamp, status, agentName } = req.body;
+    const { id, studentId, studentName, teacherId, teacherName, teacherPhone, period, type, reason, timestamp, date, status, agentName } = req.body;
     try {
       await sql`
-        INSERT INTO passes (id, student_id, student_name, teacher_id, teacher_name, teacher_phone, period, type, reason, timestamp, status, agent_name)
-        VALUES (${id}, ${studentId}, ${studentName}, ${teacherId}, ${teacherName}, ${teacherPhone}, ${period}, ${type}, ${reason}, ${timestamp}, ${status || 'pending'}, ${agentName})
+        INSERT INTO passes (id, student_id, student_name, teacher_id, teacher_name, teacher_phone, period, type, reason, timestamp, date, status, agent_name)
+        VALUES (${id}, ${studentId}, ${studentName}, ${teacherId}, ${teacherName}, ${teacherPhone}, ${period}, ${type}, ${reason}, ${timestamp}, ${date}, ${status || 'pending'}, ${agentName})
       `;
       res.json({ success: true });
     } catch (err) {

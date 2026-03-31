@@ -236,6 +236,7 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly =
                     subject={selectedSubject}
                     studentName={student.name}
                     studentId={student.id}
+                    serverLogs={trackerData}
                     onBack={() => setSelectedSubject(null)}
                   />
                 ) : (

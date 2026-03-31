@@ -14,13 +14,14 @@ export interface Pass {
   type: PassType;
   reason: string;
   timestamp: string;
+  date: string;
   status: PassStatus;
   agentName: string;
 }
 
 interface PassContextType {
   passes: Pass[];
-  addPass: (pass: Omit<Pass, 'status' | 'timestamp'>) => void;
+  addPass: (pass: Omit<Pass, 'status' | 'timestamp' | 'date'>) => void;
   updatePassStatus: (id: string, status: PassStatus) => void;
 }
 
@@ -51,12 +52,21 @@ export const PassProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => clearInterval(interval);
   }, []);
 
-  const addPass = async (newPassData: Omit<Pass, 'status' | 'timestamp'>) => {
-    const timestamp = new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+  const addPass = async (newPassData: Omit<Pass, 'status' | 'timestamp' | 'date'>) => {
+    const now = new Date();
+    const timestamp = now.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+    
+    // Use local date YYYY-MM-DD
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const date = `${year}-${month}-${day}`;
+    
     const newPass: Pass = {
       ...newPassData,
       status: 'pending',
       timestamp,
+      date,
     };
 
     // Optimistic update

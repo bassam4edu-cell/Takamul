@@ -18,25 +18,49 @@ interface Props {
   subject: string;
   studentName: string;
   studentId: number;
+  serverLogs?: any[];
   onBack: () => void;
 }
 
-export const SubjectDetailedLogView: React.FC<Props> = ({ subject, studentName, studentId, onBack }) => {
-  const [localLogs, setLocalLogs] = React.useState<any[]>([]);
+export const SubjectDetailedLogView: React.FC<Props> = ({ subject, studentName, studentId, serverLogs = [], onBack }) => {
+  const [combinedLogs, setCombinedLogs] = React.useState<any[]>([]);
 
   React.useEffect(() => {
-    const fetchLogs = () => {
+    const fetchLocalLogs = () => {
       const storedLogs = JSON.parse(localStorage.getItem('takamol_student_logs') || '[]');
-      const filteredLogs = storedLogs.filter((log: any) => 
+      const filteredLocal = storedLogs.filter((log: any) => 
         log.studentId === studentId && log.subject === subject
+      ).map((log: any) => ({
+        ...log,
+        isLocal: true
+      }));
+
+      // Normalize server logs to match the expected format
+      const normalizedServer = serverLogs
+        .filter((log: any) => log.subject === subject)
+        .map((log: any, index: number) => ({
+          id: `server-${index}`,
+          date: log.date,
+          category: log.task_category || 'مهمة أدائية', // Default if not provided
+          taskName: log.task_name,
+          score: log.student_grade,
+          maxScore: log.max_grade,
+          teacherName: log.teacher_name || log.teacherName,
+          isLocal: false
+        }));
+
+      // Combine and sort by date descending
+      const combined = [...filteredLocal, ...normalizedServer].sort((a, b) => 
+        new Date(b.date).getTime() - new Date(a.date).getTime()
       );
-      setLocalLogs(filteredLogs);
+
+      setCombinedLogs(combined);
     };
 
-    fetchLogs();
-    window.addEventListener('takamol_logs_updated', fetchLogs);
-    return () => window.removeEventListener('takamol_logs_updated', fetchLogs);
-  }, [studentId, subject]);
+    fetchLocalLogs();
+    window.addEventListener('takamol_logs_updated', fetchLocalLogs);
+    return () => window.removeEventListener('takamol_logs_updated', fetchLocalLogs);
+  }, [studentId, subject, serverLogs]);
 
   const getBadgeStyle = (score: number, maxScore: number) => {
     if (score === maxScore) return 'bg-emerald-100 text-emerald-800';
@@ -45,9 +69,12 @@ export const SubjectDetailedLogView: React.FC<Props> = ({ subject, studentName, 
   };
 
   const LogItemComponent = ({ log }: { log: any }) => (
-    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 mb-3">
+    <div className={`p-3 rounded-xl border mb-3 ${log.isLocal ? 'bg-amber-50 border-amber-100' : 'bg-slate-50 border-slate-100'}`}>
       <div className="flex justify-between items-center mb-2">
-        <p className="font-bold text-slate-800 text-sm">{log.taskName}</p>
+        <div className="flex items-center gap-2">
+          <p className="font-bold text-slate-800 text-sm">{log.taskName}</p>
+          {log.isLocal && <span className="text-[8px] bg-amber-200 text-amber-800 px-1 rounded">غير مزامن</span>}
+        </div>
         <span className={`text-xs font-bold px-2 py-1 rounded-full ${getBadgeStyle(log.score, log.maxScore)}`}>
           {log.score}/{log.maxScore}
         </span>
@@ -88,9 +115,9 @@ export const SubjectDetailedLogView: React.FC<Props> = ({ subject, studentName, 
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
           <h2 className="text-lg font-bold text-slate-800 mb-4 border-b pb-2">مشاركة</h2>
           <div className="card-body">
-            {localLogs.filter(log => log.category === 'مشاركة').length > 0 ? (
-              localLogs.filter(log => log.category === 'مشاركة').map(log => (
-                <LogItemComponent key={log.id} log={log} />
+            {combinedLogs.filter(log => log.category === 'مشاركة').length > 0 ? (
+              combinedLogs.filter(log => log.category === 'مشاركة').map((log, idx) => (
+                <LogItemComponent key={log.id || idx} log={log} />
               ))
             ) : (
               <div className="empty-state text-slate-400 text-sm">لا توجد سجلات</div>
@@ -102,9 +129,9 @@ export const SubjectDetailedLogView: React.FC<Props> = ({ subject, studentName, 
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
           <h2 className="text-lg font-bold text-slate-800 mb-4 border-b pb-2">واجب</h2>
           <div className="card-body">
-            {localLogs.filter(log => log.category === 'واجب').length > 0 ? (
-              localLogs.filter(log => log.category === 'واجب').map(log => (
-                <LogItemComponent key={log.id} log={log} />
+            {combinedLogs.filter(log => log.category === 'واجب').length > 0 ? (
+              combinedLogs.filter(log => log.category === 'واجب').map((log, idx) => (
+                <LogItemComponent key={log.id || idx} log={log} />
               ))
             ) : (
               <div className="empty-state text-slate-400 text-sm">لا توجد سجلات</div>
@@ -116,9 +143,9 @@ export const SubjectDetailedLogView: React.FC<Props> = ({ subject, studentName, 
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
           <h2 className="text-lg font-bold text-slate-800 mb-4 border-b pb-2">مهمة أدائية</h2>
           <div className="card-body">
-            {localLogs.filter(log => log.category === 'مهمة أدائية').length > 0 ? (
-              localLogs.filter(log => log.category === 'مهمة أدائية').map(log => (
-                <LogItemComponent key={log.id} log={log} />
+            {combinedLogs.filter(log => log.category === 'مهمة أدائية').length > 0 ? (
+              combinedLogs.filter(log => log.category === 'مهمة أدائية').map((log, idx) => (
+                <LogItemComponent key={log.id || idx} log={log} />
               ))
             ) : (
               <div className="empty-state text-slate-400 text-sm">لا توجد سجلات</div>
@@ -130,9 +157,9 @@ export const SubjectDetailedLogView: React.FC<Props> = ({ subject, studentName, 
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
           <h2 className="text-lg font-bold text-slate-800 mb-4 border-b pb-2">اختبار</h2>
           <div className="card-body">
-            {localLogs.filter(log => log.category === 'اختبار').length > 0 ? (
-              localLogs.filter(log => log.category === 'اختبار').map(log => (
-                <LogItemComponent key={log.id} log={log} />
+            {combinedLogs.filter(log => log.category === 'اختبار').length > 0 ? (
+              combinedLogs.filter(log => log.category === 'اختبار').map((log, idx) => (
+                <LogItemComponent key={log.id || idx} log={log} />
               ))
             ) : (
               <div className="empty-state text-slate-400 text-sm">لا توجد سجلات</div>
@@ -146,11 +173,14 @@ export const SubjectDetailedLogView: React.FC<Props> = ({ subject, studentName, 
       <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm mt-8">
         <h2 className="text-xl font-bold text-slate-800 mb-6">السجل السلوكي</h2>
         <div className="card-body">
-          {localLogs.filter(log => log.category === 'سلوك').length > 0 ? (
-            localLogs.filter(log => log.category === 'سلوك').map(log => (
-              <div key={log.id} className="p-3 mb-3 bg-blue-50/50 rounded-lg border border-blue-100">
+          {combinedLogs.filter(log => log.category === 'سلوك').length > 0 ? (
+            combinedLogs.filter(log => log.category === 'سلوك').map((log, idx) => (
+              <div key={log.id || idx} className={`p-3 mb-3 rounded-lg border ${log.isLocal ? 'bg-amber-50 border-amber-100' : 'bg-blue-50/50 border-blue-100'}`}>
                   <div className="flex justify-between items-center mb-2">
-                    <span className="font-bold text-sm text-blue-800">{log.taskName}</span>
+                    <div className="flex items-center gap-2">
+                      <span className={`font-bold text-sm ${log.isLocal ? 'text-amber-800' : 'text-blue-800'}`}>{log.taskName}</span>
+                      {log.isLocal && <span className="text-[8px] bg-amber-200 text-amber-800 px-1 rounded">غير مزامن</span>}
+                    </div>
                     <div className="text-right">
                       <span className="text-xs text-slate-500 block">{log.date}</span>
                       {log.teacherName && (
