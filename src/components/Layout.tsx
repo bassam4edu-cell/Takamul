@@ -7,7 +7,7 @@ const Layout: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   return (
-    <div className="flex h-screen bg-slate-50 font-sans overflow-hidden">
+    <div className="flex h-screen bg-slate-50 font-sans overflow-hidden print:h-auto print:overflow-visible">
       {/* Mobile Drawer Overlay */}
       {isMobileMenuOpen && (
         <div 
@@ -21,11 +21,11 @@ const Layout: React.FC = () => {
         <Sidebar onClose={() => setIsMobileMenuOpen(false)} />
       </div>
 
-      <div className="flex-1 flex flex-col overflow-hidden relative">
+      <div className="flex-1 flex flex-col overflow-hidden relative print:overflow-visible">
         <div className="no-print">
           <Header onMenuClick={() => setIsMobileMenuOpen(true)} />
         </div>
-        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-slate-50 p-4 md:p-6 pb-6">
+        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-slate-50 p-4 md:p-6 pb-6 print:overflow-visible print:p-0">
           <Outlet />
         </main>
       </div>

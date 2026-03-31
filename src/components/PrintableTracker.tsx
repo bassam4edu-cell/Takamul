@@ -27,7 +27,7 @@ export const PrintableTracker: React.FC<PrintableTrackerProps> = ({ students, st
       <style>
         {`
           @media print {
-            @page { size: landscape; margin: 1cm; }
+            @page { size: A4 landscape; margin: 1cm; }
             body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             table { page-break-inside: auto; }
             tr { page-break-inside: avoid; page-break-after: auto; }
