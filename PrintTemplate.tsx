@@ -1,329 +1,480 @@
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import * as XLSX from 'xlsx';
-import { 
-  Upload, 
-  FileSpreadsheet, 
-  Smartphone, 
-  Save, 
-  Trash2, 
-  Users, 
-  CheckCircle2, 
-  X,
-  Loader2
-} from 'lucide-react';
+import { apiFetch } from '../utils/api';
+import React, { useEffect, useState, useMemo } from 'react';
+import { Printer, ArrowRight, ChevronRight, ChevronLeft, MessageCircle } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { useMessageLog } from '../context/MessageLogContext';
+import { formatHijriDate } from '../utils/dateUtils';
+import { logAction } from '../services/auditLogger';
 
-const AdminSettings: React.FC = () => {
-  const [clearExisting, setClearExisting] = useState(false);
-  const [whatsappEnabled, setWhatsappEnabled] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
-  const [importMessage, setImportMessage] = useState<{text: string, type: 'success' | 'error'} | null>(null);
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
-  const [isDragging, setIsDragging] = useState(false);
+const DailyAbsenceReport: React.FC = React.memo(() => {
+  const { user } = useAuth();
+  const { addLogEntry } = useMessageLog();
+  const [data, setData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [principalName, setPrincipalName] = useState('مدير المدرسة');
+  const [absenceTemplate, setAbsenceTemplate] = useState("المكرم ولي أمر الطالب {اسم_الطالب}، نود إشعاركم بغياب ابنكم اليوم {التاريخ} عن {الحصة}. إدارة {اسم_المدرسة}.");
+  const [schoolName, setSchoolName] = useState('ثانوية أم القرى');
+  const [periodFilter, setPeriodFilter] = useState<string>('');
+  const itemsPerPage = 15;
+  const [reportNumber] = useState(Math.floor(Math.random() * 1000000));
+  
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  const processFile = async (file: File) => {
-    setIsImporting(true);
-    setImportMessage(null);
-    try {
-      const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data, { type: 'array' });
-      
-      let headerRowIndex = -1;
-      let targetSheetData: any[][] = [];
-      let idCol = -1, nameCol = -1, gradeCol = -1, sectionCol = -1, mobileCol = -1;
-      
-      // 1. البحث في جميع أوراق العمل (Sheets)
-      for (const sheetName of workbook.SheetNames) {
-        const worksheet = workbook.Sheets[sheetName];
-        // قراءة الملف كمصفوفة ثنائية الأبعاد خام مع ضمان قراءة كل الخلايا حتى الفارغة
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" }) as any[][];
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const searchParams = new URLSearchParams(location.search);
+        const date = searchParams.get('date') || new Date().toISOString().split('T')[0];
+        const grade = searchParams.get('grade');
+        const section = searchParams.get('section');
+        
+        let url = `/api/attendance/daily-report?date=${date}`;
+        if (grade && section) {
+          url += `&grade=${encodeURIComponent(grade)}&section=${encodeURIComponent(section)}`;
+        }
+        if (periodFilter) {
+          url += `&period=${periodFilter}`;
+        }
 
-        // 2. تحديد سطر العناوين (Header Row) وأرقام الأعمدة (Column Indices)
-        for (let i = 0; i < jsonData.length; i++) {
-          const row = jsonData[i];
-          if (!row || !Array.isArray(row)) continue;
-          
-          // البحث عن الخلية التي تحتوي على "رقم الهوية" أو "الهوية" (مع إزالة كل المسافات لتجنب مشاكل التنسيق)
-          const hasNationalId = row.some(cell => {
-            if (cell === null || cell === undefined) return false;
-            const cellStr = String(cell).replace(/\s+/g, '');
-            return cellStr.includes('رقمالهوية') || cellStr.includes('الهوية') || cellStr.includes('السجلالمدني') || cellStr.includes('رقمالطالب');
-          });
+        const [res, settingsRes] = await Promise.all([
+          apiFetch(url),
+          apiFetch('/api/settings')
+        ]);
 
-          const hasStudentName = row.some(cell => {
-            if (cell === null || cell === undefined) return false;
-            const cellStr = String(cell).replace(/\s+/g, '');
-            return cellStr.includes('اسمالطالب') || cellStr === 'الاسم';
-          });
+        if (res.ok) {
+          const json = await res.json();
+          setData(json);
+        }
 
-          if (hasNationalId || hasStudentName) {
-            headerRowIndex = i;
-            targetSheetData = jsonData;
-            
-            // البحث عن الـ Index (رقم العمود) لكل من الحقول المطلوبة مع إزالة المسافات
-            idCol = row.findIndex(col => {
-              if (col === null || col === undefined) return false;
-              const s = String(col).replace(/\s+/g, '');
-              return s.includes('الهوية') || s.includes('السجلالمدني') || s.includes('رقمالطالب');
-            });
-            nameCol = row.findIndex(col => {
-              if (col === null || col === undefined) return false;
-              const s = String(col).replace(/\s+/g, '');
-              return s.includes('اسمالطالب') || s.includes('الاسم') || s === 'اسم';
-            });
-            gradeCol = row.findIndex(col => {
-              if (col === null || col === undefined) return false;
-              const s = String(col).replace(/\s+/g, '');
-              return s.includes('الصف') || s.includes('المرحلة');
-            });
-            sectionCol = row.findIndex(col => {
-              if (col === null || col === undefined) return false;
-              const s = String(col).replace(/\s+/g, '');
-              return s.includes('الفصل') || s.includes('الشعبة');
-            });
-            mobileCol = row.findIndex(col => {
-              if (col === null || col === undefined) return false;
-              const s = String(col).replace(/\s+/g, '');
-              return s.includes('جوال') || s.includes('هاتف');
-            });
-            
-            break; // وجدنا العناوين في هذه الورقة، نخرج من حلقة الصفوف
+        if (settingsRes.ok) {
+          const settingsJson = await settingsRes.json();
+          if (settingsJson.principal_name) {
+            setPrincipalName(settingsJson.principal_name);
+          }
+          if (settingsJson.absence_template) {
+            setAbsenceTemplate(settingsJson.absence_template);
+          }
+          if (settingsJson.school_name) {
+            setSchoolName(settingsJson.school_name);
           }
         }
-        
-        if (headerRowIndex !== -1) break; // وجدنا العناوين، نخرج من حلقة الأوراق
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
       }
+    };
+    fetchData();
+  }, [location.search, periodFilter]);
 
-      if (headerRowIndex === -1) {
-        throw new Error('لم يتم العثور على عمود "رقم الهوية" أو "اسم الطالب" في أي ورقة عمل. يرجى التأكد من صيغة ملف نظام نور.');
-      }
+  const handlePrint = () => {
+    logAction(
+      'أخرى',
+      'READ',
+      'تقرير الغياب اليومي',
+      `قام بطباعة تقرير الغياب اليومي`
+    );
+    window.print();
+  };
 
-      // 2. دالة الترجمة (Grade Mapper Dictionary)
-      const gradeMapper = (rawGrade: string): string => {
-        const gradeStr = String(rawGrade).trim();
-        if (gradeStr.includes('1314')) return 'الصف الأول';
-        if (gradeStr.includes('1416')) return 'الصف الثاني';
-        if (gradeStr.includes('1516')) return 'الصف الثالث';
-        return gradeStr; // Fallback
-      };
+  const sendWhatsAppMessage = async (phoneNumber: string, studentName: string, period: number) => {
+    try {
+      const currentDate = formatHijriDate(new Date());
+      const periodName = period ? `الحصة ${period}` : 'غير محدد';
+      
+      const finalMessage = absenceTemplate
+        .replace(/{اسم_الطالب}/g, studentName)
+        .replace(/{التاريخ}/g, currentDate)
+        .replace(/{الحصة}/g, periodName)
+        .replace(/{اسم_المدرسة}/g, schoolName);
 
-      // 3. استخراج البيانات (Data Extraction)
-      const students: any[] = [];
-
-      for (let i = headerRowIndex + 1; i < targetSheetData.length; i++) {
-        const row = targetSheetData[i];
-        if (!row || !Array.isArray(row) || row.length === 0) continue;
-
-        // 4. التنظيف الصارم (Strict Sanitization)
-        const rawId = idCol !== -1 ? String(row[idCol]).trim() : "";
-        const rawName = nameCol !== -1 ? String(row[nameCol]).trim() : "";
-        const rawGrade = gradeCol !== -1 ? String(row[gradeCol]).trim() : "";
-        const rawSection = sectionCol !== -1 ? String(row[sectionCol]).trim() : "";
-        const rawMobile = mobileCol !== -1 ? String(row[mobileCol]).trim() : "";
-
-        // تجاهل أي صف يكون فيه national_id فارغاً، أو لا يتكون من أرقام (لتجاهل صفوف التذييل مثل "المجموع")
-        const national_id = rawId.replace(/\s+/g, '');
-        if (!national_id || !/^\d+$/.test(national_id)) {
-          continue;
-        }
-
-        const name = rawName;
-        const grade = gradeMapper(rawGrade);
-        const section = rawSection;
-        
-        let parent_phone = rawMobile.replace(/\s+/g, '');
-        if (parent_phone.startsWith('05')) {
-          parent_phone = '9665' + parent_phone.substring(2);
-        }
-
-        // التأكد من وجود الاسم على الأقل مع الهوية
-        if (name) {
-          students.push({
-            national_id,
-            name,
-            grade,
-            section,
-            parent_phone
-          });
-        }
-      }
-
-      if (students.length === 0) {
-        throw new Error('لم يتم العثور على بيانات طلاب صالحة بعد صف العناوين.');
-      }
-
-      console.log("Final Parsed Students:", students);
-
-      // 5. الإرسال (API Payload)
-      const response = await fetch('/api/admin/students/import', {
+      const response = await apiFetch('/api/whatsapp/send', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          students: students, 
-          wipeDatabase: clearExisting 
-        })
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ phoneNumber, studentName, period, message: finalMessage })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        if (data.code === 'MISSING_WHATSAPP_CREDENTIALS' || data.code === 'FORBIDDEN') {
+          return { success: false, code: data.code, message: data.message };
+        }
+        
+        addLogEntry({
+          recipient: studentName,
+          recipientPhone: phoneNumber,
+          messageType: ' إشعار غياب',
+          messageText: finalMessage,
+          status: 'failed'
+        });
+        
+        throw new Error('Failed to send WhatsApp message');
+      }
+
+      addLogEntry({
+        recipient: studentName,
+        recipientPhone: phoneNumber,
+        messageType: ' إشعار غياب',
+        messageText: finalMessage,
+        status: 'success'
       });
 
-      const result = await response.json();
+      logAction(
+        'أخرى',
+        'CREATE',
+        'تقرير الغياب اليومي',
+        `قام بإرسال إشعار غياب للطالب ${studentName} عبر الواتساب`
+      );
 
-      if (!response.ok) {
-        throw new Error(result.error || 'فشل في رفع البيانات إلى الخادم');
-      }
-
-      setImportMessage({ text: `تم استيراد ${result.count || students.length} طالب بنجاح`, type: 'success' });
-    } catch (error: any) {
-      console.error('Import Error:', error);
-      setImportMessage({ text: error.message || 'حدث خطأ غير متوقع أثناء معالجة الملف', type: 'error' });
-    } finally {
-      setIsImporting(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to send WhatsApp message", error);
+      return { success: false, message: 'حدث خطأ أثناء الإرسال' };
     }
   };
 
-  const handleSave = () => {
-    setIsSaving(true);
-    setTimeout(() => setIsSaving(false), 1000);
+  const handleSendWhatsApp = async (student: any) => {
+    if (!student.parent_phone || student.parent_phone.trim() === '') {
+      alert('رقم الجوال غير مسجل لهذا الطالب');
+      return;
+    }
+    
+    const result = await sendWhatsAppMessage(student.parent_phone, student.student_name, student.period);
+    
+    if (!result.success) {
+      if (result.code === 'MISSING_WHATSAPP_CREDENTIALS' || result.code === 'FORBIDDEN') {
+        alert(`️ تعذر الإرسال: ${result.message}`);
+      } else {
+        alert('حدث خطأ أثناء الإرسال.');
+      }
+      return;
+    }
+    
+    alert(`تم إرسال رسالة واتساب لولي أمر الطالب بنجاح.`);
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) processFile(file);
+  const searchParams = new URLSearchParams(location.search);
+  const selectedDateStr = searchParams.get('date') || new Date().toISOString().split('T')[0];
+  const reportDate = new Date(selectedDateStr);
+  const dateStr = formatHijriDate(reportDate);
+
+  const totalPages = useMemo(() => Math.ceil(data.length / itemsPerPage) || 1, [data.length, itemsPerPage]);
+  const paginatedData = useMemo(() => data.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage), [data, currentPage, itemsPerPage]);
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages) setCurrentPage(prev => prev + 1);
   };
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) processFile(file);
+  const handlePrevPage = () => {
+    if (currentPage > 1) setCurrentPage(prev => prev - 1);
   };
+
+  if (loading) {
+    return <div className="p-10 text-center">جاري التحميل...</div>;
+  }
 
   return (
-    <div className="p-8 bg-slate-50 min-h-screen">
-      <h1 className="text-3xl font-extrabold text-slate-900 mb-8">إعدادات النظام</h1>
-      
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* العمود الأيمن: استيراد الطلاب الذكي */}
-        <div className="space-y-6">
-          <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
-            <div className="flex items-center gap-4 mb-6">
-              <div className="w-12 h-12 bg-primary/10 text-primary rounded-2xl flex items-center justify-center">
-                <FileSpreadsheet size={24} />
-              </div>
-              <div>
-                <h2 className="text-xl font-extrabold text-slate-800">استيراد الطلاب الذكي</h2>
-                <p className="text-sm text-slate-500 font-bold mt-1">ارفع ملف Excel لتحديث قاعدة البيانات تلقائياً</p>
-              </div>
-            </div>
+    <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans" dir="rtl">
+      {/* Controls - Hidden in print */}
+      <div className="max-w-4xl mx-auto mb-6 flex flex-col md:flex-row justify-between items-center gap-4 print:hidden">
+        <button 
+          onClick={() => navigate(-1)}
+          className="flex items-center gap-2 text-slate-600 hover:text-slate-900 bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-200"
+        >
+          <ArrowRight size={20} />
+          عودة
+        </button>
 
-            <div className="flex items-center gap-3 p-4 bg-primary/5 rounded-2xl border border-primary/10 mb-6">
-              <input 
-                type="checkbox" 
-                id="clear-db"
-                checked={clearExisting}
-                onChange={(e) => setClearExisting(e.target.checked)}
-                className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary"
-              />
-              <label htmlFor="clear-db" className="text-sm font-extrabold text-slate-700 cursor-pointer">
-                مسح قاعدة بيانات الطلاب الحالية قبل الاستيراد (Wipe & Import)
-              </label>
-            </div>
+        <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-200">
+          <label className="text-sm font-bold text-slate-700 whitespace-nowrap">تصفية بالحصة:</label>
+          <select
+            value={periodFilter}
+            onChange={(e) => setPeriodFilter(e.target.value)}
+            className="bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-lg focus:ring-primary focus:border-primary block w-full p-2"
+          >
+            <option value="">الكل</option>
+            {[1, 2, 3, 4, 5, 6, 7].map((p) => (
+              <option key={p} value={p}>الحصة {p}</option>
+            ))}
+          </select>
+        </div>
 
-            <div 
-              className={`w-full flex flex-col items-center justify-center gap-6 p-12 border-2 border-dashed rounded-[2rem] bg-slate-50/50 cursor-pointer transition-all ${isDragging ? 'border-primary bg-primary/5' : 'border-slate-200 hover:border-primary/40'} ${isImporting ? 'opacity-50 cursor-not-allowed' : ''}`}
-              onClick={() => !isImporting && fileInputRef.current?.click()}
-              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-              onDragLeave={() => setIsDragging(false)}
-              onDrop={handleDrop}
-            >
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                onChange={handleFileChange} 
-                className="hidden" 
-                accept=".xlsx, .xls, .csv"
-                disabled={isImporting}
-              />
-              <div className="w-20 h-20 rounded-[2rem] flex items-center justify-center bg-white text-primary shadow-xl">
-                {isImporting ? <Loader2 size={32} className="animate-spin" /> : <Upload size={32} />}
-              </div>
-              <p className="font-black text-slate-800 text-lg">{isImporting ? 'جاري المعالجة...' : 'اسحب الملف هنا أو اضغط للرفع'}</p>
-              <p className="text-xs text-slate-400 font-bold uppercase tracking-[0.2em]">XLSX, XLS, CSV (حتى 10MB)</p>
-            </div>
+        <div className="flex gap-2">
+          <button 
+            onClick={async () => {
+              const studentsWithPhone = data.filter(s => s.parent_phone && s.parent_phone.trim() !== '');
+              if (studentsWithPhone.length === 0) {
+                alert('لا يوجد طلاب لديهم أرقام جوال مسجلة.');
+                return;
+              }
+              
+              if (!window.confirm(`سيتم إرسال رسائل واتساب إلى ${studentsWithPhone.length} طالب. هل أنت متأكد؟`)) {
+                return;
+              }
 
-            {importMessage && (
-              <div className={`mt-4 p-4 rounded-2xl text-sm font-bold flex items-center gap-3 ${importMessage.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-                {importMessage.type === 'success' ? <CheckCircle2 size={20} /> : <X size={20} />}
-                {importMessage.text}
+              let successCount = 0;
+              let failCount = 0;
+
+              for (const student of studentsWithPhone) {
+                const result = await sendWhatsAppMessage(student.parent_phone, student.student_name, student.period);
+                if (result.success) {
+                  successCount++;
+                } else {
+                  failCount++;
+                }
+                // Wait 2000ms between messages to avoid ban
+                await new Promise(resolve => setTimeout(resolve, 2000));
+              }
+
+              alert(`تم الانتهاء من الإرسال.\nنجاح: ${successCount}\nفشل: ${failCount}`);
+            }}
+            className="flex items-center gap-2 bg-[#25D366] text-white px-6 py-2 rounded-xl shadow-sm hover:bg-[#25D366]/90 font-bold"
+          >
+            <MessageCircle size={20} />
+            إرسال واتساب للجميع
+          </button>
+
+          <button 
+            onClick={handlePrint}
+            className="flex items-center gap-2 bg-primary text-white px-6 py-2 rounded-xl shadow-sm hover:bg-primary/90 font-bold"
+          >
+            <Printer size={20} />
+            طباعة التقرير
+          </button>
+        </div>
+      </div>
+
+      {/* Printable Area */}
+      <div className="max-w-4xl mx-auto bg-white p-8 md:p-12 shadow-sm border border-slate-200 rounded-2xl print:shadow-none print:border-none print:p-0 print-report font-sans" dir="rtl">
+        
+        {/* Print Header (الكليشة) */}
+        <div className="hidden print:flex justify-between items-start border-b-2 border-black pb-2 mb-4">
+          <div className="text-right space-y-1">
+            <p className="text-xs font-black">المملكة العربية السعودية</p>
+            <p className="text-xs font-black">وزارة التعليم</p>
+            <p className="text-xs font-black">الإدارة العامة للتعليم بمنطقة الرياض</p>
+            <p className="text-xs font-black">مدرسة ثانوية أم القرى</p>
+          </div>
+          <div className="text-right space-y-1 text-xs font-bold">
+            <p>الرقم: {reportNumber}</p>
+            <p>التاريخ: {dateStr}</p>
+            <p>المرفقات: ....................</p>
+          </div>
+        </div>
+
+        {/* UI Header - Hidden in print */}
+        <div className="print:hidden flex justify-between items-start border-b-2 border-slate-800 pb-6 mb-8">
+          <div className="text-right space-y-1">
+            <p className="font-bold text-sm">المملكة العربية السعودية</p>
+            <p className="font-bold text-sm">وزارة التعليم</p>
+            <p className="font-bold text-sm">الإدارة العامة للتعليم بمنطقة الرياض</p>
+            <p className="font-bold text-sm">محافظة الخرج</p>
+            <p className="font-bold text-sm">المدرسة: ثانوية أم القرى</p>
+          </div>
+          <div className="text-center">
+            <img src="https://upload.wikimedia.org/wikipedia/ar/thumb/3/32/Ministry_of_Education_Saudi_Arabia.svg/1200px-Ministry_of_Education_Saudi_Arabia.svg.png" alt="شعار الوزارة" className="w-24 h-24 object-contain mx-auto mb-2 opacity-80" onError={(e) => e.currentTarget.style.display = 'none'} />
+          </div>
+          <div className="text-left space-y-1">
+            <p className="font-bold text-sm">المرفقات: ....................</p>
+            <p className="font-bold text-sm">التاريخ: {dateStr}</p>
+          </div>
+        </div>
+
+        {/* Title - Hidden in print (replaced by Print Header) */}
+        <div className="print:hidden text-center mb-8">
+          <h1 className="text-2xl font-black text-slate-900 mb-2 border-2 border-slate-800 inline-block px-8 py-2 rounded-xl bg-slate-50">
+            تقرير الغياب والتأخر اليومي
+            {new URLSearchParams(location.search).get('grade') && ` - ${new URLSearchParams(location.search).get('grade')} / ${new URLSearchParams(location.search).get('section')}`}
+          </h1>
+          <div className="flex justify-center gap-8 mt-4 text-slate-700 font-bold">
+            <p>التاريخ: {dateStr}</p>
+          </div>
+        </div>
+
+        <h1 className="hidden print:block text-xl font-black text-center mb-8 underline underline-offset-8">
+          تقرير الغياب والتأخر اليومي
+          {new URLSearchParams(location.search).get('grade') && ` - ${new URLSearchParams(location.search).get('grade')} / ${new URLSearchParams(location.search).get('section')}`}
+        </h1>
+
+        {/* UI Table (Paginated) */}
+        <div className="print:hidden">
+          {/* Desktop Table View */}
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full border-collapse border border-slate-300 text-sm">
+              <thead>
+                <tr className="bg-slate-100">
+                  <th className="border border-slate-300 p-3 text-center w-12 font-bold text-slate-800">م</th>
+                  <th className="border border-slate-300 p-3 text-right font-bold text-slate-800">اسم الطالب</th>
+                  <th className="border border-slate-300 p-3 text-center font-bold text-slate-800">الصف</th>
+                  <th className="border border-slate-300 p-3 text-center font-bold text-slate-800">الفصل</th>
+                  <th className="border border-slate-300 p-3 text-center font-bold text-slate-800">الحصة</th>
+                  <th className="border border-slate-300 p-3 text-center font-bold text-slate-800">حالة الحضور</th>
+                  <th className="border border-slate-300 p-3 text-center font-bold text-slate-800 w-32">إجراءات</th>
+                  <th className="border border-slate-300 p-3 text-right font-bold text-slate-800 w-48">ملاحظات الوكيل</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedData.length > 0 ? (
+                  paginatedData.map((row, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50">
+                      <td className="border border-slate-300 p-3 text-center text-slate-600">{(currentPage - 1) * itemsPerPage + idx + 1}</td>
+                      <td className="border border-slate-300 p-3 font-bold text-slate-800">{row.student_name}</td>
+                      <td className="border border-slate-300 p-3 text-center text-slate-600">{row.grade}</td>
+                      <td className="border border-slate-300 p-3 text-center text-slate-600">{row.section}</td>
+                      <td className="border border-slate-300 p-3 text-center font-bold text-slate-800">{row.period || '-'}</td>
+                      <td className="border border-slate-300 p-3 text-center">
+                        <span className={`font-bold ${row.status === 'غائب' ? 'text-red-600 bg-red-50 px-2 py-1 rounded-lg' : 'text-amber-600 bg-amber-50 px-2 py-1 rounded-lg'}`}>
+                          {row.status}
+                        </span>
+                      </td>
+                      <td className="border border-slate-300 p-3 text-center">
+                        <button
+                          onClick={() => handleSendWhatsApp(row)}
+                          disabled={!row.parent_phone || row.parent_phone.trim() === ''}
+                          title={(!row.parent_phone || row.parent_phone.trim() === '') ? '️ رقم الجوال غير مسجل' : 'إرسال واتساب لولي الأمر'}
+                          className={`w-full py-2 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all min-h-[44px] ${
+                            (!row.parent_phone || row.parent_phone.trim() === '')
+                              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                              : 'bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/20 border border-[#25D366]/20'
+                          }`}
+                        >
+                          <MessageCircle size={14} />
+                          واتساب
+                        </button>
+                      </td>
+                      <td className="border border-slate-300 p-3"></td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={8} className="border border-slate-300 p-8 text-center text-slate-500 font-bold">
+                      لا يوجد غياب أو تأخر مسجل لهذا اليوم
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile Card View */}
+          <div className="md:hidden flex flex-col gap-4">
+            {paginatedData.length > 0 ? (
+              paginatedData.map((row, idx) => (
+                <div key={idx} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="font-bold text-slate-800 text-base">{row.student_name}</h3>
+                      <p className="text-xs text-slate-500 mt-1">الصف: {row.grade} - الفصل: {row.section}</p>
+                    </div>
+                    <span className={`text-xs font-bold px-2 py-1 rounded-lg ${row.status === 'غائب' ? 'text-red-600 bg-red-50' : 'text-amber-600 bg-amber-50'}`}>
+                      {row.status}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-slate-600">الحصة: <span className="font-bold text-slate-800">{row.period || '-'}</span></span>
+                  </div>
+                  <button
+                    onClick={() => handleSendWhatsApp(row)}
+                    disabled={!row.parent_phone || row.parent_phone.trim() === ''}
+                    className={`w-full py-3 px-4 rounded-xl text-sm font-black flex items-center justify-center gap-2 transition-all min-h-[44px] ${
+                      (!row.parent_phone || row.parent_phone.trim() === '')
+                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                        : 'bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/20 border border-[#25D366]/20'
+                    }`}
+                  >
+                    <MessageCircle size={18} />
+                    {(!row.parent_phone || row.parent_phone.trim() === '') ? 'رقم الجوال غير مسجل' : 'إرسال واتساب لولي الأمر'}
+                  </button>
+                </div>
+              ))
+            ) : (
+              <div className="bg-white p-8 rounded-xl border border-slate-200 text-center text-slate-500 font-bold">
+                لا يوجد غياب أو تأخر مسجل لهذا اليوم
               </div>
             )}
-
-            <div className="grid grid-cols-1 gap-4 mt-6">
-              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100">
-                <h4 className="font-extrabold text-slate-800 text-sm mb-2">الأعمدة المطلوبة</h4>
-                <p className="text-xs text-slate-500 font-bold leading-relaxed">
-                  يجب أن يحتوي الملف على: اسم الطالب، رقم الهوية، الصف، الفصل، جوال الطالب.
-                </p>
-              </div>
-              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100">
-                <h4 className="font-extrabold text-slate-800 text-sm mb-2">استراتيجية التحديث الذكي</h4>
-                <p className="text-xs text-slate-500 font-bold leading-relaxed">
-                  النظام يستخدم رقم الهوية كمفتاح فريد. إذا كان الطالب موجوداً مسبقاً، سيتم تحديث بياناته، وإذا كان جديداً سيتم إضافته.
-                </p>
-              </div>
-            </div>
           </div>
         </div>
 
-        {/* العمود الأيسر */}
-        <div className="space-y-8">
-          {/* إعدادات إشعارات الواتساب */}
-          <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
-            <h2 className="text-xl font-extrabold text-slate-800 mb-6">إعدادات إشعارات الواتساب</h2>
-            <label className="flex items-center justify-between p-5 bg-emerald-50/50 rounded-2xl border border-emerald-100 cursor-pointer mb-6">
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${whatsappEnabled ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-500'}`}>
-                  <Smartphone size={20} />
-                </div>
-                <span className="font-black text-slate-800">تفعيل إشعارات الواتساب للنظام بالكامل</span>
-              </div>
-              <input
-                type="checkbox"
-                checked={whatsappEnabled}
-                onChange={(e) => setWhatsappEnabled(e.target.checked)}
-                className="w-6 h-6 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-              />
-            </label>
+        {/* Pagination Controls */}
+        {data.length > 0 && (
+          <div className="print:hidden flex justify-between items-center mt-6 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
             <button
-              onClick={handleSave}
-              disabled={isSaving}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-colors"
+              onClick={handlePrevPage}
+              disabled={currentPage === 1}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              <Save size={20} />
-              {isSaving ? 'جاري الحفظ...' : 'حفظ الإعدادات'}
+              <ChevronRight size={18} />
+              السابق
+            </button>
+            <span className="font-bold text-slate-600">
+              صفحة {currentPage} من {totalPages}
+            </span>
+            <button
+              onClick={handleNextPage}
+              disabled={currentPage === totalPages}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              التالي
+              <ChevronLeft size={18} />
             </button>
           </div>
+        )}
 
-          {/* إدارة قواعد البيانات */}
-          <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
-            <h2 className="text-xl font-extrabold text-red-600 mb-6">إدارة قواعد البيانات (Danger Zone)</h2>
-            <div className="space-y-4">
-              <button className="w-full flex items-center justify-center gap-3 p-4 border-2 border-red-100 text-red-600 rounded-2xl font-extrabold hover:bg-red-50 transition-all">
-                <Trash2 size={18} />
-                <span>حذف قاعدة بيانات الطلاب بالكامل</span>
-              </button>
-              <button className="w-full flex items-center justify-center gap-3 p-4 border-2 border-red-100 text-red-600 rounded-2xl font-extrabold hover:bg-red-50 transition-all">
-                <Users size={18} />
-                <span>حذف جميع المستخدمين (باستثناء الإدارة)</span>
-              </button>
-            </div>
+        {/* Print Table (All Data) */}
+        <table className="hidden print:table w-full border-collapse border border-black text-sm text-black">
+          <thead>
+            <tr>
+              <th className="border border-black p-1 text-center w-12 font-bold">م</th>
+              <th className="border border-black p-1 text-right font-bold">اسم الطالب</th>
+              <th className="border border-black p-1 text-center font-bold">الصف</th>
+              <th className="border border-black p-1 text-center font-bold">الفصل</th>
+              <th className="border border-black p-1 text-center font-bold">الحصة</th>
+              <th className="border border-black p-1 text-center font-bold">حالة الحضور</th>
+              <th className="border border-black p-1 text-right font-bold w-48">ملاحظات الوكيل</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.length > 0 ? (
+              data.map((row, idx) => (
+                <tr key={idx} className="break-inside-avoid">
+                  <td className="border border-black p-1 text-center">{idx + 1}</td>
+                  <td className="border border-black p-1 font-bold">{row.student_name}</td>
+                  <td className="border border-black p-1 text-center">{row.grade}</td>
+                  <td className="border border-black p-1 text-center">{row.section}</td>
+                  <td className="border border-black p-1 text-center font-bold">{row.period || '-'}</td>
+                  <td className="border border-black p-1 text-center font-bold">
+                    {row.status}
+                  </td>
+                  <td className="border border-black p-1"></td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={7} className="border border-black p-2 text-center font-bold">
+                  لا يوجد غياب أو تأخر مسجل لهذا اليوم
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+
+        {/* Print Footer (التوقيعات الديناميكية) */}
+        <div className="hidden print:flex justify-end mt-8 pl-12 page-break-inside-avoid">
+          <div className="text-center space-y-2">
+            <p className="font-bold text-sm">وكيل شؤون الطلاب</p>
+            <p className="text-sm font-bold">{user?.name || 'غير محدد'}</p>
           </div>
         </div>
+
       </div>
     </div>
   );
-};
+});
 
-export default AdminSettings;
+export default DailyAbsenceReport;

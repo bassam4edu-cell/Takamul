@@ -1,243 +1,204 @@
 import { apiFetch } from '../utils/api';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Bell, Check, Clock, AlertCircle, ChevronLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { Search, User, FileText, ChevronLeft, Layers, UserCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { logAction } from '../services/auditLogger';
+import { motion, AnimatePresence } from 'motion/react';
+import { formatHijriDateTime } from '../utils/dateUtils';
 
-interface Student {
-  id: number;
-  name: string;
-  grade: string;
-  section: string;
-  national_id: string;
+interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  reference_id: number;
+  is_read: boolean;
+  created_at: string;
+  sender_name: string;
 }
 
-const StudentRecordSearch: React.FC = () => {
+const NotificationBell: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [students, setStudents] = useState<Student[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Hierarchical search state
-  const [selectedGrade, setSelectedGrade] = useState('');
-  const [selectedSection, setSelectedSection] = useState('');
-  const [selectedStudentId, setSelectedStudentId] = useState<number | ''>('');
+  const fetchNotifications = async () => {
+    if (!user) return;
+    try {
+      const res = await apiFetch(`/api/notifications?userId=${user.id}`);
+      if (res.ok) {
+        const data = await res.json().catch(() => []);
+        setNotifications(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch notifications', err);
+    }
+  };
 
   useEffect(() => {
-    const fetchStudents = async () => {
+    fetchNotifications();
+    
+    if (!user) return;
+
+    // Real-time updates using Server-Sent Events (SSE)
+    // This achieves the exact same real-time behavior as Supabase channels
+    // but works natively with our existing Neon Postgres + Express backend
+    const eventSource = new EventSource(`/api/notifications/stream?userId=${user.id}`);
+    
+    eventSource.onmessage = (event) => {
       try {
-        const res = await apiFetch(`/api/students?userId=${user?.id}`);
-        if (res.ok) {
-          const data = await res.json();
-          setStudents(data);
-        }
+        const newNotification = JSON.parse(event.data);
+        setNotifications(prev => [newNotification, ...prev]);
       } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
+        console.error('Error parsing real-time notification', err);
       }
     };
-    fetchStudents();
-  }, [user?.id]);
 
-  // Quick Search Results
-  const quickSearchResults = useMemo(() => {
-    if (searchTerm.trim().length < 3) return [];
-    const lowerTerm = searchTerm.toLowerCase();
-    return students.filter(s => 
-      s.name.toLowerCase().includes(lowerTerm) || s.national_id.includes(lowerTerm)
-    );
-  }, [students, searchTerm]);
+    return () => {
+      eventSource.close();
+    };
+  }, [user]);
 
-  // Hierarchical Search Data
-  const grades = useMemo(() => {
-    return Array.from(new Set(students.map(s => s.grade))).sort();
-  }, [students]);
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
-  const sections = useMemo(() => {
-    if (!selectedGrade) return [];
-    return Array.from(new Set(students.filter(s => s.grade === selectedGrade).map(s => s.section))).sort();
-  }, [students, selectedGrade]);
+  const unreadCount = notifications.filter(n => !n.is_read).length;
 
-  const studentsInSection = useMemo(() => {
-    if (!selectedGrade || !selectedSection) return [];
-    return students.filter(s => s.grade === selectedGrade && s.section === selectedSection).sort((a, b) => a.name.localeCompare(b.name, 'ar'));
-  }, [students, selectedGrade, selectedSection]);
-
-  // Reset dependent dropdowns when parent changes
-  const handleGradeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedGrade(e.target.value);
-    setSelectedSection('');
-    setSelectedStudentId('');
+  const handleNotificationClick = async (notification: Notification) => {
+    if (!notification.is_read) {
+      try {
+        const res = await apiFetch(`/api/notifications/${notification.id}/read`, { method: 'POST' });
+        if (res.ok) {
+          setNotifications(prev => prev.map(n => n.id === notification.id ? { ...n, is_read: true } : n));
+        } else {
+          const data = await res.json().catch(() => ({ error: 'فشل تحديث حالة الإشعار' }));
+          console.error(data.error || 'فشل تحديث حالة الإشعار');
+        }
+      } catch (err) {
+        console.error('Failed to mark as read', err);
+      }
+    }
+    setIsOpen(false);
+    if (notification.reference_id) {
+      navigate(`/referral/${notification.reference_id}`);
+    }
   };
 
-  const handleSectionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedSection(e.target.value);
-    setSelectedStudentId('');
-  };
-
-  const handleViewProfile = () => {
-    if (selectedStudentId) {
-      const student = students.find(s => s.id === selectedStudentId);
-      logAction(
-        'أخرى',
-        'READ',
-        'السجل الشامل للطالب',
-        `قام بعرض السجل الشامل للطالب ${student?.name}`
-      );
-      navigate(`/dashboard/student/${selectedStudentId}`);
+  const markAllAsRead = async () => {
+    try {
+      const res = await apiFetch('/api/notifications/read-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user?.id })
+      });
+      if (res.ok) {
+        setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      } else {
+        const data = await res.json().catch(() => ({ error: 'فشل تحديث الإشعارات' }));
+        console.error(data.error || 'فشل تحديث الإشعارات');
+      }
+    } catch (err) {
+      console.error('Failed to mark all as read', err);
     }
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 pb-20">
-      <div className="flex items-center gap-3 mb-8">
-        <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary">
-          <FileText size={24} />
-        </div>
-        <div>
-          <h1 className="text-2xl font-black text-slate-800">السجل الشامل للطالب</h1>
-          <p className="text-sm text-slate-500 font-bold">ابحث عن طالب لعرض سجله الأكاديمي والسلوكي</p>
-        </div>
-      </div>
+    <div className="relative" ref={dropdownRef}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="relative p-2.5 bg-white border border-slate-100 rounded-xl text-slate-500 hover:text-primary hover:border-primary/20 transition-all shadow-sm group"
+      >
+        <Bell size={20} className="group-hover:rotate-12 transition-transform" />
+        {unreadCount > 0 && (
+          <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-white animate-pulse">
+            {unreadCount}
+          </span>
+        )}
+      </button>
 
-      {loading ? (
-        <div className="flex justify-center p-10">
-          <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          
-          {/* Column 1: Quick Search */}
-          <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100 flex flex-col h-[500px]">
-            <h2 className="text-lg font-extrabold text-slate-800 flex items-center gap-2 mb-6">
-              <Search className="text-primary" size={20} />
-              <span>البحث السريع المباشر</span>
-            </h2>
-            
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex items-center gap-3 mb-4 focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20 transition-all shrink-0">
-              <Search className="text-slate-400" size={20} />
-              <input 
-                type="text"
-                placeholder="ابحث باسم الطالب أو رقم الهوية..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="flex-1 bg-transparent border-none outline-none font-bold text-slate-700 placeholder:text-slate-400"
-              />
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+            className="absolute left-0 mt-3 w-80 bg-white rounded-3xl shadow-2xl border border-slate-100 z-50 overflow-hidden"
+          >
+            <div className="p-5 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
+              <h3 className="font-black text-slate-800 text-sm uppercase tracking-widest">التنبيهات</h3>
+              {unreadCount > 0 && (
+                <button
+                  onClick={markAllAsRead}
+                  className="text-[10px] font-black text-primary hover:underline uppercase tracking-widest"
+                >
+                  تحديد الكل كمقروء
+                </button>
+              )}
             </div>
 
-            <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
-              {searchTerm.trim().length > 0 && searchTerm.trim().length < 3 ? (
-                <div className="text-center p-6 text-slate-400 font-bold text-sm">
-                  الرجاء كتابة 3 أحرف على الأقل للبحث...
-                </div>
-              ) : quickSearchResults.length > 0 ? (
-                quickSearchResults.map(student => (
-                  <div 
-                    key={student.id}
-                    onClick={() => navigate(`/dashboard/student/${student.id}`)}
-                    className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:shadow-md hover:border-primary/30 transition-all cursor-pointer flex items-center gap-4 group"
-                  >
-                    <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-slate-400 group-hover:bg-primary/10 group-hover:text-primary transition-colors shrink-0">
-                      <User size={20} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-extrabold text-slate-800 truncate text-sm">{student.name}</h3>
-                      <div className="flex items-center gap-2 mt-1 text-xs font-bold text-slate-500">
-                        <span className="bg-slate-100 px-2 py-0.5 rounded-md">{student.grade} - {student.section}</span>
-                        <span>{student.national_id}</span>
-                      </div>
-                    </div>
-                    <ChevronLeft className="text-slate-300 group-hover:text-primary transition-colors" size={18} />
+            <div className="max-h-[400px] overflow-y-auto">
+              {notifications.length === 0 ? (
+                <div className="p-10 text-center space-y-3">
+                  <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto text-slate-300">
+                    <Bell size={24} />
                   </div>
-                ))
-              ) : searchTerm.trim().length >= 3 ? (
-                <div className="text-center p-6 text-slate-400 font-bold text-sm">
-                  لا توجد نتائج مطابقة
+                  <p className="text-xs font-bold text-slate-400">لا توجد تنبيهات حالياً</p>
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center h-full text-slate-300 space-y-3 opacity-50 py-10">
-                  <Search size={48} strokeWidth={1.5} />
-                  <p className="font-bold text-sm">ابدأ الكتابة للبحث عن طالب</p>
+                <div className="divide-y divide-slate-50">
+                  {notifications.slice(0, 5).map((n) => (
+                    <button
+                      key={n.id}
+                      onClick={() => handleNotificationClick(n)}
+                      className={`w-full p-5 text-right flex gap-4 hover:bg-slate-100 transition-colors group relative ${!n.is_read ? 'bg-slate-50' : 'bg-white'}`}
+                    >
+                      {!n.is_read && (
+                        <div className="absolute right-0 top-0 bottom-0 w-1 bg-primary" />
+                      )}
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${!n.is_read ? 'bg-primary text-white' : 'bg-slate-100 text-slate-400'}`}>
+                        {n.title.includes('جديد') ? <AlertCircle size={18} /> : <Clock size={18} />}
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <p className={`text-xs leading-relaxed ${!n.is_read ? 'font-black text-slate-900' : 'font-bold text-slate-500'}`}>
+                          {n.title}
+                        </p>
+                        <p className="text-[10px] text-slate-500 line-clamp-2">
+                          {n.message}
+                        </p>
+                        <div className="flex items-center justify-between pt-1">
+                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                            {formatHijriDateTime(n.created_at).split(' - ')[1]}
+                          </span>
+                          <ChevronLeft size={12} className="text-slate-300 group-hover:text-primary group-hover:translate-x-[-2px] transition-all" />
+                        </div>
+                      </div>
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
-          </div>
 
-          {/* Column 2: Hierarchical Search */}
-          <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100 flex flex-col h-[500px]">
-            <h2 className="text-lg font-extrabold text-slate-800 flex items-center gap-2 mb-6">
-              <Layers className="text-indigo-500" size={20} />
-              <span>البحث الهرمي المتدرج</span>
-            </h2>
-
-            <div className="space-y-5 flex-1">
-              {/* Grade Dropdown */}
-              <div className="space-y-2">
-                <label className="block text-sm font-bold text-slate-700">الصف الدراسي</label>
-                <select 
-                  value={selectedGrade}
-                  onChange={handleGradeChange}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl focus:ring-primary focus:border-primary block p-3 font-bold"
-                >
-                  <option value="">اختر الصف...</option>
-                  {grades.map(grade => (
-                    <option key={grade} value={grade}>{grade}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Section Dropdown */}
-              <div className="space-y-2">
-                <label className="block text-sm font-bold text-slate-700">الفصل</label>
-                <select 
-                  value={selectedSection}
-                  onChange={handleSectionChange}
-                  disabled={!selectedGrade}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl focus:ring-primary focus:border-primary block p-3 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <option value="">اختر الفصل...</option>
-                  {sections.map(section => (
-                    <option key={section} value={section}>{section}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Student Dropdown */}
-              <div className="space-y-2">
-                <label className="block text-sm font-bold text-slate-700">اسم الطالب</label>
-                <select 
-                  value={selectedStudentId}
-                  onChange={(e) => setSelectedStudentId(e.target.value ? Number(e.target.value) : '')}
-                  disabled={!selectedSection}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl focus:ring-primary focus:border-primary block p-3 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <option value="">اختر الطالب...</option>
-                  {studentsInSection.map(student => (
-                    <option key={student.id} value={student.id}>{student.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="mt-8 pt-6 border-t border-slate-100 shrink-0">
-              <button
-                onClick={handleViewProfile}
-                disabled={!selectedStudentId}
-                className="w-full flex items-center justify-center gap-2 bg-primary text-white font-bold py-4 px-6 rounded-xl hover:bg-primary/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-primary/20"
+            <div className="p-4 border-t border-slate-50 bg-slate-50/30 text-center">
+              <button 
+                onClick={() => { setIsOpen(false); navigate('/notifications'); }}
+                className="text-[10px] font-black text-slate-400 hover:text-primary transition-colors uppercase tracking-widest"
               >
-                <UserCircle size={20} />
-                <span>عرض ملف الطالب</span>
+                عرض كافة الإشعارات
               </button>
             </div>
-          </div>
-
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
 
-export default StudentRecordSearch;
+export default NotificationBell;

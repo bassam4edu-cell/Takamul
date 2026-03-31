@@ -1,220 +1,196 @@
 import { apiFetch } from '../utils/api';
 import React, { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
-import { 
-  Bell, 
-  CheckCircle2, 
-  Clock, 
-  AlertCircle, 
-  ChevronLeft,
-  Trash2,
-  MailOpen,
-  Mail
-} from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
-import { formatHijriDate, formatHijriDateTime } from '../utils/dateUtils';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Referral } from '../types';
+import { Printer, ArrowRight } from 'lucide-react';
+import { useSchoolSettings } from '../context/SchoolContext';
 
-interface Notification {
-  id: string;
-  sender_id: number;
-  user_id: number;
-  title: string;
-  message: string;
-  reference_id: number;
-  is_read: boolean;
-  created_at: string;
-  sender_name: string;
-}
-
-const Notifications: React.FC = () => {
-  const { user } = useAuth();
+const PrintTemplate: React.FC = () => {
+  const { templateId, referralId } = useParams();
   const navigate = useNavigate();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [referral, setReferral] = useState<Referral | null>(null);
   const [loading, setLoading] = useState(true);
-
-  const fetchNotifications = async () => {
-    if (!user) return;
-    try {
-      const res = await apiFetch(`/api/notifications?userId=${user.id}`);
-      if (!res.ok) throw new Error('Failed to fetch notifications');
-      const data = await res.json().catch(() => []);
-      setNotifications(data);
-    } catch (err) {
-      console.error('Failed to fetch notifications', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { settings } = useSchoolSettings();
 
   useEffect(() => {
-    fetchNotifications();
-    
-    if (!user) return;
-
-    const eventSource = new EventSource(`/api/notifications/stream?userId=${user.id}`);
-    
-    eventSource.onmessage = (event) => {
+    const fetchReferral = async () => {
       try {
-        const newNotification = JSON.parse(event.data);
-        setNotifications(prev => [newNotification, ...prev]);
-      } catch (err) {
-        console.error('Error parsing real-time notification', err);
-      }
-    };
-
-    return () => {
-      eventSource.close();
-    };
-  }, [user]);
-
-  const markAsRead = async (id: string, referenceId?: number) => {
-    try {
-      const res = await apiFetch(`/api/notifications/${id}/read`, { method: 'POST' });
-      if (res.ok) {
-        setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
-        if (referenceId) {
-          navigate(`/referral/${referenceId}`);
+        const res = await apiFetch(`/api/referrals/${referralId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setReferral(data.referral);
         }
-      } else {
-        const data = await res.json().catch(() => ({ error: 'فشل تحديث حالة الإشعار' }));
-        console.error(data.error || 'فشل تحديث حالة الإشعار');
+      } catch (err) {
+        console.error('Failed to fetch referral', err);
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      console.error('Failed to mark as read', err);
+    };
+    if (referralId) {
+      fetchReferral();
     }
-  };
+  }, [referralId]);
 
-  const markAllAsRead = async () => {
-    if (!user) return;
-    try {
-      const res = await apiFetch('/api/notifications/read-all', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id })
-      });
-      if (res.ok) {
-        setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
-      } else {
-        const data = await res.json().catch(() => ({ error: 'فشل تحديث الإشعارات' }));
-        console.error(data.error || 'فشل تحديث الإشعارات');
-      }
-    } catch (err) {
-      console.error('Failed to mark all as read', err);
-    }
-  };
+  if (loading) {
+    return <div className="p-10 text-center font-bold">جاري التحميل...</div>;
+  }
 
-  const deleteNotification = async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    try {
-      const res = await apiFetch(`/api/notifications/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        setNotifications(prev => prev.filter(n => n.id !== id));
-      } else {
-        console.error('Failed to delete notification');
-      }
-    } catch (err) {
-      console.error('Failed to delete notification', err);
+  if (!referral) {
+    return <div className="p-10 text-center font-bold text-red-600">لم يتم العثور على الحالة</div>;
+  }
+
+  const getTemplateTitle = (id: string) => {
+    switch (id) {
+      case '1': return 'تعهد سلوكي';
+      case '2': return 'إشعار ولي أمر بمشكلة سلوكية';
+      case '4': return 'تعهد الحضور والانضباط';
+      case '5': return 'خطاب دعوة ولي أمر';
+      case '9': return 'نموذج تعويض درجات السلوك';
+      case '10': return 'نموذج إحالة طالب للموجه الطلابي';
+      case '11': return 'طلب انعقاد لجنة التوجيه الطلابي';
+      case '12': return 'خطة تعديل سلوك';
+      case '16': return 'إجراءات الغياب والتأخر';
+      default: return 'نموذج إداري';
     }
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 pb-20">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3">
-            <Bell className="text-primary" size={32} />
-            <span>الإشعارات</span>
-          </h1>
-          <p className="text-slate-500 font-bold">تابع آخر التحديثات والإجراءات المتخذة على الحالات.</p>
+    <div className="bg-slate-100 min-h-screen py-8">
+      {/* Action Buttons (Hidden when printing) */}
+      <div className="max-w-4xl mx-auto mb-6 flex justify-between items-center print:hidden px-4">
+        <button
+          onClick={() => navigate(-1)}
+          className="flex items-center gap-2 bg-white text-slate-600 px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors font-bold shadow-sm"
+        >
+          <ArrowRight size={18} />
+          <span>رجوع</span>
+        </button>
+        <button
+          onClick={() => window.print()}
+          className="flex items-center gap-2 bg-primary text-white px-6 py-2 rounded-xl hover:bg-primary/90 transition-colors font-bold shadow-lg shadow-primary/20"
+        >
+          <Printer size={18} />
+          <span>طباعة النموذج</span>
+        </button>
+      </div>
+
+      {/* Printable Area */}
+      <div className="bg-white p-10 max-w-4xl mx-auto text-right shadow-sm print:shadow-none print:p-0 print-report font-sans" dir="rtl">
+        {/* Header */}
+      <div className="flex justify-between items-start border-b-2 border-black pb-4 mb-8">
+        <div className="text-right space-y-1">
+          <p className="text-sm font-black">المملكة العربية السعودية</p>
+          <p className="text-sm font-black">وزارة التعليم</p>
+          <p className="text-sm font-black">{settings.schoolName ? `مدرسة ${settings.schoolName}` : 'مدرسة ....................'}</p>
         </div>
-        {notifications.some(n => !n.is_read) && (
-          <button 
-            onClick={markAllAsRead}
-            className="flex items-center justify-center gap-2 px-6 py-3 bg-white border border-slate-200 rounded-2xl text-slate-600 font-bold hover:text-primary hover:border-primary transition-all shadow-sm"
-          >
-            <MailOpen size={20} />
-            <span>تحديد الكل كمقروء</span>
-          </button>
-        )}
+        <div className="text-center">
+          <img src="https://upload.wikimedia.org/wikipedia/ar/thumb/a/a3/Ministry_of_Education_%28Saudi_Arabia%29_Logo.svg/1200px-Ministry_of_Education_%28Saudi_Arabia%29_Logo.svg.png" alt="شعار الوزارة" className="w-20 h-auto mx-auto grayscale opacity-80" />
+        </div>
+        <div className="text-right space-y-1 text-sm font-bold">
+          <p>الرقم: ....................</p>
+          <p>التاريخ: {new Date().toLocaleDateString('ar-SA')}</p>
+          <p>المرفقات: ....................</p>
+        </div>
       </div>
 
-      <div className="sts-card overflow-hidden">
-        {loading ? (
-          <div className="p-20 text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-4 text-slate-400 font-bold">جاري تحميل الإشعارات...</p>
-          </div>
-        ) : notifications.length === 0 ? (
-          <div className="p-20 text-center space-y-4">
-            <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto text-slate-300">
-              <Bell size={40} />
-            </div>
-            <p className="text-slate-400 font-bold text-lg">لا توجد إشعارات حالياً</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-slate-50">
-            {notifications.map((notification, i) => (
-              <motion.div 
-                key={notification.id}
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.05 }}
-                onClick={() => markAsRead(notification.id, notification.reference_id)}
-                className={`p-6 md:p-8 flex items-start gap-4 md:gap-6 cursor-pointer transition-all hover:bg-slate-50/50 relative group ${!notification.is_read ? 'bg-primary/[0.02]' : ''}`}
-              >
-                {!notification.is_read && (
-                  <div className="absolute right-0 top-0 bottom-0 w-1 bg-primary" />
-                )}
-                
-                <div className={`w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center shrink-0 transition-all ${
-                  !notification.is_read ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-slate-100 text-slate-400'
-                }`}>
-                  {notification.is_read ? <MailOpen size={24} /> : <Mail size={24} />}
-                </div>
+      {/* Title */}
+      <h1 className="text-xl font-black text-center mb-8 underline underline-offset-8">
+        {getTemplateTitle(templateId || '')}
+      </h1>
 
-                <div className="flex-1 space-y-2">
-                  <div className="flex items-center justify-between gap-4">
-                    <p className={`text-sm md:text-base leading-relaxed ${!notification.is_read ? 'font-black text-slate-900' : 'font-bold text-slate-600'}`}>
-                      {notification.title}
-                    </p>
-                    <span className="text-[10px] md:text-xs text-slate-400 font-bold whitespace-nowrap">
-                      {formatHijriDate(notification.created_at)}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500">
-                    {notification.message}
-                  </p>
-                  
-                  <div className="flex items-center gap-4 text-[10px] md:text-xs font-bold uppercase tracking-wider pt-2">
-                    <span className="text-primary">من: {notification.sender_name || 'النظام'}</span>
-                    <span className="w-1 h-1 bg-slate-200 rounded-full" />
-                    <span className="text-slate-400 flex items-center gap-1">
-                      <Clock size={12} />
-                      {formatHijriDateTime(notification.created_at).split(' - ')[1]}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="self-center flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  {user?.role === 'admin' && (
-                    <button 
-                      onClick={(e) => deleteNotification(e, notification.id)}
-                      className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
-                      title="حذف الإشعار"
-                    >
-                      <Trash2 size={20} />
-                    </button>
-                  )}
-                  <ChevronLeft className="text-slate-300" size={24} />
-                </div>
-              </motion.div>
-            ))}
+      {/* Content */}
+      <div className="space-y-6">
+        {/* Student Info */}
+        <div className="print-section">
+          <div className="print-section-header">بيانات الطالب الأساسية</div>
+          <div className="print-grid">
+            <div className="print-cell"><span className="print-label">اسم الطالب:</span> {referral.student_name}</div>
+            <div className="print-cell"><span className="print-label">رقم الهوية:</span> {referral.student_national_id || 'غير مسجل'}</div>
+            <div className="print-cell"><span className="print-label">الصف الدراسي:</span> {referral.student_grade}</div>
+            <div className="print-cell"><span className="print-label">الفصل:</span> {referral.student_section}</div>
           </div>
-        )}
+        </div>
+
+        {/* Dynamic Content based on template */}
+        <div className="print-section">
+          <div className="print-section-header">تفاصيل النموذج</div>
+          <div className="print-full-cell space-y-4">
+            {templateId === '1' && (
+              <>
+                <p>أقر أنا الطالب المذكور أعلاه، وبناءً على ما بدر مني من مخالفة سلوكية تتمثل في:</p>
+                <p className="font-bold">{referral.reason}</p>
+                <p>بأنني ألتزم التزاماً تاماً بأنظمة وقوانين المدرسة، وأتعهد بعدم تكرار هذه المخالفة أو أي مخالفة أخرى مستقبلاً. وفي حال تكرار ذلك، يحق لإدارة المدرسة اتخاذ الإجراءات النظامية بحقي وفق قواعد السلوك والمواظبة.</p>
+              </>
+            )}
+
+            {templateId === '2' && (
+              <>
+                <p>المكرم ولي أمر الطالب / <span className="font-bold">{referral.student_name}</span> المحترم</p>
+                <p>السلام عليكم ورحمة الله وبركاته، وبعد:</p>
+                <p>نود إشعاركم بأنه لوحظ على ابنكم المخالفة السلوكية التالية:</p>
+                <p className="font-bold">{referral.reason}</p>
+                <p>نأمل منكم التعاون مع إدارة المدرسة في توجيه ابنكم ومتابعة سلوكه، شاكرين لكم حسن تعاونكم.</p>
+              </>
+            )}
+
+            {templateId === '5' && (
+              <>
+                <p>المكرم ولي أمر الطالب / <span className="font-bold">{referral.student_name}</span> المحترم</p>
+                <p>السلام عليكم ورحمة الله وبركاته، وبعد:</p>
+                <p>نظراً لأهمية الشراكة بين المدرسة والأسرة في تقويم سلوك الطلاب، نأمل منكم الحضور للمدرسة يوم (....................) الموافق (....................) لمناقشة بعض الأمور التربوية المتعلقة بابنكم.</p>
+                <p>شاكرين ومقدرين تعاونكم المستمر.</p>
+              </>
+            )}
+
+            {templateId === '12' && (
+              <>
+                <p className="font-bold">وصف المشكلة السلوكية:</p>
+                <p>{referral.reason}</p>
+                <p className="font-bold mt-4">الأهداف العلاجية:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>تعديل السلوك السلبي إلى سلوك إيجابي.</li>
+                  <li>تعزيز الوعي الذاتي لدى الطالب بأهمية الانضباط.</li>
+                  <li>إشراك الأسرة في عملية التعديل.</li>
+                </ul>
+                <p className="font-bold mt-4">الإجراءات والأساليب:</p>
+                <p className="min-h-[60px]"></p>
+              </>
+            )}
+
+            {/* Default fallback for other templates */}
+            {!['1', '2', '5', '12'].includes(templateId || '') && (
+              <>
+                <p className="font-bold">تفاصيل الحالة:</p>
+                <p>{referral.reason}</p>
+                <p className="font-bold mt-4">الإجراء المتخذ:</p>
+                <p className="min-h-[60px]"></p>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Signatures */}
+        <div className="mt-16 print-grid grid-cols-3 gap-8 text-center page-break-inside-avoid">
+          <div className="space-y-8">
+            <p className="print-label">توقيع الطالب</p>
+            <div className="h-px bg-black w-3/4 mx-auto"></div>
+            <p className="text-sm font-bold">التوقيع: .................</p>
+          </div>
+          <div className="space-y-8">
+            <p className="print-label">توقيع ولي الأمر</p>
+            <div className="h-px bg-black w-3/4 mx-auto"></div>
+            <p className="text-sm font-bold">التوقيع: .................</p>
+          </div>
+          <div className="space-y-8">
+            <p className="print-label">الختم والاعتماد</p>
+            <div className="h-px bg-black w-3/4 mx-auto"></div>
+            <p className="text-sm font-bold">التوقيع: .................</p>
+          </div>
+        </div>
       </div>
+    </div>
     </div>
   );
 };
 
-export default Notifications;
+export default PrintTemplate;

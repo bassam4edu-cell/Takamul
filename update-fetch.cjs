@@ -1,22 +1,14 @@
-const fs = require('fs');
-const path = require('path');
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>بوابة تكامل | الإدارة المدرسية الذكية</title>
+    <meta name="description" content="بوابة تكامل - الإدارة المدرسية الذكية" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
 
-function processDir(dir) {
-  const files = fs.readdirSync(dir);
-  for (const file of files) {
-    const fullPath = path.join(dir, file);
-    if (fs.statSync(fullPath).isDirectory()) {
-      processDir(fullPath);
-    } else if (fullPath.endsWith('.tsx')) {
-      let content = fs.readFileSync(fullPath, 'utf8');
-      if (content.includes('../../utils/api')) {
-        content = content.replace(/\.\.\/\.\.\/utils\/api/g, '../utils/api');
-        fs.writeFileSync(fullPath, content);
-        console.log(`Updated ${fullPath}`);
-      }
-    }
-  }
-}
-
-processDir(path.join(__dirname, 'src', 'pages'));
-processDir(path.join(__dirname, 'src', 'components'));

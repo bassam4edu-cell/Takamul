@@ -1,489 +1,179 @@
 import { apiFetch } from '../utils/api';
-import React, { useEffect, useState, useMemo } from 'react';
-import { Printer, ArrowRight, ChevronRight, ChevronLeft, MessageCircle } from 'lucide-react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { 
+  Clock, 
+  CheckCircle2, 
+  AlertCircle, 
+  Search,
+  ArrowUpRight
+} from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Referral } from '../types';
 import { useAuth } from '../context/AuthContext';
-import { useMessageLog } from '../context/MessageLogContext';
-import { formatHijriDate } from '../utils/dateUtils';
-import { logAction } from '../services/auditLogger';
+import { motion } from 'motion/react';
 
-const DailyAbsenceReport: React.FC = React.memo(() => {
+const KanbanColumn = ({ title, icon: Icon, color, cases, count }: any) => (
+  <div className="flex flex-col h-full bg-slate-50/50 rounded-[2rem] border border-slate-100 p-4 md:p-6">
+    <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center gap-3">
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white ${color}`}>
+          <Icon size={20} />
+        </div>
+        <h2 className="font-extrabold text-lg text-slate-800">{title}</h2>
+      </div>
+      <span className="bg-white px-3 py-1 rounded-full text-sm font-bold text-slate-500 shadow-sm border border-slate-100">
+        {count}
+      </span>
+    </div>
+
+    <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
+      {cases.length === 0 ? (
+        <div className="h-32 flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-200 rounded-2xl">
+          <p className="font-bold text-sm">لا توجد حالات</p>
+        </div>
+      ) : (
+        cases.map((referral: Referral) => (
+          <motion.div
+            key={referral.id}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md hover:border-primary/30 transition-all group"
+          >
+            <div className="flex justify-between items-start mb-3">
+              <div>
+                <h3 className="font-extrabold text-slate-800">{referral.student_name}</h3>
+                <p className="text-xs text-slate-500 font-bold mt-1">
+                  {referral.student_grade} - {referral.student_section}
+                </p>
+              </div>
+              <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold ${
+                referral.severity === 'high' ? 'bg-red-50 text-red-600' :
+                referral.severity === 'medium' ? 'bg-amber-50 text-amber-600' :
+                'bg-emerald-50 text-emerald-600'
+              }`}>
+                {referral.severity === 'high' ? 'عالية' : referral.severity === 'medium' ? 'متوسطة' : 'عادية'}
+              </span>
+            </div>
+            
+            <div className="mb-4">
+              <p className="text-sm text-slate-600 font-medium line-clamp-2">
+                {referral.reason}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between pt-4 border-t border-slate-50">
+              <div className="flex items-center gap-2 text-xs text-slate-400 font-bold">
+                <Clock size={14} />
+                <span>{new Date(referral.created_at).toLocaleDateString('ar-SA')}</span>
+              </div>
+              <Link
+                to={`/dashboard/referral/${referral.id}`}
+                className="w-8 h-8 rounded-full bg-slate-50 text-slate-400 flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors"
+              >
+                <ArrowUpRight size={16} />
+              </Link>
+            </div>
+          </motion.div>
+        ))
+      )}
+    </div>
+  </div>
+);
+
+const CounselorDashboard: React.FC = () => {
   const { user } = useAuth();
-  const { addLogEntry } = useMessageLog();
-  const [data, setData] = useState<any[]>([]);
+  const [referrals, setReferrals] = useState<Referral[]>([]);
   const [loading, setLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [principalName, setPrincipalName] = useState('مدير المدرسة');
-  const [absenceTemplate, setAbsenceTemplate] = useState("المكرم ولي أمر الطالب {اسم_الطالب}، نود إشعاركم بغياب ابنكم اليوم {التاريخ} عن {الحصة}. إدارة {اسم_المدرسة}.");
-  const [schoolName, setSchoolName] = useState('ثانوية أم القرى');
-  const [periodFilter, setPeriodFilter] = useState<string>('');
-  const itemsPerPage = 15;
-  const [reportNumber] = useState(Math.floor(Math.random() * 1000000));
-  
-  const navigate = useNavigate();
-  const location = useLocation();
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchReferrals = async () => {
       try {
-        const searchParams = new URLSearchParams(location.search);
-        const date = searchParams.get('date') || new Date().toISOString().split('T')[0];
-        const grade = searchParams.get('grade');
-        const section = searchParams.get('section');
-        
-        let url = `/api/attendance/daily-report?date=${date}`;
-        if (grade && section) {
-          url += `&grade=${encodeURIComponent(grade)}&section=${encodeURIComponent(section)}`;
-        }
-        if (periodFilter) {
-          url += `&period=${periodFilter}`;
-        }
-
-        const [res, settingsRes] = await Promise.all([
-          apiFetch(url),
-          apiFetch('/api/settings')
-        ]);
-
-        if (res.ok) {
-          const json = await res.json();
-          setData(json);
-        }
-
-        if (settingsRes.ok) {
-          const settingsJson = await settingsRes.json();
-          if (settingsJson.principal_name) {
-            setPrincipalName(settingsJson.principal_name);
-          }
-          if (settingsJson.absence_template) {
-            setAbsenceTemplate(settingsJson.absence_template);
-          }
-          if (settingsJson.school_name) {
-            setSchoolName(settingsJson.school_name);
-          }
-        }
+        const res = await apiFetch(`/api/referrals?userId=${user?.id}&role=${user?.role}`);
+        if (!res.ok) throw new Error('Failed to fetch referrals');
+        const data = await res.json().catch(() => []);
+        setReferrals(data);
       } catch (err) {
         console.error(err);
       } finally {
         setLoading(false);
       }
     };
-    fetchData();
-  }, [location.search, periodFilter]);
+    if (user?.id) fetchReferrals();
+  }, [user?.id, user?.role]);
 
-  const handlePrint = () => {
-    logAction(
-      'أخرى',
-      'READ',
-      'تقرير الغياب اليومي',
-      `قام بطباعة تقرير الغياب اليومي`
-    );
-    window.print();
-  };
+  // Filter referrals for counselor
+  const counselorReferrals = referrals.filter(r => 
+    r.status === 'pending_counselor' || 
+    r.status === 'scheduled_meeting' || 
+    r.status === 'resolved' || 
+    r.status === 'closed'
+  );
 
-  const sendWhatsAppMessage = async (phoneNumber: string, studentName: string, period: number) => {
-    try {
-      const currentDate = formatHijriDate(new Date());
-      const periodName = period ? `الحصة ${period}` : 'غير محدد';
-      
-      const finalMessage = absenceTemplate
-        .replace(/{اسم_الطالب}/g, studentName)
-        .replace(/{التاريخ}/g, currentDate)
-        .replace(/{الحصة}/g, periodName)
-        .replace(/{اسم_المدرسة}/g, schoolName);
+  const filteredReferrals = counselorReferrals.filter(r => 
+    r.student_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    r.reason.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-      const response = await apiFetch('/api/whatsapp/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ phoneNumber, studentName, period, message: finalMessage })
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        if (data.code === 'MISSING_WHATSAPP_CREDENTIALS' || data.code === 'FORBIDDEN') {
-          return { success: false, code: data.code, message: data.message };
-        }
-        
-        addLogEntry({
-          recipient: studentName,
-          recipientPhone: phoneNumber,
-          messageType: ' إشعار غياب',
-          messageText: finalMessage,
-          status: 'failed'
-        });
-        
-        throw new Error('Failed to send WhatsApp message');
-      }
-
-      addLogEntry({
-        recipient: studentName,
-        recipientPhone: phoneNumber,
-        messageType: ' إشعار غياب',
-        messageText: finalMessage,
-        status: 'success'
-      });
-
-      logAction(
-        'أخرى',
-        'CREATE',
-        'تقرير الغياب اليومي',
-        `قام بإرسال إشعار غياب للطالب ${studentName} عبر الواتساب`
-      );
-
-      return { success: true };
-    } catch (error) {
-      console.error("Failed to send WhatsApp message", error);
-      return { success: false, message: 'حدث خطأ أثناء الإرسال' };
-    }
-  };
-
-  const handleSendWhatsApp = async (student: any) => {
-    if (!student.parent_phone || student.parent_phone.trim() === '') {
-      alert('رقم الجوال غير مسجل لهذا الطالب');
-      return;
-    }
-    
-    const result = await sendWhatsAppMessage(student.parent_phone, student.student_name, student.period);
-    
-    if (!result.success) {
-      if (result.code === 'MISSING_WHATSAPP_CREDENTIALS' || result.code === 'FORBIDDEN') {
-        alert(`️ تعذر الإرسال: ${result.message}`);
-      } else {
-        alert('حدث خطأ أثناء الإرسال.');
-      }
-      return;
-    }
-    
-    alert(`تم إرسال رسالة واتساب لولي أمر الطالب بنجاح.`);
-  };
-
-  const searchParams = new URLSearchParams(location.search);
-  const selectedDateStr = searchParams.get('date') || new Date().toISOString().split('T')[0];
-  const reportDate = new Date(selectedDateStr);
-  const dateStr = formatHijriDate(reportDate);
-
-  const totalPages = useMemo(() => Math.ceil(data.length / itemsPerPage) || 1, [data.length, itemsPerPage]);
-  const paginatedData = useMemo(() => data.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage), [data, currentPage, itemsPerPage]);
-
-  const handleNextPage = () => {
-    if (currentPage < totalPages) setCurrentPage(prev => prev + 1);
-  };
-
-  const handlePrevPage = () => {
-    if (currentPage > 1) setCurrentPage(prev => prev - 1);
-  };
+  const newCases = filteredReferrals.filter(r => r.status === 'pending_counselor');
+  const inProgressCases = filteredReferrals.filter(r => r.status === 'scheduled_meeting');
+  const resolvedCases = filteredReferrals.filter(r => r.status === 'resolved' || r.status === 'closed');
 
   if (loading) {
-    return <div className="p-10 text-center">جاري التحميل...</div>;
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent"></div>
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans" dir="rtl">
-      {/* Controls - Hidden in print */}
-      <div className="max-w-4xl mx-auto mb-6 flex flex-col md:flex-row justify-between items-center gap-4 print:hidden">
-        <button 
-          onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-slate-600 hover:text-slate-900 bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-200"
-        >
-          <ArrowRight size={20} />
-          عودة
-        </button>
-
-        <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-200">
-          <label className="text-sm font-bold text-slate-700 whitespace-nowrap">تصفية بالحصة:</label>
-          <select
-            value={periodFilter}
-            onChange={(e) => setPeriodFilter(e.target.value)}
-            className="bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-lg focus:ring-primary focus:border-primary block w-full p-2"
-          >
-            <option value="">الكل</option>
-            {[1, 2, 3, 4, 5, 6, 7].map((p) => (
-              <option key={p} value={p}>الحصة {p}</option>
-            ))}
-          </select>
+    <div className="space-y-8 pb-12 h-[calc(100vh-6rem)] flex flex-col">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 shrink-0">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">لوحة الموجه الطلابي</h1>
+          <p className="text-sm md:text-base text-slate-500 mt-1">إدارة ومتابعة الحالات السلوكية المحالة من الوكيل</p>
         </div>
-
-        <div className="flex gap-2">
-          <button 
-            onClick={async () => {
-              const studentsWithPhone = data.filter(s => s.parent_phone && s.parent_phone.trim() !== '');
-              if (studentsWithPhone.length === 0) {
-                alert('لا يوجد طلاب لديهم أرقام جوال مسجلة.');
-                return;
-              }
-              
-              if (!window.confirm(`سيتم إرسال رسائل واتساب إلى ${studentsWithPhone.length} طالب. هل أنت متأكد؟`)) {
-                return;
-              }
-
-              let successCount = 0;
-              let failCount = 0;
-
-              for (const student of studentsWithPhone) {
-                const result = await sendWhatsAppMessage(student.parent_phone, student.student_name, student.period);
-                if (result.success) {
-                  successCount++;
-                } else {
-                  failCount++;
-                }
-                // Wait 2000ms between messages to avoid ban
-                await new Promise(resolve => setTimeout(resolve, 2000));
-              }
-
-              alert(`تم الانتهاء من الإرسال.\nنجاح: ${successCount}\nفشل: ${failCount}`);
-            }}
-            className="flex items-center gap-2 bg-[#25D366] text-white px-6 py-2 rounded-xl shadow-sm hover:bg-[#25D366]/90 font-bold"
-          >
-            <MessageCircle size={20} />
-            إرسال واتساب للجميع
-          </button>
-
-          <button 
-            onClick={handlePrint}
-            className="flex items-center gap-2 bg-primary text-white px-6 py-2 rounded-xl shadow-sm hover:bg-primary/90 font-bold"
-          >
-            <Printer size={20} />
-            طباعة التقرير
-          </button>
+        
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+            <input
+              type="text"
+              placeholder="بحث عن طالب أو حالة..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full md:w-64 pl-4 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+            />
+          </div>
         </div>
       </div>
 
-      {/* Printable Area */}
-      <div className="max-w-4xl mx-auto bg-white p-8 md:p-12 shadow-sm border border-slate-200 rounded-2xl print:shadow-none print:border-none print:p-0 print-report font-sans" dir="rtl">
-        
-        {/* Print Header (الكليشة) */}
-        <div className="hidden print:flex justify-between items-start border-b-2 border-black pb-4 mb-8">
-          <div className="text-right space-y-1">
-            <p className="text-sm font-black">المملكة العربية السعودية</p>
-            <p className="text-sm font-black">وزارة التعليم</p>
-            <p className="text-sm font-black">الإدارة العامة للتعليم بمنطقة الرياض</p>
-            <p className="text-sm font-black">مدرسة ثانوية أم القرى</p>
-          </div>
-          <div className="text-center">
-            <img src="https://upload.wikimedia.org/wikipedia/ar/thumb/a/a3/Ministry_of_Education_%28Saudi_Arabia%29_Logo.svg/1200px-Ministry_of_Education_%28Saudi_Arabia%29_Logo.svg.png" alt="شعار الوزارة" className="w-20 h-auto mx-auto grayscale opacity-80" />
-          </div>
-          <div className="text-right space-y-1 text-sm font-bold">
-            <p>الرقم: {reportNumber}</p>
-            <p>التاريخ: {dateStr}</p>
-            <p>المرفقات: ....................</p>
-          </div>
-        </div>
-
-        {/* UI Header - Hidden in print */}
-        <div className="print:hidden flex justify-between items-start border-b-2 border-slate-800 pb-6 mb-8">
-          <div className="text-right space-y-1">
-            <p className="font-bold text-sm">المملكة العربية السعودية</p>
-            <p className="font-bold text-sm">وزارة التعليم</p>
-            <p className="font-bold text-sm">الإدارة العامة للتعليم بمنطقة الرياض</p>
-            <p className="font-bold text-sm">محافظة الخرج</p>
-            <p className="font-bold text-sm">المدرسة: ثانوية أم القرى</p>
-          </div>
-          <div className="text-center">
-            <img src="https://upload.wikimedia.org/wikipedia/ar/thumb/3/32/Ministry_of_Education_Saudi_Arabia.svg/1200px-Ministry_of_Education_Saudi_Arabia.svg.png" alt="شعار الوزارة" className="w-24 h-24 object-contain mx-auto mb-2 opacity-80" onError={(e) => e.currentTarget.style.display = 'none'} />
-          </div>
-          <div className="text-left space-y-1">
-            <p className="font-bold text-sm">المرفقات: ....................</p>
-            <p className="font-bold text-sm">التاريخ: {dateStr}</p>
-          </div>
-        </div>
-
-        {/* Title - Hidden in print (replaced by Print Header) */}
-        <div className="print:hidden text-center mb-8">
-          <h1 className="text-2xl font-black text-slate-900 mb-2 border-2 border-slate-800 inline-block px-8 py-2 rounded-xl bg-slate-50">
-            تقرير الغياب والتأخر اليومي
-            {new URLSearchParams(location.search).get('grade') && ` - ${new URLSearchParams(location.search).get('grade')} / ${new URLSearchParams(location.search).get('section')}`}
-          </h1>
-          <div className="flex justify-center gap-8 mt-4 text-slate-700 font-bold">
-            <p>التاريخ: {dateStr}</p>
-          </div>
-        </div>
-
-        <h1 className="hidden print:block text-xl font-black text-center mb-8 underline underline-offset-8">
-          تقرير الغياب والتأخر اليومي
-          {new URLSearchParams(location.search).get('grade') && ` - ${new URLSearchParams(location.search).get('grade')} / ${new URLSearchParams(location.search).get('section')}`}
-        </h1>
-
-        {/* UI Table (Paginated) */}
-        <div className="print:hidden">
-          {/* Desktop Table View */}
-          <div className="hidden md:block overflow-x-auto">
-            <table className="w-full border-collapse border border-slate-300 text-sm">
-              <thead>
-                <tr className="bg-slate-100">
-                  <th className="border border-slate-300 p-3 text-center w-12 font-bold text-slate-800">م</th>
-                  <th className="border border-slate-300 p-3 text-right font-bold text-slate-800">اسم الطالب</th>
-                  <th className="border border-slate-300 p-3 text-center font-bold text-slate-800">الصف</th>
-                  <th className="border border-slate-300 p-3 text-center font-bold text-slate-800">الفصل</th>
-                  <th className="border border-slate-300 p-3 text-center font-bold text-slate-800">الحصة</th>
-                  <th className="border border-slate-300 p-3 text-center font-bold text-slate-800">حالة الحضور</th>
-                  <th className="border border-slate-300 p-3 text-center font-bold text-slate-800 w-32">إجراءات</th>
-                  <th className="border border-slate-300 p-3 text-right font-bold text-slate-800 w-48">ملاحظات الوكيل</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedData.length > 0 ? (
-                  paginatedData.map((row, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50">
-                      <td className="border border-slate-300 p-3 text-center text-slate-600">{(currentPage - 1) * itemsPerPage + idx + 1}</td>
-                      <td className="border border-slate-300 p-3 font-bold text-slate-800">{row.student_name}</td>
-                      <td className="border border-slate-300 p-3 text-center text-slate-600">{row.grade}</td>
-                      <td className="border border-slate-300 p-3 text-center text-slate-600">{row.section}</td>
-                      <td className="border border-slate-300 p-3 text-center font-bold text-slate-800">{row.period || '-'}</td>
-                      <td className="border border-slate-300 p-3 text-center">
-                        <span className={`font-bold ${row.status === 'غائب' ? 'text-red-600 bg-red-50 px-2 py-1 rounded-lg' : 'text-amber-600 bg-amber-50 px-2 py-1 rounded-lg'}`}>
-                          {row.status}
-                        </span>
-                      </td>
-                      <td className="border border-slate-300 p-3 text-center">
-                        <button
-                          onClick={() => handleSendWhatsApp(row)}
-                          disabled={!row.parent_phone || row.parent_phone.trim() === ''}
-                          title={(!row.parent_phone || row.parent_phone.trim() === '') ? '️ رقم الجوال غير مسجل' : 'إرسال واتساب لولي الأمر'}
-                          className={`w-full py-2 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all min-h-[44px] ${
-                            (!row.parent_phone || row.parent_phone.trim() === '')
-                              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                              : 'bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/20 border border-[#25D366]/20'
-                          }`}
-                        >
-                          <MessageCircle size={14} />
-                          واتساب
-                        </button>
-                      </td>
-                      <td className="border border-slate-300 p-3"></td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={8} className="border border-slate-300 p-8 text-center text-slate-500 font-bold">
-                      لا يوجد غياب أو تأخر مسجل لهذا اليوم
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Mobile Card View */}
-          <div className="md:hidden flex flex-col gap-4">
-            {paginatedData.length > 0 ? (
-              paginatedData.map((row, idx) => (
-                <div key={idx} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="font-bold text-slate-800 text-base">{row.student_name}</h3>
-                      <p className="text-xs text-slate-500 mt-1">الصف: {row.grade} - الفصل: {row.section}</p>
-                    </div>
-                    <span className={`text-xs font-bold px-2 py-1 rounded-lg ${row.status === 'غائب' ? 'text-red-600 bg-red-50' : 'text-amber-600 bg-amber-50'}`}>
-                      {row.status}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-slate-600">الحصة: <span className="font-bold text-slate-800">{row.period || '-'}</span></span>
-                  </div>
-                  <button
-                    onClick={() => handleSendWhatsApp(row)}
-                    disabled={!row.parent_phone || row.parent_phone.trim() === ''}
-                    className={`w-full py-3 px-4 rounded-xl text-sm font-black flex items-center justify-center gap-2 transition-all min-h-[44px] ${
-                      (!row.parent_phone || row.parent_phone.trim() === '')
-                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                        : 'bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/20 border border-[#25D366]/20'
-                    }`}
-                  >
-                    <MessageCircle size={18} />
-                    {(!row.parent_phone || row.parent_phone.trim() === '') ? 'رقم الجوال غير مسجل' : 'إرسال واتساب لولي الأمر'}
-                  </button>
-                </div>
-              ))
-            ) : (
-              <div className="bg-white p-8 rounded-xl border border-slate-200 text-center text-slate-500 font-bold">
-                لا يوجد غياب أو تأخر مسجل لهذا اليوم
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Pagination Controls */}
-        {data.length > 0 && (
-          <div className="print:hidden flex justify-between items-center mt-6 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <button
-              onClick={handlePrevPage}
-              disabled={currentPage === 1}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronRight size={18} />
-              السابق
-            </button>
-            <span className="font-bold text-slate-600">
-              صفحة {currentPage} من {totalPages}
-            </span>
-            <button
-              onClick={handleNextPage}
-              disabled={currentPage === totalPages}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              التالي
-              <ChevronLeft size={18} />
-            </button>
-          </div>
-        )}
-
-        {/* Print Table (All Data) */}
-        <table className="hidden print:table w-full border-collapse border border-black text-sm text-black">
-          <thead>
-            <tr>
-              <th className="border border-black p-2 text-center w-12 font-bold">م</th>
-              <th className="border border-black p-2 text-right font-bold">اسم الطالب</th>
-              <th className="border border-black p-2 text-center font-bold">الصف</th>
-              <th className="border border-black p-2 text-center font-bold">الفصل</th>
-              <th className="border border-black p-2 text-center font-bold">الحصة</th>
-              <th className="border border-black p-2 text-center font-bold">حالة الحضور</th>
-              <th className="border border-black p-2 text-right font-bold w-48">ملاحظات الوكيل</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.length > 0 ? (
-              data.map((row, idx) => (
-                <tr key={idx} className="break-inside-avoid">
-                  <td className="border border-black p-2 text-center">{idx + 1}</td>
-                  <td className="border border-black p-2 font-bold">{row.student_name}</td>
-                  <td className="border border-black p-2 text-center">{row.grade}</td>
-                  <td className="border border-black p-2 text-center">{row.section}</td>
-                  <td className="border border-black p-2 text-center font-bold">{row.period || '-'}</td>
-                  <td className="border border-black p-2 text-center font-bold">
-                    {row.status}
-                  </td>
-                  <td className="border border-black p-2"></td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={6} className="border border-black p-4 text-center font-bold">
-                  لا يوجد غياب أو تأخر مسجل لهذا اليوم
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-
-        {/* Print Footer (التوقيعات الديناميكية) */}
-        <div className="hidden print:grid mt-16 print-grid grid-cols-2 gap-8 text-center page-break-inside-avoid">
-          <div className="space-y-8">
-            <p className="print-label">وكيل شؤون الطلاب</p>
-            <div className="h-px bg-black w-3/4 mx-auto"></div>
-            <p className="text-sm font-bold">الاسم: {user?.name || 'غير محدد'}</p>
-          </div>
-          <div className="space-y-8">
-            <p className="print-label">مدير المدرسة</p>
-            <div className="h-px bg-black w-3/4 mx-auto"></div>
-            <p className="text-sm font-bold">الاسم: {principalName}</p>
-          </div>
-        </div>
-
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 min-h-0">
+        <KanbanColumn 
+          title="حالات جديدة" 
+          icon={AlertCircle} 
+          color="bg-red-500" 
+          cases={newCases} 
+          count={newCases.length} 
+        />
+        <KanbanColumn 
+          title="قيد المتابعة" 
+          icon={Clock} 
+          color="bg-amber-500" 
+          cases={inProgressCases} 
+          count={inProgressCases.length} 
+        />
+        <KanbanColumn 
+          title="حالات معالجة" 
+          icon={CheckCircle2} 
+          color="bg-emerald-500" 
+          cases={resolvedCases} 
+          count={resolvedCases.length} 
+        />
       </div>
     </div>
   );
-});
+};
 
-export default DailyAbsenceReport;
+export default CounselorDashboard;

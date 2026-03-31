@@ -1,429 +1,329 @@
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useAuth } from '../context/AuthContext';
+import React, { useState } from 'react';
+import { motion } from 'framer-motion';
+import * as XLSX from 'xlsx';
 import { 
-  CheckCircle2, 
-  Dices, 
+  Upload, 
+  FileSpreadsheet, 
+  Smartphone, 
   Save, 
-  Hand, 
-  BookOpen, 
-  AlertTriangle, 
+  Trash2, 
+  Users, 
+  CheckCircle2, 
   X,
-  Star,
-  Clock,
-  XCircle,
-  Check,
-  Lock
+  Loader2
 } from 'lucide-react';
-import { apiFetch } from '../utils/api';
-import { formatHijriDate } from '../utils/dateUtils';
 
-interface Student {
-  id: number;
-  rollNumber: number;
-  name: string;
-  points: number;
-  avatar: string;
-}
-
-interface StudentState {
-  attendance: 'present' | 'late' | 'absent';
-  participation: boolean;
-  homework: boolean;
-  negativeNote: boolean;
-}
-
-const mockStudents: Student[] = [
-  { id: 1, rollNumber: 1, name: 'خالد عبدالله', points: 15, avatar: 'https://ui-avatars.com/api/?name=خالد+عبدالله&background=0D8ABC&color=fff' },
-  { id: 2, rollNumber: 2, name: 'سعود محمد', points: 10, avatar: 'https://ui-avatars.com/api/?name=سعود+محمد&background=0D8ABC&color=fff' },
-  { id: 3, rollNumber: 3, name: 'فيصل فهد', points: 22, avatar: 'https://ui-avatars.com/api/?name=فيصل+فهد&background=0D8ABC&color=fff' },
-  { id: 4, rollNumber: 4, name: 'عبدالرحمن سالم', points: 5, avatar: 'https://ui-avatars.com/api/?name=عبدالرحمن+سالم&background=0D8ABC&color=fff' },
-  { id: 5, rollNumber: 5, name: 'عمر خالد', points: 18, avatar: 'https://ui-avatars.com/api/?name=عمر+خالد&background=0D8ABC&color=fff' },
-];
-
-const behaviorChips = [
-  'إزعاج', 
-  'إهمال أدوات', 
-  'نوم بالحصة', 
-  'تميز وابتكار', 
-  'مساعدة زميل'
-];
-
-const ClassTracker: React.FC = () => {
-  const { user } = useAuth();
-  const isReadOnly = user?.role !== 'teacher';
-
-  const [grade, setGrade] = useState('');
-  const [section, setSection] = useState('');
-  const [subject, setSubject] = useState('رياضيات');
-  const [period, setPeriod] = useState<number>(1);
-  
-  const [availableGrades, setAvailableGrades] = useState<string[]>([]);
-  const [availableSections, setAvailableSections] = useState<string[]>([]);
-  
-  const [students, setStudents] = useState<Student[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  const [studentsState, setStudentsState] = useState<Record<number, StudentState>>({});
-
-  const [highlightedStudent, setHighlightedStudent] = useState<number | null>(null);
-  const [selectedStudentForModal, setSelectedStudentForModal] = useState<Student | null>(null);
-  const [modalNote, setModalNote] = useState('');
-  const [selectedChips, setSelectedChips] = useState<string[]>([]);
+const AdminSettings: React.FC = () => {
+  const [clearExisting, setClearExisting] = useState(false);
+  const [whatsappEnabled, setWhatsappEnabled] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState<{text: string, type: 'success' | 'error'} | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
-  const todayDate = formatHijriDate(new Date());
+  const processFile = async (file: File) => {
+    setIsImporting(true);
+    setImportMessage(null);
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array' });
+      
+      let headerRowIndex = -1;
+      let targetSheetData: any[][] = [];
+      let idCol = -1, nameCol = -1, gradeCol = -1, sectionCol = -1, mobileCol = -1;
+      
+      // 1. البحث في جميع أوراق العمل (Sheets)
+      for (const sheetName of workbook.SheetNames) {
+        const worksheet = workbook.Sheets[sheetName];
+        // قراءة الملف كمصفوفة ثنائية الأبعاد خام مع ضمان قراءة كل الخلايا حتى الفارغة
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" }) as any[][];
 
-  const handleAttendanceChange = (studentId: number, status: 'present' | 'late' | 'absent') => {
-    if (isReadOnly) return;
-    setStudentsState(prev => ({
-      ...prev,
-      [studentId]: { ...prev[studentId], attendance: status }
-    }));
-  };
+        // 2. تحديد سطر العناوين (Header Row) وأرقام الأعمدة (Column Indices)
+        for (let i = 0; i < jsonData.length; i++) {
+          const row = jsonData[i];
+          if (!row || !Array.isArray(row)) continue;
+          
+          // البحث عن الخلية التي تحتوي على "رقم الهوية" أو "الهوية" (مع إزالة كل المسافات لتجنب مشاكل التنسيق)
+          const hasNationalId = row.some(cell => {
+            if (cell === null || cell === undefined) return false;
+            const cellStr = String(cell).replace(/\s+/g, '');
+            return cellStr.includes('رقمالهوية') || cellStr.includes('الهوية') || cellStr.includes('السجلالمدني') || cellStr.includes('رقمالطالب');
+          });
 
-  const toggleAssessment = (studentId: number, field: keyof Omit<StudentState, 'attendance'>) => {
-    if (isReadOnly) return;
-    setStudentsState(prev => ({
-      ...prev,
-      [studentId]: { ...prev[studentId], [field]: !prev[studentId][field] }
-    }));
-  };
+          const hasStudentName = row.some(cell => {
+            if (cell === null || cell === undefined) return false;
+            const cellStr = String(cell).replace(/\s+/g, '');
+            return cellStr.includes('اسمالطالب') || cellStr === 'الاسم';
+          });
 
-  const markAllPresent = () => {
-    if (isReadOnly) return;
-    setStudentsState(prev => {
-      const newState = { ...prev };
-      Object.keys(newState).forEach(id => {
-        newState[Number(id)].attendance = 'present';
-      });
-      return newState;
-    });
-  };
-
-  const pickRandomStudent = () => {
-    if (isReadOnly || students.length === 0) return;
-    let counter = 0;
-    const interval = setInterval(() => {
-      const randomIndex = Math.floor(Math.random() * students.length);
-      setHighlightedStudent(students[randomIndex].id);
-      counter++;
-      if (counter > 10) {
-        clearInterval(interval);
-        setTimeout(() => setHighlightedStudent(null), 3000);
+          if (hasNationalId || hasStudentName) {
+            headerRowIndex = i;
+            targetSheetData = jsonData;
+            
+            // البحث عن الـ Index (رقم العمود) لكل من الحقول المطلوبة مع إزالة المسافات
+            idCol = row.findIndex(col => {
+              if (col === null || col === undefined) return false;
+              const s = String(col).replace(/\s+/g, '');
+              return s.includes('الهوية') || s.includes('السجلالمدني') || s.includes('رقمالطالب');
+            });
+            nameCol = row.findIndex(col => {
+              if (col === null || col === undefined) return false;
+              const s = String(col).replace(/\s+/g, '');
+              return s.includes('اسمالطالب') || s.includes('الاسم') || s === 'اسم';
+            });
+            gradeCol = row.findIndex(col => {
+              if (col === null || col === undefined) return false;
+              const s = String(col).replace(/\s+/g, '');
+              return s.includes('الصف') || s.includes('المرحلة');
+            });
+            sectionCol = row.findIndex(col => {
+              if (col === null || col === undefined) return false;
+              const s = String(col).replace(/\s+/g, '');
+              return s.includes('الفصل') || s.includes('الشعبة');
+            });
+            mobileCol = row.findIndex(col => {
+              if (col === null || col === undefined) return false;
+              const s = String(col).replace(/\s+/g, '');
+              return s.includes('جوال') || s.includes('هاتف');
+            });
+            
+            break; // وجدنا العناوين في هذه الورقة، نخرج من حلقة الصفوف
+          }
+        }
+        
+        if (headerRowIndex !== -1) break; // وجدنا العناوين، نخرج من حلقة الأوراق
       }
-    }, 100);
+
+      if (headerRowIndex === -1) {
+        throw new Error('لم يتم العثور على عمود "رقم الهوية" أو "اسم الطالب" في أي ورقة عمل. يرجى التأكد من صيغة ملف نظام نور.');
+      }
+
+      // 2. دالة الترجمة (Grade Mapper Dictionary)
+      const gradeMapper = (rawGrade: string): string => {
+        const gradeStr = String(rawGrade).trim();
+        if (gradeStr.includes('1314')) return 'الصف الأول';
+        if (gradeStr.includes('1416')) return 'الصف الثاني';
+        if (gradeStr.includes('1516')) return 'الصف الثالث';
+        return gradeStr; // Fallback
+      };
+
+      // 3. استخراج البيانات (Data Extraction)
+      const students: any[] = [];
+
+      for (let i = headerRowIndex + 1; i < targetSheetData.length; i++) {
+        const row = targetSheetData[i];
+        if (!row || !Array.isArray(row) || row.length === 0) continue;
+
+        // 4. التنظيف الصارم (Strict Sanitization)
+        const rawId = idCol !== -1 ? String(row[idCol]).trim() : "";
+        const rawName = nameCol !== -1 ? String(row[nameCol]).trim() : "";
+        const rawGrade = gradeCol !== -1 ? String(row[gradeCol]).trim() : "";
+        const rawSection = sectionCol !== -1 ? String(row[sectionCol]).trim() : "";
+        const rawMobile = mobileCol !== -1 ? String(row[mobileCol]).trim() : "";
+
+        // تجاهل أي صف يكون فيه national_id فارغاً، أو لا يتكون من أرقام (لتجاهل صفوف التذييل مثل "المجموع")
+        const national_id = rawId.replace(/\s+/g, '');
+        if (!national_id || !/^\d+$/.test(national_id)) {
+          continue;
+        }
+
+        const name = rawName;
+        const grade = gradeMapper(rawGrade);
+        const section = rawSection;
+        
+        let parent_phone = rawMobile.replace(/\s+/g, '');
+        if (parent_phone.startsWith('05')) {
+          parent_phone = '9665' + parent_phone.substring(2);
+        }
+
+        // التأكد من وجود الاسم على الأقل مع الهوية
+        if (name) {
+          students.push({
+            national_id,
+            name,
+            grade,
+            section,
+            parent_phone
+          });
+        }
+      }
+
+      if (students.length === 0) {
+        throw new Error('لم يتم العثور على بيانات طلاب صالحة بعد صف العناوين.');
+      }
+
+      console.log("Final Parsed Students:", students);
+
+      // 5. الإرسال (API Payload)
+      const response = await fetch('/api/admin/students/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          students: students, 
+          wipeDatabase: clearExisting 
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'فشل في رفع البيانات إلى الخادم');
+      }
+
+      setImportMessage({ text: `تم استيراد ${result.count || students.length} طالب بنجاح`, type: 'success' });
+    } catch (error: any) {
+      console.error('Import Error:', error);
+      setImportMessage({ text: error.message || 'حدث خطأ غير متوقع أثناء معالجة الملف', type: 'error' });
+    } finally {
+      setIsImporting(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
   };
 
-  const openStudentModal = (student: Student) => {
-    if (isReadOnly) return;
-    setSelectedStudentForModal(student);
-    setSelectedChips([]);
-    setModalNote('');
-  };
-
-  const handleSaveToRecord = () => {
-    if (isReadOnly) return;
+  const handleSave = () => {
     setIsSaving(true);
-    setTimeout(() => {
-      setIsSaving(false);
-      setSelectedStudentForModal(null);
-    }, 1000);
+    setTimeout(() => setIsSaving(false), 1000);
   };
 
-  const toggleChip = (chip: string) => {
-    if (isReadOnly) return;
-    setSelectedChips(prev => 
-      prev.includes(chip) ? prev.filter(c => c !== chip) : [...prev, chip]
-    );
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) processFile(file);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) processFile(file);
   };
 
   return (
-    <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6 pb-24">
-      {/* Top Bar & Tools */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 space-y-4">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-            <select 
-              value={grade} onChange={(e) => setGrade(e.target.value)}
-              className="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-primary focus:border-primary block p-2.5 font-bold"
+    <div className="p-8 bg-slate-50 min-h-screen">
+      <h1 className="text-3xl font-extrabold text-slate-900 mb-8">إعدادات النظام</h1>
+      
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* العمود الأيمن: استيراد الطلاب الذكي */}
+        <div className="space-y-6">
+          <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-12 h-12 bg-primary/10 text-primary rounded-2xl flex items-center justify-center">
+                <FileSpreadsheet size={24} />
+              </div>
+              <div>
+                <h2 className="text-xl font-extrabold text-slate-800">استيراد الطلاب الذكي</h2>
+                <p className="text-sm text-slate-500 font-bold mt-1">ارفع ملف Excel لتحديث قاعدة البيانات تلقائياً</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 p-4 bg-primary/5 rounded-2xl border border-primary/10 mb-6">
+              <input 
+                type="checkbox" 
+                id="clear-db"
+                checked={clearExisting}
+                onChange={(e) => setClearExisting(e.target.checked)}
+                className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary"
+              />
+              <label htmlFor="clear-db" className="text-sm font-extrabold text-slate-700 cursor-pointer">
+                مسح قاعدة بيانات الطلاب الحالية قبل الاستيراد (Wipe & Import)
+              </label>
+            </div>
+
+            <div 
+              className={`w-full flex flex-col items-center justify-center gap-6 p-12 border-2 border-dashed rounded-[2rem] bg-slate-50/50 cursor-pointer transition-all ${isDragging ? 'border-primary bg-primary/5' : 'border-slate-200 hover:border-primary/40'} ${isImporting ? 'opacity-50 cursor-not-allowed' : ''}`}
+              onClick={() => !isImporting && fileInputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={handleDrop}
             >
-              {availableGrades.map(g => (
-                <option key={g} value={g}>{g}</option>
-              ))}
-            </select>
-            <select 
-              value={section} onChange={(e) => setSection(e.target.value)}
-              className="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-primary focus:border-primary block p-2.5 font-bold"
-            >
-              {availableSections.map(s => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-            <select 
-              value={subject} onChange={(e) => setSubject(e.target.value)}
-              className="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-primary focus:border-primary block p-2.5 font-bold"
-            >
-              <option value="رياضيات">رياضيات</option>
-              <option value="فيزياء">فيزياء</option>
-              <option value="كيمياء">كيمياء</option>
-            </select>
-            
-            <select 
-              value={period} onChange={(e) => setPeriod(Number(e.target.value))}
-              className="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-primary focus:border-primary block p-2.5 font-bold"
-            >
-              {[1, 2, 3, 4, 5, 6, 7].map(p => (
-                <option key={p} value={p}>الحصة {p}</option>
-              ))}
-            </select>
-          </div>
-          <div className="text-sm font-medium text-slate-500 bg-slate-50 px-4 py-2 rounded-lg">
-            {todayDate}
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                onChange={handleFileChange} 
+                className="hidden" 
+                accept=".xlsx, .xls, .csv"
+                disabled={isImporting}
+              />
+              <div className="w-20 h-20 rounded-[2rem] flex items-center justify-center bg-white text-primary shadow-xl">
+                {isImporting ? <Loader2 size={32} className="animate-spin" /> : <Upload size={32} />}
+              </div>
+              <p className="font-black text-slate-800 text-lg">{isImporting ? 'جاري المعالجة...' : 'اسحب الملف هنا أو اضغط للرفع'}</p>
+              <p className="text-xs text-slate-400 font-bold uppercase tracking-[0.2em]">XLSX, XLS, CSV (حتى 10MB)</p>
+            </div>
+
+            {importMessage && (
+              <div className={`mt-4 p-4 rounded-2xl text-sm font-bold flex items-center gap-3 ${importMessage.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                {importMessage.type === 'success' ? <CheckCircle2 size={20} /> : <X size={20} />}
+                {importMessage.text}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-4 mt-6">
+              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100">
+                <h4 className="font-extrabold text-slate-800 text-sm mb-2">الأعمدة المطلوبة</h4>
+                <p className="text-xs text-slate-500 font-bold leading-relaxed">
+                  يجب أن يحتوي الملف على: اسم الطالب، رقم الهوية، الصف، الفصل، جوال الطالب.
+                </p>
+              </div>
+              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100">
+                <h4 className="font-extrabold text-slate-800 text-sm mb-2">استراتيجية التحديث الذكي</h4>
+                <p className="text-xs text-slate-500 font-bold leading-relaxed">
+                  النظام يستخدم رقم الهوية كمفتاح فريد. إذا كان الطالب موجوداً مسبقاً، سيتم تحديث بياناته، وإذا كان جديداً سيتم إضافته.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
 
-        {!isReadOnly && (
-          <div className="flex flex-wrap gap-3 pt-2 border-t border-slate-100">
-            <button 
-              onClick={markAllPresent}
-              className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold py-2.5 px-4 rounded-xl transition-all duration-200"
+        {/* العمود الأيسر */}
+        <div className="space-y-8">
+          {/* إعدادات إشعارات الواتساب */}
+          <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
+            <h2 className="text-xl font-extrabold text-slate-800 mb-6">إعدادات إشعارات الواتساب</h2>
+            <label className="flex items-center justify-between p-5 bg-emerald-50/50 rounded-2xl border border-emerald-100 cursor-pointer mb-6">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${whatsappEnabled ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-500'}`}>
+                  <Smartphone size={20} />
+                </div>
+                <span className="font-black text-slate-800">تفعيل إشعارات الواتساب للنظام بالكامل</span>
+              </div>
+              <input
+                type="checkbox"
+                checked={whatsappEnabled}
+                onChange={(e) => setWhatsappEnabled(e.target.checked)}
+                className="w-6 h-6 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+              />
+            </label>
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-colors"
             >
-              <CheckCircle2 size={18} />
-              <span className="text-sm">تحضير الكل حاضر</span>
-            </button>
-            
-            <button 
-              onClick={pickRandomStudent}
-              className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold py-2.5 px-4 rounded-xl transition-all duration-200"
-            >
-              <Dices size={18} />
-              <span className="text-sm">اختيار عشوائي</span>
-            </button>
-
-            <button 
-              className="flex-1 md:flex-none md:mr-auto flex items-center justify-center gap-2 bg-primary text-white hover:bg-primary/90 font-bold py-2.5 px-6 rounded-xl transition-all duration-200 shadow-sm shadow-primary/20"
-            >
-              <Save size={18} />
-              <span className="text-sm">اعتماد وحفظ في السجل الشامل</span>
+              <Save size={20} />
+              {isSaving ? 'جاري الحفظ...' : 'حفظ الإعدادات'}
             </button>
           </div>
-        )}
+
+          {/* إدارة قواعد البيانات */}
+          <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
+            <h2 className="text-xl font-extrabold text-red-600 mb-6">إدارة قواعد البيانات (Danger Zone)</h2>
+            <div className="space-y-4">
+              <button className="w-full flex items-center justify-center gap-3 p-4 border-2 border-red-100 text-red-600 rounded-2xl font-extrabold hover:bg-red-50 transition-all">
+                <Trash2 size={18} />
+                <span>حذف قاعدة بيانات الطلاب بالكامل</span>
+              </button>
+              <button className="w-full flex items-center justify-center gap-3 p-4 border-2 border-red-100 text-red-600 rounded-2xl font-extrabold hover:bg-red-50 transition-all">
+                <Users size={18} />
+                <span>حذف جميع المستخدمين (باستثناء الإدارة)</span>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
-
-      {/* Students Grid */}
-      <div className="space-y-3">
-        {loading ? (
-          <div className="text-center py-12 text-slate-500">جاري تحميل الطلاب...</div>
-        ) : (
-          students.map((student) => {
-            const state = studentsState[student.id];
-            if (!state) return null;
-            const isHighlighted = highlightedStudent === student.id;
-
-            return (
-              <motion.div 
-                key={student.id}
-                initial={false}
-                animate={{
-                  scale: isHighlighted ? 1.02 : 1,
-                  boxShadow: isHighlighted ? '0 10px 25px -5px rgba(99, 102, 241, 0.4)' : '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
-                  borderColor: isHighlighted ? '#6366f1' : '#f1f5f9'
-                }}
-                className={`bg-white rounded-xl border p-3 md:p-4 flex flex-col md:flex-row items-center gap-4 transition-all duration-200 ${isHighlighted ? 'ring-2 ring-indigo-500 ring-offset-2 z-10 relative' : ''}`}
-              >
-                {/* Identity (Right) */}
-                <div 
-                  className="flex items-center gap-3 w-full md:w-1/3 cursor-pointer group"
-                  onClick={() => openStudentModal(student)}
-                >
-                  <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500 shrink-0">
-                    {student.id}
-                  </div>
-                  <img src={student.avatar} alt={student.name} className="w-12 h-12 rounded-full shadow-sm" />
-                  <div>
-                    <h3 className="font-bold text-slate-800 group-hover:text-primary transition-colors">{student.name}</h3>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                      <span className="text-xs font-bold text-slate-500">100 نقطة</span>
-                    </div>
-                  </div>
-                </div>
-
-              {/* Attendance (Center) */}
-              <div className="flex items-center justify-center w-full md:w-1/3 bg-slate-50 p-1.5 rounded-xl">
-                <button
-                  onClick={() => handleAttendanceChange(student.id, 'present')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-bold transition-all duration-200 ${
-                    state.attendance === 'present' 
-                      ? 'bg-white text-emerald-600 shadow-sm ring-1 ring-slate-200/50' 
-                      : 'text-slate-400 hover:text-slate-600'
-                  }`}
-                >
-                  <CheckCircle2 size={14} className={state.attendance === 'present' ? 'text-emerald-500' : ''} />
-                  حاضر
-                </button>
-                <button
-                  onClick={() => handleAttendanceChange(student.id, 'late')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-bold transition-all duration-200 ${
-                    state.attendance === 'late' 
-                      ? 'bg-white text-amber-600 shadow-sm ring-1 ring-slate-200/50' 
-                      : 'text-slate-400 hover:text-slate-600'
-                  }`}
-                >
-                  <Clock size={14} className={state.attendance === 'late' ? 'text-amber-500' : ''} />
-                  متأخر
-                </button>
-                <button
-                  onClick={() => handleAttendanceChange(student.id, 'absent')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-bold transition-all duration-200 ${
-                    state.attendance === 'absent' 
-                      ? 'bg-white text-red-600 shadow-sm ring-1 ring-slate-200/50' 
-                      : 'text-slate-400 hover:text-slate-600'
-                  }`}
-                >
-                  <XCircle size={14} className={state.attendance === 'absent' ? 'text-red-500' : ''} />
-                  غائب
-                </button>
-              </div>
-
-              {/* Quick Assessment (Left) */}
-              <div className="flex items-center justify-end gap-3 w-full md:w-1/3">
-                <button
-                  onClick={() => toggleAssessment(student.id, 'participation')}
-                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 ${
-                    state.participation 
-                      ? 'bg-indigo-100 text-indigo-600 ring-2 ring-indigo-500/20' 
-                      : 'bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600'
-                  }`}
-                  title="مشاركة / نشط"
-                >
-                  <Hand size={18} />
-                </button>
-                <button
-                  onClick={() => toggleAssessment(student.id, 'homework')}
-                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 ${
-                    state.homework 
-                      ? 'bg-blue-100 text-blue-600 ring-2 ring-blue-500/20' 
-                      : 'bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600'
-                  }`}
-                  title="حل الواجب"
-                >
-                  <BookOpen size={18} />
-                </button>
-                <button
-                  onClick={() => {
-                    toggleAssessment(student.id, 'negativeNote');
-                    if (!state.negativeNote) {
-                      openStudentModal(student);
-                    }
-                  }}
-                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 ${
-                    state.negativeNote 
-                      ? 'bg-red-100 text-red-600 ring-2 ring-red-500/20' 
-                      : 'bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600'
-                  }`}
-                  title="ملاحظة سلبية"
-                >
-                  <AlertTriangle size={18} />
-                </button>
-              </div>
-            </motion.div>
-            );
-          })
-        )}
-      </div>
-
-      {/* Student Details Modal */}
-      <AnimatePresence>
-        {selectedStudentForModal && (
-          <>
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40"
-              onClick={() => setSelectedStudentForModal(null)}
-            />
-            <motion.div 
-              initial={{ opacity: 0, y: '100%' }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: '100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="fixed bottom-0 left-0 right-0 md:top-1/2 md:left-1/2 md:right-auto md:bottom-auto md:-translate-x-1/2 md:-translate-y-1/2 w-full md:w-[500px] bg-white rounded-t-3xl md:rounded-3xl shadow-2xl z-50 overflow-hidden flex flex-col max-h-[90vh]"
-            >
-              {/* Modal Header */}
-              <div className="bg-slate-50 p-4 border-b border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <img src={selectedStudentForModal.avatar} alt={selectedStudentForModal.name} className="w-10 h-10 rounded-full shadow-sm" />
-                  <div>
-                    <h3 className="font-bold text-slate-800">{selectedStudentForModal.name}</h3>
-                    <p className="text-xs text-slate-500">رقم الكشف: {selectedStudentForModal.rollNumber}</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => setSelectedStudentForModal(null)}
-                  className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-200/50 text-slate-500 hover:bg-slate-200 transition-colors"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              {/* Modal Body */}
-              <div className="p-5 overflow-y-auto space-y-5">
-                <div>
-                  <h4 className="text-sm font-bold text-slate-700 mb-3">تقييم سريع للسلوك:</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {behaviorChips.map(chip => (
-                      <button
-                        key={chip}
-                        onClick={() => toggleChip(chip)}
-                        className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 border ${
-                          selectedChips.includes(chip)
-                            ? 'bg-primary/10 border-primary/30 text-primary'
-                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                        }`}
-                      >
-                        {chip}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="text-sm font-bold text-slate-700 mb-3">ملاحظات إضافية:</h4>
-                  <textarea
-                    value={modalNote}
-                    onChange={(e) => setModalNote(e.target.value)}
-                    placeholder="اكتب ملاحظة مخصصة هنا..."
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 min-h-[100px] resize-none"
-                  />
-                </div>
-              </div>
-
-              {/* Modal Footer */}
-              <div className="p-4 border-t border-slate-100 bg-white">
-                <button
-                  onClick={handleSaveToRecord}
-                  disabled={isSaving}
-                  className="w-full bg-primary hover:bg-primary/90 disabled:opacity-70 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all"
-                >
-                  {isSaving ? (
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      <Save size={18} />
-                      <span>إضافة للسجل الشامل</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
     </div>
   );
 };
 
-export default ClassTracker;
+export default AdminSettings;

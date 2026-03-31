@@ -1,164 +1,156 @@
-import React from 'react';
-import { Student, StudentState, TaskCategory, Task } from '../pages/SmartTracker';
-import { useSchoolSettings } from '../context/SchoolContext';
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&family=Tajawal:wght@400;500;700;900&display=swap');
+@import "tailwindcss";
 
-interface PrintableTrackerProps {
-  students: Student[];
-  studentsState: Record<number, StudentState>;
-  tasks: Record<TaskCategory, Task[]>;
-  subject: string;
-  grade: string;
-  section: string;
-  teacherName?: string;
+@theme {
+  --font-sans: "Cairo", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Tajawal", sans-serif;
+  
+  --color-primary: #006847;
+  --color-primary-light: #00855c;
+  --color-primary-dark: #004d35;
+  --color-accent: #d4af37; /* Gold/Yellow from the login button */
+  --color-bg-light: #f8fafc;
+  
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+  --radius-3xl: 2rem;
 }
 
-export const PrintableTracker: React.FC<PrintableTrackerProps> = ({ students, studentsState, tasks, subject, grade, section, teacherName }) => {
-  const { settings } = useSchoolSettings();
+@layer base {
+  body {
+    @apply bg-bg-light text-slate-800 antialiased;
+    direction: rtl;
+  }
+  
+  input, button, select, textarea {
+    @apply min-h-[44px];
+  }
+}
 
-  const getCategoryTotal = (studentId: number, category: TaskCategory) => {
-    const studentState = studentsState[studentId];
-    if (!studentState) return 0;
-    return (tasks?.[category] || []).reduce((sum, t) => sum + (Number(studentState.grades?.[t.id]) || 0), 0);
-  };
+@layer components {
+  .sts-card {
+    @apply bg-white rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-all duration-300;
+  }
+  
+  .sts-button-primary {
+    @apply bg-primary hover:bg-primary-light text-white font-bold py-3 px-6 rounded-2xl transition-all duration-300 shadow-lg shadow-primary/20 active:scale-95;
+  }
+  
+  .sts-button-accent {
+    @apply bg-accent hover:bg-yellow-600 text-white font-bold py-3 px-6 rounded-2xl transition-all duration-300 shadow-lg shadow-accent/20 active:scale-95;
+  }
 
-  return (
-    <div className="hidden print:block print:w-full print:bg-white" dir="rtl">
-      <style>
-        {`
-          @media print {
-            @page { size: A4 portrait; margin: 5mm; }
-            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            table { page-break-inside: auto; }
-            tr { page-break-inside: avoid; page-break-after: auto; }
-            thead { display: table-header-group; }
-            tfoot { display: table-footer-group; }
-          }
-        `}
-      </style>
+  .sts-input {
+    @apply w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-5 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none;
+  }
+}
 
-      {/* Header */}
-      <div className="flex justify-between items-start mb-2 border-b-2 border-black pb-1">
-        <div className="text-[10px] font-bold leading-relaxed text-black">
-          <p>المملكة العربية السعودية</p>
-          <p>وزارة التعليم</p>
-          <p>{settings.schoolName ? `مدرسة ${settings.schoolName}` : 'مدرسة ....................'}</p>
-        </div>
+.glass {
+  @apply bg-white/80 backdrop-blur-md border border-white/20;
+}
 
-        <div className="flex flex-col items-center justify-center">
-          <div className="border-2 border-black text-black px-4 py-0.5 rounded-full font-bold text-base shadow-sm">
-            كشف درجات الطلاب التفصيلي
-          </div>
-        </div>
+.card-shadow {
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05), 0 2px 10px -2px rgba(0, 0, 0, 0.03);
+}
 
-        <div className="flex items-center gap-2">
-          {/* Logos removed as requested */}
-        </div>
-      </div>
+@layer utilities {
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
 
-      {/* Meta-info Bar */}
-      <div className="flex justify-between border-2 border-black text-black px-2 py-1 text-[10px] font-bold mb-2 rounded-lg">
-        <div>المادة: {subject || '....................'}</div>
-        <div>الصف: {grade || '....................'} - الفصل: {section || '....................'}</div>
-        <div>المعلم: {teacherName || '....................'}</div>
-      </div>
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 0.5cm;
+  }
+  
+  html, body, #root, main {
+    background-color: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    direction: rtl;
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
 
-      {/* Master Table */}
-      <table className="w-full border-collapse border-2 border-black text-center text-[9px]">
-        <thead>
-          <tr className="bg-white text-black border-b-2 border-black">
-            <th rowSpan={2} className="w-6 border border-black p-0.5 font-bold">م</th>
-            <th rowSpan={2} className="w-32 border border-black p-0.5 font-bold text-right pr-1">اسم الطالب</th>
-            
-            {(tasks.participation?.length || 0) > 0 && (
-              <th colSpan={tasks.participation?.length} className="border border-black p-0.5 font-bold">المشاركة</th>
-            )}
-            {(tasks.homework?.length || 0) > 0 && (
-              <th colSpan={tasks.homework?.length} className="border border-black p-0.5 font-bold">الواجبات</th>
-            )}
-            {(tasks.performance?.length || 0) > 0 && (
-              <th colSpan={tasks.performance?.length} className="border border-black p-0.5 font-bold">المهام الأدائية</th>
-            )}
-            {(tasks.exams?.length || 0) > 0 && (
-              <th colSpan={tasks.exams?.length} className="border border-black p-0.5 font-bold">الاختبارات</th>
-            )}
-            
-            <th rowSpan={2} className="w-12 border border-black p-0.5 font-bold">المجموع</th>
-          </tr>
-          <tr className="bg-white text-black text-[7px] border-b-2 border-black">
-            {tasks.participation?.map(t => (
-              <th key={t.id} className="border border-black p-0.5 font-normal w-6" title={t.name}>
-                <div className="truncate max-w-[30px] mx-auto">{t.name}</div>
-                <div className="text-[6px] text-gray-600 mt-0.5">({t.maxGrade})</div>
-              </th>
-            ))}
-            {tasks.homework?.map(t => (
-              <th key={t.id} className="border border-black p-0.5 font-normal w-6" title={t.name}>
-                <div className="truncate max-w-[30px] mx-auto">{t.name}</div>
-                <div className="text-[6px] text-gray-600 mt-0.5">({t.maxGrade})</div>
-              </th>
-            ))}
-            {tasks.performance?.map(t => (
-              <th key={t.id} className="border border-black p-0.5 font-normal w-6" title={t.name}>
-                <div className="truncate max-w-[30px] mx-auto">{t.name}</div>
-                <div className="text-[6px] text-gray-600 mt-0.5">({t.maxGrade})</div>
-              </th>
-            ))}
-            {tasks.exams?.map(t => (
-              <th key={t.id} className="border border-black p-0.5 font-normal w-6" title={t.name}>
-                <div className="truncate max-w-[30px] mx-auto">{t.name}</div>
-                <div className="text-[6px] text-gray-600 mt-0.5">({t.maxGrade})</div>
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {students.map((student, index) => {
-            const studentState = studentsState[student.id];
-            
-            const partTotal = getCategoryTotal(student.id, 'participation');
-            const hwTotal = getCategoryTotal(student.id, 'homework');
-            const perfTotal = getCategoryTotal(student.id, 'performance');
-            const examTotal = getCategoryTotal(student.id, 'exams');
-            const overall = partTotal + hwTotal + perfTotal + examTotal;
+  .no-print, aside, nav, header, button, .sticky, .no-print-area {
+    display: none !important;
+  }
 
-            return (
-              <tr key={student.id} className="bg-white">
-                <td className="border border-black p-0.5 font-bold text-black">{index + 1}</td>
-                <td className="border border-black p-0.5 text-right pr-1 font-bold text-black text-[10px]">{student.name}</td>
-                
-                {tasks.participation?.map(t => (
-                  <td key={t.id} className="border border-black p-0.5 text-black">
-                    {studentState?.grades?.[t.id] || '-'}
-                  </td>
-                ))}
-                {tasks.homework?.map(t => (
-                  <td key={t.id} className="border border-black p-0.5 text-black">
-                    {studentState?.grades?.[t.id] || '-'}
-                  </td>
-                ))}
-                {tasks.performance?.map(t => (
-                  <td key={t.id} className="border border-black p-0.5 text-black">
-                    {studentState?.grades?.[t.id] || '-'}
-                  </td>
-                ))}
-                {tasks.exams?.map(t => (
-                  <td key={t.id} className="border border-black p-0.5 text-black">
-                    {studentState?.grades?.[t.id] || '-'}
-                  </td>
-                ))}
+  ::-webkit-scrollbar {
+    display: none !important;
+  }
 
-                <td className="border border-black p-0.5 font-black text-[10px] text-black">{overall}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+  /* Ensure the main content takes full width */
+  main {
+    width: 100% !important;
+  }
 
-      {/* Footer */}
-      <div className="flex justify-between mt-4 text-xs font-bold px-4 text-black">
-        <div>توقيع المعلم: ........................................</div>
-        <div>توقيع مدير المدرسة: ........................................</div>
-      </div>
-    </div>
-  );
-};
+  .max-w-6xl, .max-w-4xl, .max-w-5xl {
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  .sts-card {
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+  }
+
+  .print-report {
+    display: block !important;
+    padding: 5mm;
+    transform: scale(0.95);
+    transform-origin: top center;
+  }
+
+  .print-section {
+    margin-bottom: 15px;
+    border: 1px solid #000;
+    page-break-inside: avoid;
+  }
+
+  .print-section-header {
+    background-color: #f1f5f9 !important;
+    border-bottom: 1px solid #000;
+    padding: 6px 10px;
+    font-weight: bold;
+    font-size: 13px;
+  }
+
+  .print-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .print-cell {
+    padding: 6px 10px;
+    border-bottom: 1px solid #eee;
+    border-left: 1px solid #eee;
+    font-size: 11px;
+  }
+
+  .print-cell:last-child {
+    border-left: none;
+  }
+
+  .print-label {
+    font-weight: bold;
+    color: #475569;
+    margin-left: 6px;
+  }
+
+  .print-full-cell {
+    padding: 10px;
+    font-size: 11px;
+    line-height: 1.5;
+  }
+}
+
+.print-report {
+  display: none;
+}

@@ -1,320 +1,220 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { motion } from 'motion/react';
-import { Shield, User, Phone, ArrowRight, Loader2 } from 'lucide-react';
 import { apiFetch } from '../utils/api';
+import React, { useEffect, useState } from 'react';
+import { motion } from 'motion/react';
+import { 
+  Bell, 
+  CheckCircle2, 
+  Clock, 
+  AlertCircle, 
+  ChevronLeft,
+  Trash2,
+  MailOpen,
+  Mail
+} from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import { formatHijriDate, formatHijriDateTime } from '../utils/dateUtils';
 
-const ParentLogin: React.FC = () => {
-  const [nationalId, setNationalId] = useState('');
-  const [parentPhone, setParentPhone] = useState('');
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  
-  // OTP State
-  const [step, setStep] = useState<1 | 2>(1);
-  const [otp, setOtp] = useState(['', '', '', '']);
-  const [countdown, setCountdown] = useState(60);
-  const [tempUser, setTempUser] = useState<any>(null);
+interface Notification {
+  id: string;
+  sender_id: number;
+  user_id: number;
+  title: string;
+  message: string;
+  reference_id: number;
+  is_read: boolean;
+  created_at: string;
+  sender_name: string;
+}
 
+const Notifications: React.FC = () => {
+  const { user } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
-  const { user, login } = useAuth();
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (step === 2 && countdown > 0) {
-      timer = setInterval(() => {
-        setCountdown((prev) => prev - 1);
-      }, 1000);
-    }
-    return () => {
-      if (timer) clearInterval(timer);
-    };
-  }, [step, countdown]);
-
-  useEffect(() => {
-    if (user?.role === 'parent') {
-      navigate('/parent-portal');
-    } else if (user) {
-      navigate('/dashboard');
-    }
-  }, [user, navigate]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setIsLoading(true);
-
-    let formattedPhone = parentPhone.trim();
-    if (formattedPhone.startsWith('05')) {
-      formattedPhone = '966' + formattedPhone.substring(1);
-    }
-    if (formattedPhone.startsWith('+966')) {
-      formattedPhone = formattedPhone.substring(1);
-    }
-
+  const fetchNotifications = async () => {
+    if (!user) return;
     try {
-      const response = await apiFetch('/api/parent-login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ national_id: nationalId, parent_phone: formattedPhone }),
-      });
+      const res = await apiFetch(`/api/notifications?userId=${user.id}`);
+      if (!res.ok) throw new Error('Failed to fetch notifications');
+      const data = await res.json().catch(() => []);
+      setNotifications(data);
+    } catch (err) {
+      console.error('Failed to fetch notifications', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      const data = await response.json();
+  useEffect(() => {
+    fetchNotifications();
+    
+    if (!user) return;
 
-      if (response.ok && data.success) {
-        if (data.user.national_id === '1000000005' || data.user.email?.endsWith('@test.com')) {
-          login(data.user);
-          let from = (location.state as any)?.from?.pathname;
-          if (!from || from === '/') {
-            from = data.user.role === 'parent' ? '/parent-portal' : '/dashboard';
-          }
-          navigate(from, { replace: true });
-        } else {
-          // الانتقال للخطوة الثانية (OTP)
-          setTempUser(data.user);
-          setStep(2);
-          setCountdown(60);
-          setOtp(['', '', '', '']);
+    const eventSource = new EventSource(`/api/notifications/stream?userId=${user.id}`);
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const newNotification = JSON.parse(event.data);
+        setNotifications(prev => [newNotification, ...prev]);
+      } catch (err) {
+        console.error('Error parsing real-time notification', err);
+      }
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [user]);
+
+  const markAsRead = async (id: string, referenceId?: number) => {
+    try {
+      const res = await apiFetch(`/api/notifications/${id}/read`, { method: 'POST' });
+      if (res.ok) {
+        setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+        if (referenceId) {
+          navigate(`/referral/${referenceId}`);
         }
       } else {
-        setError(data.message || 'بيانات الدخول غير صحيحة، يرجى التأكد من هوية الطالب ورقم الجوال المسجل بالمدرسة');
+        const data = await res.json().catch(() => ({ error: 'فشل تحديث حالة الإشعار' }));
+        console.error(data.error || 'فشل تحديث حالة الإشعار');
       }
     } catch (err) {
-      setError('حدث خطأ أثناء تسجيل الدخول. يرجى المحاولة مرة أخرى.');
-    } finally {
-      setIsLoading(false);
+      console.error('Failed to mark as read', err);
     }
   };
 
-  const handleOtpChange = (index: number, value: string) => {
-    if (value.length > 1) value = value.slice(-1);
-    if (!/^\d*$/.test(value)) return;
-
-    const newOtp = [...otp];
-    newOtp[index] = value;
-    setOtp(newOtp);
-
-    if (value && index < 3) {
-      const nextInput = document.getElementById(`otp-${index + 1}`);
-      nextInput?.focus();
-    }
-  };
-
-  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace' && !otp[index] && index > 0) {
-      const prevInput = document.getElementById(`otp-${index - 1}`);
-      prevInput?.focus();
-    }
-  };
-
-  const handleVerifyOTP = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const code = otp.join('');
-    if (code.length !== 4) {
-      setError('يرجى إدخال رمز التحقق كاملاً');
-      return;
-    }
-    
-    setIsLoading(true);
-    setError('');
-    
+  const markAllAsRead = async () => {
+    if (!user) return;
     try {
-      const response = await apiFetch('/api/verify-login-otp', {
+      const res = await apiFetch('/api/notifications/read-all', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone_number: tempUser.parent_phone, // Use parent_phone for parent login
-          otp_code: code
-        })
+        body: JSON.stringify({ userId: user.id })
       });
-
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        console.log("OTP Valid, but Parent role routing failed? No, OTP is invalid");
-        throw new Error(data.message || "رمز التحقق غير صحيح أو منتهي الصلاحية");
+      if (res.ok) {
+        setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      } else {
+        const data = await res.json().catch(() => ({ error: 'فشل تحديث الإشعارات' }));
+        console.error(data.error || 'فشل تحديث الإشعارات');
       }
-
-      // If successful, log the user in
-      const finalUser = { ...tempUser, ...(data.user || {}), student_id: tempUser.student_id || data.user?.student_id };
-      login(finalUser);
-      
-      try {
-        if (!finalUser.student_id) {
-          console.log("OTP Valid, but Parent role routing failed: No student linked");
-          // Still navigate, ParentPortal will show the message
-        }
-        navigate('/parent-portal', { replace: true });
-      } catch (e) {
-        console.log("OTP Valid, but Parent role routing failed");
-        setError("جاري ربط حسابك ببيانات أبنائك");
-      }
-
-    } catch (err: any) {
-      console.log("Verification Exception:", err.message);
-      setError(err.message || 'حدث خطأ أثناء التحقق');
-    } finally {
-      setIsLoading(false);
+    } catch (err) {
+      console.error('Failed to mark all as read', err);
     }
   };
 
-  const handleResendOTP = async () => {
-    setCountdown(60);
-    setOtp(['', '', '', '']);
-    setError('');
-    // محاكاة إعادة الإرسال
+  const deleteNotification = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    try {
+      const res = await apiFetch(`/api/notifications/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setNotifications(prev => prev.filter(n => n.id !== id));
+      } else {
+        console.error('Failed to delete notification');
+      }
+    } catch (err) {
+      console.error('Failed to delete notification', err);
+    }
   };
 
   return (
-    <div className="min-h-screen w-full bg-white flex flex-col justify-center px-6 py-8 md:bg-gray-50 md:py-12 relative overflow-hidden">
-      {/* Background decorations - hidden on mobile for cleaner look */}
-      <div className="hidden md:block absolute top-0 left-0 w-full h-96 bg-primary/10 -skew-y-6 transform origin-top-left -z-10" />
-      <div className="hidden md:block absolute bottom-0 right-0 w-96 h-96 bg-secondary/10 rounded-full blur-3xl -z-10" />
-
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full md:max-w-md md:mx-auto md:bg-white md:rounded-2xl md:shadow-xl md:p-10 relative z-10"
-      >
-        <div className="flex justify-end mb-8">
+    <div className="max-w-4xl mx-auto space-y-8 pb-20">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="space-y-2">
+          <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3">
+            <Bell className="text-primary" size={32} />
+            <span>الإشعارات</span>
+          </h1>
+          <p className="text-slate-500 font-bold">تابع آخر التحديثات والإجراءات المتخذة على الحالات.</p>
+        </div>
+        {notifications.some(n => !n.is_read) && (
           <button 
-            onClick={() => navigate('/')}
-            className="text-slate-400 hover:text-primary transition-colors flex items-center gap-1 text-sm font-bold"
+            onClick={markAllAsRead}
+            className="flex items-center justify-center gap-2 px-6 py-3 bg-white border border-slate-200 rounded-2xl text-slate-600 font-bold hover:text-primary hover:border-primary transition-all shadow-sm"
           >
-            <span>الرئيسية</span>
-            <ArrowRight size={16} className="rotate-180" />
+            <MailOpen size={20} />
+            <span>تحديد الكل كمقروء</span>
           </button>
-        </div>
-        <div className="hidden md:block absolute top-0 right-0 w-2 h-full bg-primary" />
-        
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-primary/10 text-primary rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <Shield size={32} />
+        )}
+      </div>
+
+      <div className="sts-card overflow-hidden">
+        {loading ? (
+          <div className="p-20 text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+            <p className="mt-4 text-slate-400 font-bold">جاري تحميل الإشعارات...</p>
           </div>
-          {step === 1 ? (
-            <>
-              <h1 className="text-2xl font-black text-slate-800">تسجيل الدخول لبوابة تكامل</h1>
-              <p className="text-slate-500 mt-2 text-sm">بوابة ولي الأمر لمتابعة سجل الطالب</p>
-            </>
-          ) : (
-            <>
-              <h1 className="text-2xl font-black text-slate-800">التحقق الأمني</h1>
-              <p className="text-slate-500 mt-2 text-sm">تم إرسال رمز تحقق (OTP) إلى رقم جوالك المسجل عبر الواتساب</p>
-            </>
-          )}
-        </div>
-
-        {error && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            className="bg-red-50 text-red-600 p-4 rounded-xl text-sm font-bold mb-6 border border-red-100"
-          >
-            {error}
-          </motion.div>
-        )}
-
-        {step === 1 ? (
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">رقم هوية الطالب</label>
-              <div className="relative">
-                <User className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-                <input
-                  type="text"
-                  value={nationalId}
-                  onChange={(e) => setNationalId(e.target.value)}
-                  className="w-full pl-4 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-left"
-                  placeholder="أدخل رقم الهوية"
-                  required
-                  dir="ltr"
-                />
-              </div>
+        ) : notifications.length === 0 ? (
+          <div className="p-20 text-center space-y-4">
+            <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto text-slate-300">
+              <Bell size={40} />
             </div>
-
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">رقم الجوال المسجل</label>
-              <div className="relative">
-                <Phone className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-                <input
-                  type="tel"
-                  value={parentPhone}
-                  onChange={(e) => setParentPhone(e.target.value)}
-                  className="w-full pl-4 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-left"
-                  placeholder="05XXXXXXXX"
-                  required
-                  dir="ltr"
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-3 text-lg rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-70"
-            >
-              {isLoading ? (
-                <Loader2 className="animate-spin" size={20} />
-              ) : (
-                <>
-                  <span>تسجيل الدخول</span>
-                  <ArrowRight size={20} />
-                </>
-              )}
-            </button>
-          </form>
+            <p className="text-slate-400 font-bold text-lg">لا توجد إشعارات حالياً</p>
+          </div>
         ) : (
-          <form onSubmit={handleVerifyOTP} className="space-y-6 text-center">
-            <div className="flex justify-center gap-3 dir-ltr">
-              {otp.map((digit, index) => (
-                <input
-                  key={index}
-                  id={`otp-${index}`}
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  autoComplete="one-time-code"
-                  maxLength={1}
-                  value={digit}
-                  onChange={(e) => handleOtpChange(index, e.target.value)}
-                  onKeyDown={(e) => handleOtpKeyDown(index, e)}
-                  className="w-12 h-12 text-center text-2xl font-bold bg-slate-50 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-[#004D40] focus:ring-2 focus:ring-[#004D40]/20 transition-all"
-                  autoFocus={index === 0}
-                />
-              ))}
-            </div>
-
-            <button
-              type="submit"
-              disabled={isLoading || otp.join('').length !== 4}
-              className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-3 text-lg rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-70"
-            >
-              {isLoading ? (
-                <Loader2 className="animate-spin" size={20} />
-              ) : (
-                <span>تأكيد الرمز</span>
-              )}
-            </button>
-
-            <div className="mt-4">
-              <button
-                type="button"
-                onClick={handleResendOTP}
-                disabled={countdown > 0 || isLoading}
-                className="text-[#004D40] font-medium hover:underline disabled:text-slate-400 disabled:no-underline transition-colors"
+          <div className="divide-y divide-slate-50">
+            {notifications.map((notification, i) => (
+              <motion.div 
+                key={notification.id}
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.05 }}
+                onClick={() => markAsRead(notification.id, notification.reference_id)}
+                className={`p-6 md:p-8 flex items-start gap-4 md:gap-6 cursor-pointer transition-all hover:bg-slate-50/50 relative group ${!notification.is_read ? 'bg-primary/[0.02]' : ''}`}
               >
-                {countdown > 0 ? `يمكنك طلب رمز جديد بعد 00:${countdown.toString().padStart(2, '0')}` : 'إعادة إرسال الرمز'}
-              </button>
-            </div>
-          </form>
+                {!notification.is_read && (
+                  <div className="absolute right-0 top-0 bottom-0 w-1 bg-primary" />
+                )}
+                
+                <div className={`w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center shrink-0 transition-all ${
+                  !notification.is_read ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-slate-100 text-slate-400'
+                }`}>
+                  {notification.is_read ? <MailOpen size={24} /> : <Mail size={24} />}
+                </div>
+
+                <div className="flex-1 space-y-2">
+                  <div className="flex items-center justify-between gap-4">
+                    <p className={`text-sm md:text-base leading-relaxed ${!notification.is_read ? 'font-black text-slate-900' : 'font-bold text-slate-600'}`}>
+                      {notification.title}
+                    </p>
+                    <span className="text-[10px] md:text-xs text-slate-400 font-bold whitespace-nowrap">
+                      {formatHijriDate(notification.created_at)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    {notification.message}
+                  </p>
+                  
+                  <div className="flex items-center gap-4 text-[10px] md:text-xs font-bold uppercase tracking-wider pt-2">
+                    <span className="text-primary">من: {notification.sender_name || 'النظام'}</span>
+                    <span className="w-1 h-1 bg-slate-200 rounded-full" />
+                    <span className="text-slate-400 flex items-center gap-1">
+                      <Clock size={12} />
+                      {formatHijriDateTime(notification.created_at).split(' - ')[1]}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="self-center flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {user?.role === 'admin' && (
+                    <button 
+                      onClick={(e) => deleteNotification(e, notification.id)}
+                      className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                      title="حذف الإشعار"
+                    >
+                      <Trash2 size={20} />
+                    </button>
+                  )}
+                  <ChevronLeft className="text-slate-300" size={24} />
+                </div>
+              </motion.div>
+            ))}
+          </div>
         )}
-      </motion.div>
+      </div>
     </div>
   );
 };
 
-export default ParentLogin;
+export default Notifications;

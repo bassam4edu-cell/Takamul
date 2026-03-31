@@ -1,94 +1,38 @@
-export type Role = 'teacher' | 'vice_principal' | 'counselor' | 'admin' | 'principal' | 'super_admin' | 'parent';
+import React from 'react';
 
-export interface User {
-  id: number;
-  name: string;
-  email?: string;
-  role: Role;
-  school_id?: number;
-  schoolId?: number;
-  assigned_grades?: string[];
-  assignments?: TeacherAssignment[];
-  is_active?: boolean;
-  phone_number?: string;
-  whatsapp_enabled?: boolean;
-  student_id?: number;
-  national_id?: string;
-  grade?: string;
-  section?: string;
-  status?: string;
-  is_phone_verified?: boolean;
+interface LogoProps {
+  className?: string;
+  showText?: boolean;
+  light?: boolean;
+  variant?: 'login' | 'internal';
 }
 
-export interface Student {
-  id: number;
-  name: string;
-  national_id: string;
-  grade: string;
-  section: string;
-  behavior_score?: number;
-  bonus_score?: number;
-  attendance_score?: number;
-  parent_phone?: string;
-}
+const Logo: React.FC<LogoProps> = ({ className = "w-12 h-12", showText = false, light = false, variant = 'internal' }) => {
+  const primaryColor = light ? "#FFFFFF" : "#006847";
+  const secondaryColor = light ? "rgba(255,255,255,0.8)" : "#00855c";
 
-export interface Referral {
-  id: number;
-  student_id: number;
-  student_name: string;
-  student_national_id?: string;
-  student_grade: string;
-  student_section: string;
-  student_behavior_score?: number;
-  teacher_id: number;
-  teacher_name: string;
-  assigned_to_id: number | null;
-  type: 'behavior' | 'academic' | 'attendance' | 'uniform';
-  severity: 'low' | 'medium' | 'high';
-  reason: string;
-  teacher_notes: string;
-  remedial_plan?: string;
-  remedial_plan_file?: string;
-  status: 'pending_vp' | 'pending_counselor' | 'scheduled_meeting' | 'resolved' | 'closed' | 'returned_to_teacher';
-  created_at: string;
-  violation_id?: number;
-  violation_name?: string;
-  violation_degree?: number;
-  violation_points?: number;
-  applied_remedial_actions?: string[];
-}
+  // Using different logo files for login vs internal UI as requested
+  const logoUrl = variant === 'login' 
+    ? "https://i.ibb.co/ZzPTFG3y/222.png"
+    : "https://i.ibb.co/QFwrvnqF/photo-2026-02-20-15-16-20.jpg";
 
-export interface Subject {
-  id: number;
-  name: string;
-  school_id: number;
-  is_elective?: boolean;
-  grade?: string | null;
-  semester?: string | null;
-}
+  return (
+    <div className={`flex flex-col items-center gap-4 ${className}`}>
+      <img 
+        src={logoUrl} 
+        alt="شعار وزارة التعليم" 
+        className="w-full h-full object-contain"
+        referrerPolicy="no-referrer"
+      />
+      {showText && (
+        <div className="flex flex-col items-center text-center">
+          <span className={`text-sm font-extrabold leading-none mb-1 ${light ? 'text-white' : 'text-primary'}`}>ثانوية أم القرى بالخرج</span>
+          <span className={`text-xl font-extrabold leading-none ${light ? 'text-white' : 'text-primary'}`}>بوابة تكامل</span>
+          <span className={`text-[10px] font-medium tracking-wider uppercase ${light ? 'text-white/80' : 'text-slate-500'}`}>بوابة تكامل</span>
+        </div>
+      )}
+    </div>
+  );
+};
 
-export interface Class {
-  id: number;
-  name: string;
-  school_id: number;
-}
-
-export interface TeacherAssignment {
-  id: number;
-  teacher_id: number;
-  subject_id: number;
-  class_id: string | number;
-}
-
-export interface ReferralLog {
-  id: number;
-  referral_id: number;
-  user_id: number;
-  user_name: string;
-  user_role: Role;
-  action: string;
-  notes: string;
-  evidence_file?: string;
-  evidence_text?: string;
-  created_at: string;
-}
+export default Logo;

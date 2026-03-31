@@ -1,198 +1,216 @@
-import React, { Suspense, lazy } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { User } from './types';
-import Layout from './components/Layout';
-import { MessageLogProvider } from './context/MessageLogContext';
-import { AuditLogProvider } from './context/AuditLogContext';
-import LoadingSpinner from './components/LoadingSpinner';
-import { AuthProvider, useAuth } from './context/AuthContext';
-import { SchoolProvider } from './context/SchoolContext';
+import React from 'react';
+import { NavLink } from 'react-router-dom';
+import { 
+  LayoutDashboard, 
+  FilePlus, 
+  Users, 
+  Settings, 
+  LogOut,
+  ClipboardList,
+  ShieldCheck,
+  Settings2,
+  Home,
+  BarChart3,
+  UserCircle,
+  Bell,
+  FileText,
+  MessageSquare,
+  Puzzle
+} from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { logAction } from '../services/auditLogger';
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+import Logo from './Logo';
 
-export { useAuth };
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 
-const Landing = lazy(() => import('./pages/Landing'));
-const Login = lazy(() => import('./pages/Login'));
-const TeacherDashboard = lazy(() => import('./pages/TeacherDashboard'));
-const CounselorDashboard = lazy(() => import('./pages/CounselorDashboard'));
-const ReferralForm = lazy(() => import('./pages/ReferralForm'));
-const ManagementDashboard = lazy(() => import('./pages/ManagementDashboard'));
-const ManagementReferrals = lazy(() => import('./pages/ManagementReferrals'));
-const ReferralDetails = lazy(() => import('./pages/ReferralDetails'));
-const StudentProfile = lazy(() => import('./pages/StudentProfile'));
-const SubjectDetails = lazy(() => import('./pages/SubjectDetails'));
-const Reports = lazy(() => import('./pages/Reports'));
-const Settings = lazy(() => import('./pages/Settings'));
-const Notifications = lazy(() => import('./pages/Notifications'));
-const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
-const SuperAdminDashboard = lazy(() => import('./pages/SuperAdminDashboard'));
-const AdminReferrals = lazy(() => import('./pages/AdminReferrals'));
-const MessageCenter = lazy(() => import('./pages/MessageCenter'));
-const PrincipalDashboard = lazy(() => import('./pages/PrincipalDashboard'));
-const BehavioralViolations = lazy(() => import('./pages/BehavioralViolations'));
-const PrintTemplate = lazy(() => import('./pages/PrintTemplate'));
-const VPRadar = lazy(() => import('./pages/VPRadar'));
-const StudentRecordSearch = lazy(() => import('./pages/StudentRecordSearch'));
-const TeacherRollCall = lazy(() => import('./pages/TeacherRollCall'));
-const DailyAbsenceReport = lazy(() => import('./pages/DailyAbsenceReport'));
-const ParentLogin = lazy(() => import('./pages/ParentLogin'));
-const ParentPortal = lazy(() => import('./pages/ParentPortal'));
-const Register = lazy(() => import('./pages/Register'));
-const AuditLogs = lazy(() => import('./pages/AuditLogs'));
-const SmartTracker = lazy(() => import('./pages/SmartTracker'));
-const SchoolSettings = lazy(() => import('./pages/SchoolSettings'));
-const ExtensionSetup = lazy(() => import('./pages/ExtensionSetup'));
+interface SidebarProps {
+  onClose?: () => void;
+}
 
+const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
+  const { user, logout } = useAuth();
 
+  const menuItems = [
+    { 
+      title: 'لوحة التحكم', 
+      path: '/dashboard', 
+      icon: LayoutDashboard,
+      roles: ['teacher', 'vice_principal', 'counselor', 'principal', 'super_admin']
+    },
+    { 
+      title: 'تحويل جديد', 
+      path: '/dashboard/referral/new', 
+      icon: FilePlus,
+      roles: ['teacher']
+    },
+    { 
+      title: 'التحضير اليومي', 
+      path: '/dashboard/attendance/teacher', 
+      icon: Users,
+      roles: ['teacher']
+    },
+    { 
+      title: 'كشف المتابعة الذكي', 
+      path: '/dashboard/class-tracker', 
+      icon: ClipboardList,
+      roles: ['teacher']
+    },
+    { 
+      title: 'رادار التحضير والغياب', 
+      path: '/dashboard/attendance/radar', 
+      icon: Users,
+      roles: ['vice_principal', 'principal']
+    },
+    { 
+      title: 'إدارة التحويلات', 
+      path: '/dashboard/referrals', 
+      icon: ClipboardList,
+      roles: ['vice_principal', 'counselor', 'principal']
+    },
+    { 
+      title: 'إدارة النظام', 
+      path: '/dashboard/admin', 
+      icon: ShieldCheck,
+      roles: ['admin']
+    },
+    { 
+      title: 'إدارة التحويلات', 
+      path: '/dashboard/admin-referrals', 
+      icon: ClipboardList,
+      roles: ['admin']
+    },
+    { 
+      title: 'سجل العمليات', 
+      path: '/dashboard/audit-logs', 
+      icon: ShieldCheck,
+      roles: ['admin']
+    },
+    { 
+      title: 'إعدادات المدرسة', 
+      path: '/dashboard/school-settings', 
+      icon: Settings2,
+      roles: ['admin', 'principal']
+    },
+    { 
+      title: 'مركز الرسائل', 
+      path: '/dashboard/message-center', 
+      icon: MessageSquare,
+      roles: ['admin', 'principal', 'management', 'vice_principal']
+    },
+    { 
+      title: 'السجل الشامل للطالب', 
+      path: '/dashboard/student-record', 
+      icon: FileText,
+      roles: ['vice_principal', 'counselor', 'principal', 'admin']
+    },
+    { 
+      title: 'المشكلات السلوكية', 
+      path: '/dashboard/behavioral-violations', 
+      icon: ShieldCheck,
+      roles: ['vice_principal', 'admin', 'principal']
+    },
+    { 
+      title: 'التقارير الإحصائية', 
+      path: '/dashboard/reports', 
+      icon: BarChart3,
+      roles: ['principal', 'admin']
+    },
+    { 
+      title: 'الإشعارات', 
+      path: '/dashboard/notifications', 
+      icon: Bell,
+      roles: ['teacher', 'vice_principal', 'counselor', 'admin', 'principal']
+    },
+    { 
+      title: 'تفعيل الرصد الآلي', 
+      path: '/dashboard/extension-setup', 
+      icon: Puzzle,
+      roles: ['teacher', 'vice_principal']
+    },
+    { 
+      title: 'الإعدادات', 
+      path: '/dashboard/settings', 
+      icon: Settings,
+      roles: ['teacher', 'vice_principal', 'counselor', 'admin', 'principal']
+    },
+  ];
 
-const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: string[] }> = ({ children, allowedRoles }) => {
-  const { user } = useAuth();
-  const location = useLocation();
-
-  if (!user) {
-    if (location.pathname === '/parent-portal') {
-      return <Navigate to="/parent-login" state={{ from: location }} replace />;
-    }
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
-
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  return <>{children}</>;
-};
-
-const App: React.FC = () => {
   return (
-    <AuthProvider>
-      <MessageLogProvider>
-        <AuditLogProvider>
-          <SchoolProvider>
-            <Router>
-              <Suspense fallback={<LoadingSpinner />}>
-                <Routes>
-            <Route path="/" element={<Landing />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            <Route path="/parent-login" element={<ParentLogin />} />
-            <Route path="/parent-portal" element={
-              <ProtectedRoute allowedRoles={['parent']}>
-                <ParentPortal />
-              </ProtectedRoute>
-            } />
-            
-            <Route path="/print/:templateId/:referralId" element={
-              <ProtectedRoute>
-                <PrintTemplate />
-              </ProtectedRoute>
-            } />
+    <aside className="w-72 bg-white border-l border-slate-100 flex flex-col h-full z-20 transition-all duration-300">
+      <div className="p-8 flex flex-col items-center gap-4 border-b border-slate-50">
+        <Logo className="w-20 h-20" />
+        <div className="text-center">
+          <p className="text-xs font-extrabold text-primary mb-1">ثانوية أم القرى بالخرج</p>
+          <h1 className="font-extrabold text-primary text-xl leading-tight">بوابة تكامل</h1>
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">بوابة تكامل</p>
+        </div>
+      </div>
 
-            <Route path="/print/daily-absence" element={
-              <ProtectedRoute allowedRoles={['vice_principal', 'principal']}>
-                <DailyAbsenceReport />
-              </ProtectedRoute>
-            } />
+      <nav className="flex-1 p-6 space-y-2 overflow-y-auto">
+        {menuItems.filter(item => item.roles.includes(user?.role || '')).map((item) => (
+          <NavLink
+            key={item.path}
+            to={item.path}
+            onClick={onClose}
+            className={({ isActive }) => cn(
+              "flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 group min-h-[44px]",
+              isActive 
+                ? "bg-primary text-white shadow-lg shadow-primary/20 font-bold" 
+                : "text-slate-500 hover:bg-slate-50 hover:text-primary"
+            )}
+          >
+            {({ isActive }) => (
+              <>
+                <item.icon size={22} className={cn(
+                  "transition-colors",
+                  isActive ? "text-white" : "group-hover:text-primary"
+                )} />
+                <span className="text-sm">{item.title}</span>
+              </>
+            )}
+          </NavLink>
+        ))}
+      </nav>
 
-            <Route path="/dashboard" element={
-              <ProtectedRoute>
-                <Layout />
-              </ProtectedRoute>
-            }>
-              <Route index element={<DashboardSwitcher />} />
-              <Route path="referral/new" element={
-                <ProtectedRoute allowedRoles={['teacher']}>
-                  <ReferralForm />
-                </ProtectedRoute>
-              } />
-              <Route path="referrals" element={
-                <ProtectedRoute allowedRoles={['vice_principal', 'counselor', 'principal']}>
-                  <ManagementReferrals />
-                </ProtectedRoute>
-              } />
-              <Route path="referral/:id" element={<ReferralDetails />} />
-              <Route path="student/:id" element={<StudentProfile />} />
-              <Route path="student/:studentId/subject/:subjectId" element={<SubjectDetails />} />
-              <Route path="attendance/teacher" element={
-                <ProtectedRoute allowedRoles={['teacher']}>
-                  <TeacherRollCall />
-                </ProtectedRoute>
-              } />
-              <Route path="class-tracker" element={
-                <ProtectedRoute allowedRoles={['teacher']}>
-                  <SmartTracker />
-                </ProtectedRoute>
-              } />
-              <Route path="attendance/radar" element={
-                <ProtectedRoute allowedRoles={['vice_principal', 'principal']}>
-                  <VPRadar />
-                </ProtectedRoute>
-              } />
-              <Route path="student-record" element={
-                <ProtectedRoute allowedRoles={['vice_principal', 'counselor', 'principal', 'admin']}>
-                  <StudentRecordSearch />
-                </ProtectedRoute>
-              } />
-              <Route path="extension-setup" element={
-                <ProtectedRoute allowedRoles={['teacher', 'vice_principal']}>
-                  <ExtensionSetup />
-                </ProtectedRoute>
-              } />
-              <Route path="reports" element={<Reports />} />
-              <Route path="settings" element={<Settings />} />
-              <Route path="notifications" element={<Notifications />} />
-              <Route path="behavioral-violations" element={
-                <ProtectedRoute allowedRoles={['vice_principal', 'admin', 'principal']}>
-                  <BehavioralViolations />
-                </ProtectedRoute>
-              } />
-              <Route path="admin" element={
-                <ProtectedRoute allowedRoles={['admin']}>
-                  <AdminDashboard />
-                </ProtectedRoute>
-              } />
-              <Route path="admin-referrals" element={
-                <ProtectedRoute allowedRoles={['admin']}>
-                  <AdminReferrals />
-                </ProtectedRoute>
-              } />
-              <Route path="audit-logs" element={
-                <ProtectedRoute allowedRoles={['admin']}>
-                  <AuditLogs />
-                </ProtectedRoute>
-              } />
-              <Route path="school-settings" element={
-                <ProtectedRoute allowedRoles={['admin', 'principal']}>
-                  <SchoolSettings />
-                </ProtectedRoute>
-              } />
-              <Route path="message-center" element={
-                <ProtectedRoute allowedRoles={['admin', 'principal', 'management', 'vice_principal']}>
-                  <MessageCenter />
-                </ProtectedRoute>
-              } />
-            </Route>
-            
-            {/* Fallback redirect */}
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-          </Suspense>
-          </Router>
-          </SchoolProvider>
-        </AuditLogProvider>
-      </MessageLogProvider>
-    </AuthProvider>
+      <div className="p-6 border-t border-slate-50">
+        <div className="bg-slate-50 rounded-2xl p-4 mb-4 flex items-center gap-3">
+          <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-primary shadow-sm border border-slate-100">
+            <UserCircle size={24} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-bold text-slate-800 truncate">{user?.name}</p>
+            <p className="text-[10px] text-slate-400 font-medium truncate">
+              {user?.role === 'teacher' ? 'معلم' : user?.role === 'vice_principal' ? 'وكيل' : user?.role === 'counselor' ? 'موجه' : user?.role === 'admin' ? 'أدمن' : 'مدير'}
+            </p>
+          </div>
+        </div>
+        
+        <button
+          onClick={() => {
+            if (user) {
+              logAction(
+                'مصادقة/دخول',
+                'LOGOUT',
+                'النظام',
+                `تسجيل خروج المستخدم ${user.name}`,
+                undefined,
+                { id: user.id, name: user.name, role: user.role }
+              );
+            }
+            logout();
+          }}
+          className="flex items-center gap-4 px-5 py-4 w-full text-right text-red-500 hover:bg-red-50 rounded-2xl transition-all duration-300 font-bold text-sm"
+        >
+          <LogOut size={20} />
+          <span>تسجيل الخروج</span>
+        </button>
+      </div>
+    </aside>
   );
 };
 
-const DashboardSwitcher = () => {
-  const { user } = useAuth();
-  if (user?.role === 'parent') return <Navigate to="/parent-portal" replace />;
-  if (user?.role === 'teacher') return <TeacherDashboard />;
-  if (user?.role === 'counselor') return <CounselorDashboard />;
-  if (user?.role === 'admin') return <AdminDashboard />;
-  if (user?.role === 'super_admin') return <SuperAdminDashboard />;
-  if (user?.role === 'principal') return <PrincipalDashboard />;
-  return <ManagementDashboard />;
-};
-
-export default App;
+export default Sidebar;

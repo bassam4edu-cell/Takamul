@@ -1,179 +1,223 @@
-import { apiFetch } from '../utils/api';
 import React, { useState, useEffect } from 'react';
-import { 
-  Clock, 
-  CheckCircle2, 
-  AlertCircle, 
-  Search,
-  ArrowUpRight
-} from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { Referral } from '../types';
+import { Download, Puzzle, Settings, CheckCircle, AlertCircle, RefreshCw, Key } from 'lucide-react';
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
 import { useAuth } from '../context/AuthContext';
-import { motion } from 'motion/react';
 
-const KanbanColumn = ({ title, icon: Icon, color, cases, count }: any) => (
-  <div className="flex flex-col h-full bg-slate-50/50 rounded-[2rem] border border-slate-100 p-4 md:p-6">
-    <div className="flex items-center justify-between mb-6">
-      <div className="flex items-center gap-3">
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white ${color}`}>
-          <Icon size={20} />
-        </div>
-        <h2 className="font-extrabold text-lg text-slate-800">{title}</h2>
-      </div>
-      <span className="bg-white px-3 py-1 rounded-full text-sm font-bold text-slate-500 shadow-sm border border-slate-100">
-        {count}
-      </span>
-    </div>
-
-    <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
-      {cases.length === 0 ? (
-        <div className="h-32 flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-200 rounded-2xl">
-          <p className="font-bold text-sm">لا توجد حالات</p>
-        </div>
-      ) : (
-        cases.map((referral: Referral) => (
-          <motion.div
-            key={referral.id}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md hover:border-primary/30 transition-all group"
-          >
-            <div className="flex justify-between items-start mb-3">
-              <div>
-                <h3 className="font-extrabold text-slate-800">{referral.student_name}</h3>
-                <p className="text-xs text-slate-500 font-bold mt-1">
-                  {referral.student_grade} - {referral.student_section}
-                </p>
-              </div>
-              <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold ${
-                referral.severity === 'high' ? 'bg-red-50 text-red-600' :
-                referral.severity === 'medium' ? 'bg-amber-50 text-amber-600' :
-                'bg-emerald-50 text-emerald-600'
-              }`}>
-                {referral.severity === 'high' ? 'عالية' : referral.severity === 'medium' ? 'متوسطة' : 'عادية'}
-              </span>
-            </div>
-            
-            <div className="mb-4">
-              <p className="text-sm text-slate-600 font-medium line-clamp-2">
-                {referral.reason}
-              </p>
-            </div>
-
-            <div className="flex items-center justify-between pt-4 border-t border-slate-50">
-              <div className="flex items-center gap-2 text-xs text-slate-400 font-bold">
-                <Clock size={14} />
-                <span>{new Date(referral.created_at).toLocaleDateString('ar-SA')}</span>
-              </div>
-              <Link
-                to={`/dashboard/referral/${referral.id}`}
-                className="w-8 h-8 rounded-full bg-slate-50 text-slate-400 flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors"
-              >
-                <ArrowUpRight size={16} />
-              </Link>
-            </div>
-          </motion.div>
-        ))
-      )}
-    </div>
-  </div>
-);
-
-const CounselorDashboard: React.FC = () => {
+const ExtensionSetup: React.FC = () => {
   const { user } = useAuth();
-  const [referrals, setReferrals] = useState<Referral[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [syncCode, setSyncCode] = useState<string | null>(null);
+  const [isLoadingCode, setIsLoadingCode] = useState(false);
 
   useEffect(() => {
-    const fetchReferrals = async () => {
-      try {
-        const res = await apiFetch(`/api/referrals?userId=${user?.id}&role=${user?.role}`);
-        if (!res.ok) throw new Error('Failed to fetch referrals');
-        const data = await res.json().catch(() => []);
-        setReferrals(data);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
+    fetchSyncCode();
+  }, []);
+
+  const fetchSyncCode = async () => {
+    if (!user) return;
+    try {
+      setIsLoadingCode(true);
+      const res = await fetch(`/api/extension/sync-code?teacher_id=${user.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSyncCode(data.syncCode);
       }
-    };
-    if (user?.id) fetchReferrals();
-  }, [user?.id, user?.role]);
+    } catch (error) {
+      console.error('Error fetching sync code:', error);
+    } finally {
+      setIsLoadingCode(false);
+    }
+  };
 
-  // Filter referrals for counselor
-  const counselorReferrals = referrals.filter(r => 
-    r.status === 'pending_counselor' || 
-    r.status === 'scheduled_meeting' || 
-    r.status === 'resolved' || 
-    r.status === 'closed'
-  );
+  const generateSyncCode = async () => {
+    if (!user) return;
+    try {
+      setIsLoadingCode(true);
+      const res = await fetch('/api/extension/sync-code/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ teacher_id: user.id })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSyncCode(data.syncCode);
+      }
+    } catch (error) {
+      console.error('Error generating sync code:', error);
+    } finally {
+      setIsLoadingCode(false);
+    }
+  };
 
-  const filteredReferrals = counselorReferrals.filter(r => 
-    r.student_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    r.reason.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const newCases = filteredReferrals.filter(r => r.status === 'pending_counselor');
-  const inProgressCases = filteredReferrals.filter(r => r.status === 'scheduled_meeting');
-  const resolvedCases = filteredReferrals.filter(r => r.status === 'resolved' || r.status === 'closed');
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent"></div>
-      </div>
-    );
-  }
+  const handleDownload = async () => {
+    try {
+      const zip = new JSZip();
+      
+      // Fetch manifest.json
+      const manifestRes = await fetch('/extension/manifest.json');
+      const manifestText = await manifestRes.text();
+      zip.file('manifest.json', manifestText);
+      
+      // Fetch content.js
+      const contentRes = await fetch('/extension/content.js');
+      const contentText = await contentRes.text();
+      
+      // Replace the placeholder API_BASE_URL with the actual current origin
+      const currentOrigin = window.location.origin;
+      const apiBaseUrl = `${currentOrigin}/api`;
+      
+      const updatedContentText = contentText.replace(
+        /const API_BASE_URL = ".*?";/,
+        `const API_BASE_URL = "${apiBaseUrl}";`
+      );
+      
+      zip.file('content.js', updatedContentText);
+      
+      // Generate ZIP
+      const content = await zip.generateAsync({ type: 'blob' });
+      saveAs(content, 'takamol-extension.zip');
+      
+    } catch (error) {
+      console.error('Error generating extension ZIP:', error);
+      alert('حدث خطأ أثناء تحميل الإضافة. يرجى المحاولة مرة أخرى.');
+    }
+  };
 
   return (
-    <div className="space-y-8 pb-12 h-[calc(100vh-6rem)] flex flex-col">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 shrink-0">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">لوحة الموجه الطلابي</h1>
-          <p className="text-sm md:text-base text-slate-500 mt-1">إدارة ومتابعة الحالات السلوكية المحالة من الوكيل</p>
-        </div>
+    <div className="p-6 max-w-5xl mx-auto space-y-8 animate-fade-in">
+      {/* Hero Section */}
+      <div className="bg-gradient-to-br from-emerald-600 to-teal-800 rounded-3xl p-8 md:p-12 text-white shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-black/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2"></div>
         
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-            <input
-              type="text"
-              placeholder="بحث عن طالب أو حالة..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full md:w-64 pl-4 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-            />
+        <div className="relative z-10 flex flex-col items-center text-center space-y-6">
+          <div className="bg-white/20 p-4 rounded-2xl backdrop-blur-sm">
+            <Puzzle size={48} className="text-emerald-100" />
+          </div>
+          <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight">
+            أداة الرصد الآلي المتقدمة 🚀
+          </h1>
+          <p className="text-lg md:text-xl text-emerald-50 max-w-2xl leading-relaxed">
+            حمل إضافة المتصفح الخاصة بالمدرسة لربط بوابتنا بنظام نور بضغطة زر، دون الحاجة للانتظار أو الإدخال اليدوي.
+          </p>
+          
+          <button
+            onClick={handleDownload}
+            className="mt-4 group relative inline-flex items-center justify-center gap-3 px-8 py-4 font-bold text-emerald-700 bg-white rounded-full overflow-hidden shadow-2xl transition-transform hover:scale-105 active:scale-95"
+          >
+            <span className="absolute inset-0 w-full h-full -mt-1 rounded-lg opacity-30 bg-gradient-to-b from-transparent via-transparent to-black"></span>
+            <Download size={24} className="animate-bounce" />
+            <span className="text-lg">تحميل ملف الأداة (ZIP) 📥</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Sync Code Section */}
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-8 text-center">
+        <div className="flex flex-col items-center justify-center space-y-4">
+          <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-2">
+            <Key className="text-blue-600" size={32} />
+          </div>
+          <h2 className="text-2xl font-bold text-slate-800">كود الربط السريع</h2>
+          <p className="text-slate-600 max-w-md mx-auto">
+            أدخل هذا الكود في الإضافة عند طلبها لمرة واحدة لربط حسابك بنظام نور.
+          </p>
+          
+          <div className="mt-6 p-6 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col items-center gap-4 min-w-[300px]">
+            {isLoadingCode ? (
+              <div className="animate-pulse flex space-x-4 space-x-reverse">
+                <div className="h-12 bg-slate-200 rounded w-32"></div>
+              </div>
+            ) : syncCode ? (
+              <div className="text-4xl font-mono font-bold text-slate-800 tracking-widest">
+                {syncCode}
+              </div>
+            ) : (
+              <div className="text-slate-500">لا يوجد كود ربط حالياً</div>
+            )}
+            
+            <button
+              onClick={generateSyncCode}
+              disabled={isLoadingCode}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw size={16} className={isLoadingCode ? 'animate-spin' : ''} />
+              تحديث الكود
+            </button>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 min-h-0">
-        <KanbanColumn 
-          title="حالات جديدة" 
-          icon={AlertCircle} 
-          color="bg-red-500" 
-          cases={newCases} 
-          count={newCases.length} 
-        />
-        <KanbanColumn 
-          title="قيد المتابعة" 
-          icon={Clock} 
-          color="bg-amber-500" 
-          cases={inProgressCases} 
-          count={inProgressCases.length} 
-        />
-        <KanbanColumn 
-          title="حالات معالجة" 
-          icon={CheckCircle2} 
-          color="bg-emerald-500" 
-          cases={resolvedCases} 
-          count={resolvedCases.length} 
-        />
+      {/* Installation Guide */}
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-8">
+        <h2 className="text-2xl font-bold text-slate-800 mb-8 text-center flex items-center justify-center gap-2">
+          <Settings className="text-emerald-600" />
+          دليل التثبيت السريع
+        </h2>
+        
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          {/* Step 1 */}
+          <div className="relative flex flex-col items-center text-center p-6 bg-slate-50 rounded-2xl border border-slate-100">
+            <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center font-bold text-xl mb-4 shadow-sm">
+              1
+            </div>
+            <h3 className="font-bold text-slate-800 mb-2">تحميل وفك الضغط</h3>
+            <p className="text-sm text-slate-600">
+              حمل الملف المضغوط (ZIP) من الزر أعلاه وفك الضغط عنه في مجلد على جهازك.
+            </p>
+          </div>
+
+          {/* Step 2 */}
+          <div className="relative flex flex-col items-center text-center p-6 bg-slate-50 rounded-2xl border border-slate-100">
+            <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center font-bold text-xl mb-4 shadow-sm">
+              2
+            </div>
+            <h3 className="font-bold text-slate-800 mb-2">فتح الإضافات</h3>
+            <p className="text-sm text-slate-600">
+              افتح صفحة الإضافات في متصفح كروم عبر كتابة <code className="bg-slate-200 px-1 rounded text-emerald-700 font-mono text-xs">chrome://extensions</code> في شريط العنوان.
+            </p>
+          </div>
+
+          {/* Step 3 */}
+          <div className="relative flex flex-col items-center text-center p-6 bg-slate-50 rounded-2xl border border-slate-100">
+            <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center font-bold text-xl mb-4 shadow-sm">
+              3
+            </div>
+            <h3 className="font-bold text-slate-800 mb-2">وضع المطور</h3>
+            <p className="text-sm text-slate-600">
+              فعّل خيار "وضع المطور" (Developer mode) الموجود في أعلى يمين/يسار الشاشة.
+            </p>
+          </div>
+
+          {/* Step 4 */}
+          <div className="relative flex flex-col items-center text-center p-6 bg-slate-50 rounded-2xl border border-slate-100">
+            <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center font-bold text-xl mb-4 shadow-sm">
+              4
+            </div>
+            <h3 className="font-bold text-slate-800 mb-2">تحميل الإضافة</h3>
+            <p className="text-sm text-slate-600">
+              اضغط على "تحميل إضافة تم فك ضغطها" (Load unpacked) واختر المجلد الذي قمت بفك ضغطه.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Important Notes */}
+      <div className="bg-amber-50 rounded-2xl p-6 border border-amber-200 flex gap-4 items-start">
+        <AlertCircle className="text-amber-600 shrink-0 mt-1" />
+        <div>
+          <h3 className="font-bold text-amber-800 mb-2">ملاحظات هامة:</h3>
+          <ul className="list-disc list-inside text-sm text-amber-700 space-y-1">
+            <li>هذه الإضافة تعمل فقط على متصفح Google Chrome أو المتصفحات المبنية على Chromium (مثل Edge و Brave).</li>
+            <li>تأكد من تسجيل الدخول إلى نظام نور قبل استخدام الإضافة.</li>
+            <li>الإضافة مصممة للعمل حصرياً في صفحة رصد الدرجات في نظام نور.</li>
+          </ul>
+        </div>
       </div>
     </div>
   );
 };
 
-export default CounselorDashboard;
+export default ExtensionSetup;

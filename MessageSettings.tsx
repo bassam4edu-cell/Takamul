@@ -1,289 +1,429 @@
-import { apiFetch } from '../utils/api';
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { logAction } from '../services/auditLogger';
-import { 
-  FileText, 
-  Search, 
-  ChevronLeft, 
-  Clock, 
-  CheckCircle2, 
-  AlertCircle,
-  RotateCcw,
-  Calendar,
-  ShieldAlert,
-  Trash2,
-  Edit2
-} from 'lucide-react';
-import { Referral } from '../types';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
-import { motion } from 'motion/react';
+import { 
+  CheckCircle2, 
+  Dices, 
+  Save, 
+  Hand, 
+  BookOpen, 
+  AlertTriangle, 
+  X,
+  Star,
+  Clock,
+  XCircle,
+  Check,
+  Lock
+} from 'lucide-react';
+import { apiFetch } from '../utils/api';
+import { formatHijriDate } from '../utils/dateUtils';
 
-const AdminReferrals: React.FC = () => {
+interface Student {
+  id: number;
+  rollNumber: number;
+  name: string;
+  points: number;
+  avatar: string;
+}
+
+interface StudentState {
+  attendance: 'present' | 'late' | 'absent';
+  participation: boolean;
+  homework: boolean;
+  negativeNote: boolean;
+}
+
+const mockStudents: Student[] = [
+  { id: 1, rollNumber: 1, name: 'خالد عبدالله', points: 15, avatar: 'https://ui-avatars.com/api/?name=خالد+عبدالله&background=0D8ABC&color=fff' },
+  { id: 2, rollNumber: 2, name: 'سعود محمد', points: 10, avatar: 'https://ui-avatars.com/api/?name=سعود+محمد&background=0D8ABC&color=fff' },
+  { id: 3, rollNumber: 3, name: 'فيصل فهد', points: 22, avatar: 'https://ui-avatars.com/api/?name=فيصل+فهد&background=0D8ABC&color=fff' },
+  { id: 4, rollNumber: 4, name: 'عبدالرحمن سالم', points: 5, avatar: 'https://ui-avatars.com/api/?name=عبدالرحمن+سالم&background=0D8ABC&color=fff' },
+  { id: 5, rollNumber: 5, name: 'عمر خالد', points: 18, avatar: 'https://ui-avatars.com/api/?name=عمر+خالد&background=0D8ABC&color=fff' },
+];
+
+const behaviorChips = [
+  'إزعاج', 
+  'إهمال أدوات', 
+  'نوم بالحصة', 
+  'تميز وابتكار', 
+  'مساعدة زميل'
+];
+
+const ClassTracker: React.FC = () => {
   const { user } = useAuth();
-  const navigate = useNavigate();
-  const [referrals, setReferrals] = useState<Referral[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [deletingReferralId, setDeletingReferralId] = useState<number | null>(null);
+  const isReadOnly = user?.role !== 'teacher';
 
-  useEffect(() => {
-    fetchReferrals();
-  }, []);
+  const [grade, setGrade] = useState('');
+  const [section, setSection] = useState('');
+  const [subject, setSubject] = useState('رياضيات');
+  const [period, setPeriod] = useState<number>(1);
+  
+  const [availableGrades, setAvailableGrades] = useState<string[]>([]);
+  const [availableSections, setAvailableSections] = useState<string[]>([]);
+  
+  const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const fetchReferrals = async () => {
-    try {
-      const res = await apiFetch(`/api/referrals?userId=${user?.id}&role=${user?.role}`);
-      if (res.ok) {
-        const data = await res.json();
-        setReferrals(data);
-      }
-    } catch (err) {
-      console.error('Failed to fetch referrals:', err);
-    } finally {
-      setLoading(false);
-    }
+  const [studentsState, setStudentsState] = useState<Record<number, StudentState>>({});
+
+  const [highlightedStudent, setHighlightedStudent] = useState<number | null>(null);
+  const [selectedStudentForModal, setSelectedStudentForModal] = useState<Student | null>(null);
+  const [modalNote, setModalNote] = useState('');
+  const [selectedChips, setSelectedChips] = useState<string[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const todayDate = formatHijriDate(new Date());
+
+  const handleAttendanceChange = (studentId: number, status: 'present' | 'late' | 'absent') => {
+    if (isReadOnly) return;
+    setStudentsState(prev => ({
+      ...prev,
+      [studentId]: { ...prev[studentId], attendance: status }
+    }));
   };
 
-  const handleDelete = async (id: number) => {
-    setDeletingReferralId(null);
-    try {
-      const res = await apiFetch(`/api/admin/referrals/${id}/delete`, {
-        method: 'POST'
+  const toggleAssessment = (studentId: number, field: keyof Omit<StudentState, 'attendance'>) => {
+    if (isReadOnly) return;
+    setStudentsState(prev => ({
+      ...prev,
+      [studentId]: { ...prev[studentId], [field]: !prev[studentId][field] }
+    }));
+  };
+
+  const markAllPresent = () => {
+    if (isReadOnly) return;
+    setStudentsState(prev => {
+      const newState = { ...prev };
+      Object.keys(newState).forEach(id => {
+        newState[Number(id)].attendance = 'present';
       });
-      if (res.ok) {
-        const referral = referrals.find(r => r.id === id);
-        logAction(
-          'التحويلات',
-          'DELETE',
-          'إدارة التحويلات',
-          `قام بحذف تحويل الطالب ${referral?.student_name}`
-        );
-        setReferrals(referrals.filter(r => r.id !== id));
-      } else {
-        alert('فشل حذف التحويل');
+      return newState;
+    });
+  };
+
+  const pickRandomStudent = () => {
+    if (isReadOnly || students.length === 0) return;
+    let counter = 0;
+    const interval = setInterval(() => {
+      const randomIndex = Math.floor(Math.random() * students.length);
+      setHighlightedStudent(students[randomIndex].id);
+      counter++;
+      if (counter > 10) {
+        clearInterval(interval);
+        setTimeout(() => setHighlightedStudent(null), 3000);
       }
-    } catch (err) {
-      console.error(err);
-      alert('حدث خطأ أثناء الحذف');
-    }
+    }, 100);
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'pending_vp':
-        return <span className="px-3 py-1.5 bg-red-50 text-red-700 rounded-xl text-[10px] font-extrabold border border-red-100 flex items-center gap-1.5 w-fit"><ShieldAlert size={14} /> بانتظار الوكيل</span>;
-      case 'pending_counselor':
-        return <span className="px-3 py-1.5 bg-amber-50 text-amber-700 rounded-xl text-[10px] font-extrabold border border-amber-100 flex items-center gap-1.5 w-fit"><Clock size={14} /> قيد المتابعة</span>;
-      case 'scheduled_meeting':
-        return <span className="px-3 py-1.5 bg-primary/5 text-primary rounded-xl text-[10px] font-extrabold border border-primary/10 flex items-center gap-1.5 w-fit"><Calendar size={14} /> موعد جلسة</span>;
-      case 'returned_to_teacher':
-        return <span className="px-3 py-1.5 bg-amber-50 text-amber-700 rounded-xl text-[10px] font-extrabold border border-amber-100 flex items-center gap-1.5 w-fit"><RotateCcw size={14} /> معاد للمعلم</span>;
-      case 'resolved':
-        return <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-xl text-[10px] font-extrabold border border-emerald-100 flex items-center gap-1.5 w-fit"><CheckCircle2 size={14} /> تمت المعالجة</span>;
-      default:
-        return <span className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-xl text-[10px] font-extrabold flex items-center gap-1.5 w-fit"><AlertCircle size={14} /> غير معروف</span>;
-    }
+  const openStudentModal = (student: Student) => {
+    if (isReadOnly) return;
+    setSelectedStudentForModal(student);
+    setSelectedChips([]);
+    setModalNote('');
   };
 
-  const filteredReferrals = referrals.filter(r => {
-    const matchesSearch = 
-      r.student_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.student_national_id?.includes(searchQuery) ||
-      r.teacher_name?.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesStatus = statusFilter === 'all' || r.status === statusFilter;
+  const handleSaveToRecord = () => {
+    if (isReadOnly) return;
+    setIsSaving(true);
+    setTimeout(() => {
+      setIsSaving(false);
+      setSelectedStudentForModal(null);
+    }, 1000);
+  };
 
-    return matchesSearch && matchesStatus;
-  });
+  const toggleChip = (chip: string) => {
+    if (isReadOnly) return;
+    setSelectedChips(prev => 
+      prev.includes(chip) ? prev.filter(c => c !== chip) : [...prev, chip]
+    );
+  };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">إدارة التحويلات</h1>
-          <p className="text-slate-500 text-sm mt-2 font-bold">عرض وتعديل وحذف جميع التحويلات في النظام</p>
-        </div>
-      </div>
-
-      <div className="sts-card p-6 space-y-6">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-            <input
-              type="text"
-              placeholder="ابحث باسم الطالب، رقم الهوية، أو اسم المعلم..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="sts-input pl-4 pr-12 w-full"
-            />
-          </div>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="sts-input md:w-64"
-          >
-            <option value="all">جميع الحالات</option>
-            <option value="pending_vp">بانتظار الوكيل</option>
-            <option value="pending_counselor">قيد المتابعة</option>
-            <option value="scheduled_meeting">موعد جلسة</option>
-            <option value="returned_to_teacher">معاد للمعلم</option>
-            <option value="resolved">تمت المعالجة</option>
-          </select>
-        </div>
-
-        {loading ? (
-          <div className="py-12 flex justify-center">
-            <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
-          </div>
-        ) : filteredReferrals.length === 0 ? (
-          <div className="py-12 text-center text-slate-500 font-bold">
-            لا توجد تحويلات مطابقة للبحث
-          </div>
-        ) : (
-          <>
-            {/* Mobile Card View */}
-            <div className="md:hidden space-y-4">
-              {filteredReferrals.map((referral) => (
-                <div key={referral.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm space-y-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <span className="text-xs font-bold text-slate-400 block mb-1">رقم التحويل</span>
-                      <span className="text-sm font-bold text-slate-900">#{referral.id}</span>
-                    </div>
-                    <div>{getStatusBadge(referral.status)}</div>
-                  </div>
-                  
-                  <div>
-                    <span className="text-xs font-bold text-slate-400 block mb-1">الطالب</span>
-                    <div className="font-bold text-slate-900">{referral.student_name}</div>
-                    <div className="text-[10px] text-slate-500">{referral.student_national_id}</div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <span className="text-xs font-bold text-slate-400 block mb-1">المعلم المحيل</span>
-                      <span className="text-sm font-bold text-slate-700">{referral.teacher_name}</span>
-                    </div>
-                    <div>
-                      <span className="text-xs font-bold text-slate-400 block mb-1">تاريخ التحويل</span>
-                      <span className="text-sm font-bold text-slate-500">{new Date(referral.created_at).toLocaleDateString('ar-SA')}</span>
-                    </div>
-                  </div>
-
-                  <div className="pt-3 border-t border-slate-50 flex gap-2">
-                    <button
-                      onClick={() => navigate(`/dashboard/referral/${referral.id}`)}
-                      className="flex-1 py-2 bg-primary/10 text-primary rounded-xl font-bold text-sm flex items-center justify-center gap-2"
-                    >
-                      <Edit2 size={16} />
-                      عرض وتعديل
-                    </button>
-                    <button
-                      onClick={() => setDeletingReferralId(referral.id)}
-                      className="flex-1 py-2 bg-red-50 text-red-600 rounded-xl font-bold text-sm flex items-center justify-center gap-2"
-                    >
-                      <Trash2 size={16} />
-                      حذف
-                    </button>
-                  </div>
-                </div>
+    <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6 pb-24">
+      {/* Top Bar & Tools */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 space-y-4">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+            <select 
+              value={grade} onChange={(e) => setGrade(e.target.value)}
+              className="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-primary focus:border-primary block p-2.5 font-bold"
+            >
+              {availableGrades.map(g => (
+                <option key={g} value={g}>{g}</option>
               ))}
-            </div>
+            </select>
+            <select 
+              value={section} onChange={(e) => setSection(e.target.value)}
+              className="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-primary focus:border-primary block p-2.5 font-bold"
+            >
+              {availableSections.map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            <select 
+              value={subject} onChange={(e) => setSubject(e.target.value)}
+              className="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-primary focus:border-primary block p-2.5 font-bold"
+            >
+              <option value="رياضيات">رياضيات</option>
+              <option value="فيزياء">فيزياء</option>
+              <option value="كيمياء">كيمياء</option>
+            </select>
+            
+            <select 
+              value={period} onChange={(e) => setPeriod(Number(e.target.value))}
+              className="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-primary focus:border-primary block p-2.5 font-bold"
+            >
+              {[1, 2, 3, 4, 5, 6, 7].map(p => (
+                <option key={p} value={p}>الحصة {p}</option>
+              ))}
+            </select>
+          </div>
+          <div className="text-sm font-medium text-slate-500 bg-slate-50 px-4 py-2 rounded-lg">
+            {todayDate}
+          </div>
+        </div>
 
-            {/* Desktop Table View */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-right">
-                <thead>
-                  <tr className="border-b-2 border-slate-100">
-                    <th className="pb-4 font-black text-slate-400 text-xs uppercase tracking-widest">رقم التحويل</th>
-                    <th className="pb-4 font-black text-slate-400 text-xs uppercase tracking-widest">الطالب</th>
-                    <th className="pb-4 font-black text-slate-400 text-xs uppercase tracking-widest">المعلم المحيل</th>
-                    <th className="pb-4 font-black text-slate-400 text-xs uppercase tracking-widest">تاريخ التحويل</th>
-                    <th className="pb-4 font-black text-slate-400 text-xs uppercase tracking-widest">الحالة</th>
-                    <th className="pb-4 font-black text-slate-400 text-xs uppercase tracking-widest">الإجراءات</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {filteredReferrals.map((referral) => (
-                    <tr key={referral.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="py-4 text-sm font-bold text-slate-900">#{referral.id}</td>
-                      <td className="py-4">
-                        <div className="font-bold text-slate-900">{referral.student_name}</div>
-                        <div className="text-[10px] text-slate-500">{referral.student_national_id}</div>
-                      </td>
-                      <td className="py-4 text-sm font-bold text-slate-700">{referral.teacher_name}</td>
-                      <td className="py-4 text-sm font-bold text-slate-500">{new Date(referral.created_at).toLocaleDateString('ar-SA')}</td>
-                      <td className="py-4">{getStatusBadge(referral.status)}</td>
-                      <td className="py-4">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => navigate(`/dashboard/referral/${referral.id}`)}
-                            className="p-2 text-primary hover:bg-primary/10 rounded-xl transition-colors"
-                            title="عرض وتعديل"
-                          >
-                            <Edit2 size={18} />
-                          </button>
-                          <button
-                            onClick={() => setDeletingReferralId(referral.id)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition-colors"
-                            title="حذف"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
+        {!isReadOnly && (
+          <div className="flex flex-wrap gap-3 pt-2 border-t border-slate-100">
+            <button 
+              onClick={markAllPresent}
+              className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold py-2.5 px-4 rounded-xl transition-all duration-200"
+            >
+              <CheckCircle2 size={18} />
+              <span className="text-sm">تحضير الكل حاضر</span>
+            </button>
+            
+            <button 
+              onClick={pickRandomStudent}
+              className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold py-2.5 px-4 rounded-xl transition-all duration-200"
+            >
+              <Dices size={18} />
+              <span className="text-sm">اختيار عشوائي</span>
+            </button>
+
+            <button 
+              className="flex-1 md:flex-none md:mr-auto flex items-center justify-center gap-2 bg-primary text-white hover:bg-primary/90 font-bold py-2.5 px-6 rounded-xl transition-all duration-200 shadow-sm shadow-primary/20"
+            >
+              <Save size={18} />
+              <span className="text-sm">اعتماد وحفظ في السجل الشامل</span>
+            </button>
+          </div>
         )}
       </div>
 
-      {deletingReferralId && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-6">
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            onClick={() => setDeletingReferralId(null)}
-            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-          />
-          <motion.div 
-            initial={{ scale: 0.9, y: 20, opacity: 0 }}
-            animate={{ scale: 1, y: 0, opacity: 1 }}
-            className="bg-white w-full max-w-sm rounded-[2.5rem] p-10 shadow-2xl relative z-10 text-center space-y-8"
-          >
-            <div className="w-20 h-20 bg-red-50 text-red-600 rounded-3xl flex items-center justify-center mx-auto shadow-sm border border-red-100">
-              <Trash2 size={36} />
-            </div>
-            <div className="space-y-2">
-              <h3 className="text-xl font-black text-slate-800">حذف التحويل؟</h3>
-              <p className="text-sm text-slate-500 font-bold leading-relaxed">
-                هل أنت متأكد من رغبتك في حذف هذا التحويل نهائياً؟ لا يمكن التراجع عن هذا الإجراء.
-              </p>
-            </div>
-            <div className="flex gap-4">
-              <button 
-                onClick={() => handleDelete(deletingReferralId)}
-                className="flex-1 bg-red-600 text-white py-4 rounded-2xl font-black hover:bg-red-700 transition-all shadow-xl shadow-red-600/20"
+      {/* Students Grid */}
+      <div className="space-y-3">
+        {loading ? (
+          <div className="text-center py-12 text-slate-500">جاري تحميل الطلاب...</div>
+        ) : (
+          students.map((student) => {
+            const state = studentsState[student.id];
+            if (!state) return null;
+            const isHighlighted = highlightedStudent === student.id;
+
+            return (
+              <motion.div 
+                key={student.id}
+                initial={false}
+                animate={{
+                  scale: isHighlighted ? 1.02 : 1,
+                  boxShadow: isHighlighted ? '0 10px 25px -5px rgba(99, 102, 241, 0.4)' : '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+                  borderColor: isHighlighted ? '#6366f1' : '#f1f5f9'
+                }}
+                className={`bg-white rounded-xl border p-3 md:p-4 flex flex-col md:flex-row items-center gap-4 transition-all duration-200 ${isHighlighted ? 'ring-2 ring-indigo-500 ring-offset-2 z-10 relative' : ''}`}
               >
-                تأكيد الحذف
-              </button>
-              <button 
-                onClick={() => setDeletingReferralId(null)}
-                className="flex-1 bg-slate-100 text-slate-600 py-4 rounded-2xl font-black hover:bg-slate-200 transition-all"
-              >
-                إلغاء الأمر
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      )}
+                {/* Identity (Right) */}
+                <div 
+                  className="flex items-center gap-3 w-full md:w-1/3 cursor-pointer group"
+                  onClick={() => openStudentModal(student)}
+                >
+                  <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500 shrink-0">
+                    {student.id}
+                  </div>
+                  <img src={student.avatar} alt={student.name} className="w-12 h-12 rounded-full shadow-sm" />
+                  <div>
+                    <h3 className="font-bold text-slate-800 group-hover:text-primary transition-colors">{student.name}</h3>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                      <span className="text-xs font-bold text-slate-500">100 نقطة</span>
+                    </div>
+                  </div>
+                </div>
+
+              {/* Attendance (Center) */}
+              <div className="flex items-center justify-center w-full md:w-1/3 bg-slate-50 p-1.5 rounded-xl">
+                <button
+                  onClick={() => handleAttendanceChange(student.id, 'present')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-bold transition-all duration-200 ${
+                    state.attendance === 'present' 
+                      ? 'bg-white text-emerald-600 shadow-sm ring-1 ring-slate-200/50' 
+                      : 'text-slate-400 hover:text-slate-600'
+                  }`}
+                >
+                  <CheckCircle2 size={14} className={state.attendance === 'present' ? 'text-emerald-500' : ''} />
+                  حاضر
+                </button>
+                <button
+                  onClick={() => handleAttendanceChange(student.id, 'late')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-bold transition-all duration-200 ${
+                    state.attendance === 'late' 
+                      ? 'bg-white text-amber-600 shadow-sm ring-1 ring-slate-200/50' 
+                      : 'text-slate-400 hover:text-slate-600'
+                  }`}
+                >
+                  <Clock size={14} className={state.attendance === 'late' ? 'text-amber-500' : ''} />
+                  متأخر
+                </button>
+                <button
+                  onClick={() => handleAttendanceChange(student.id, 'absent')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-bold transition-all duration-200 ${
+                    state.attendance === 'absent' 
+                      ? 'bg-white text-red-600 shadow-sm ring-1 ring-slate-200/50' 
+                      : 'text-slate-400 hover:text-slate-600'
+                  }`}
+                >
+                  <XCircle size={14} className={state.attendance === 'absent' ? 'text-red-500' : ''} />
+                  غائب
+                </button>
+              </div>
+
+              {/* Quick Assessment (Left) */}
+              <div className="flex items-center justify-end gap-3 w-full md:w-1/3">
+                <button
+                  onClick={() => toggleAssessment(student.id, 'participation')}
+                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 ${
+                    state.participation 
+                      ? 'bg-indigo-100 text-indigo-600 ring-2 ring-indigo-500/20' 
+                      : 'bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600'
+                  }`}
+                  title="مشاركة / نشط"
+                >
+                  <Hand size={18} />
+                </button>
+                <button
+                  onClick={() => toggleAssessment(student.id, 'homework')}
+                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 ${
+                    state.homework 
+                      ? 'bg-blue-100 text-blue-600 ring-2 ring-blue-500/20' 
+                      : 'bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600'
+                  }`}
+                  title="حل الواجب"
+                >
+                  <BookOpen size={18} />
+                </button>
+                <button
+                  onClick={() => {
+                    toggleAssessment(student.id, 'negativeNote');
+                    if (!state.negativeNote) {
+                      openStudentModal(student);
+                    }
+                  }}
+                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 ${
+                    state.negativeNote 
+                      ? 'bg-red-100 text-red-600 ring-2 ring-red-500/20' 
+                      : 'bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600'
+                  }`}
+                  title="ملاحظة سلبية"
+                >
+                  <AlertTriangle size={18} />
+                </button>
+              </div>
+            </motion.div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Student Details Modal */}
+      <AnimatePresence>
+        {selectedStudentForModal && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40"
+              onClick={() => setSelectedStudentForModal(null)}
+            />
+            <motion.div 
+              initial={{ opacity: 0, y: '100%' }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="fixed bottom-0 left-0 right-0 md:top-1/2 md:left-1/2 md:right-auto md:bottom-auto md:-translate-x-1/2 md:-translate-y-1/2 w-full md:w-[500px] bg-white rounded-t-3xl md:rounded-3xl shadow-2xl z-50 overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              {/* Modal Header */}
+              <div className="bg-slate-50 p-4 border-b border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <img src={selectedStudentForModal.avatar} alt={selectedStudentForModal.name} className="w-10 h-10 rounded-full shadow-sm" />
+                  <div>
+                    <h3 className="font-bold text-slate-800">{selectedStudentForModal.name}</h3>
+                    <p className="text-xs text-slate-500">رقم الكشف: {selectedStudentForModal.rollNumber}</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setSelectedStudentForModal(null)}
+                  className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-200/50 text-slate-500 hover:bg-slate-200 transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-5 overflow-y-auto space-y-5">
+                <div>
+                  <h4 className="text-sm font-bold text-slate-700 mb-3">تقييم سريع للسلوك:</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {behaviorChips.map(chip => (
+                      <button
+                        key={chip}
+                        onClick={() => toggleChip(chip)}
+                        className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 border ${
+                          selectedChips.includes(chip)
+                            ? 'bg-primary/10 border-primary/30 text-primary'
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        {chip}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-bold text-slate-700 mb-3">ملاحظات إضافية:</h4>
+                  <textarea
+                    value={modalNote}
+                    onChange={(e) => setModalNote(e.target.value)}
+                    placeholder="اكتب ملاحظة مخصصة هنا..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 min-h-[100px] resize-none"
+                  />
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-4 border-t border-slate-100 bg-white">
+                <button
+                  onClick={handleSaveToRecord}
+                  disabled={isSaving}
+                  className="w-full bg-primary hover:bg-primary/90 disabled:opacity-70 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all"
+                >
+                  {isSaving ? (
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <Save size={18} />
+                      <span>إضافة للسجل الشامل</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
 
-export default AdminReferrals;
+export default ClassTracker;

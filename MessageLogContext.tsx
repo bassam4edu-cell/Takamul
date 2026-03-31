@@ -1,102 +1,36 @@
-import React from 'react';
-import { NavLink } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  FilePlus, 
-  Bell, 
-  UserCircle,
-  BarChart3,
-  FileText,
-  ClipboardList,
-  Users
-} from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import React, { useState } from 'react';
+import { Outlet } from 'react-router-dom';
+import Sidebar from './Sidebar';
+import Header from './Header';
 
-const BottomNav: React.FC = () => {
-  const { user } = useAuth();
-
-  const navItems = [
-    { 
-      title: 'الرئيسية', 
-      path: '/dashboard', 
-      icon: LayoutDashboard,
-      roles: ['teacher', 'vice_principal', 'counselor', 'principal', 'admin']
-    },
-    { 
-      title: 'تحويل', 
-      path: '/dashboard/referral/new', 
-      icon: FilePlus,
-      roles: ['teacher']
-    },
-    { 
-      title: 'التحويلات', 
-      path: '/dashboard/referrals', 
-      icon: ClipboardList,
-      roles: ['vice_principal', 'counselor', 'principal']
-    },
-    { 
-      title: 'التحويلات', 
-      path: '/dashboard/admin-referrals', 
-      icon: ClipboardList,
-      roles: ['admin']
-    },
-    { 
-      title: ' تحضير', 
-      path: '/dashboard/attendance/teacher', 
-      icon: Users,
-      roles: ['teacher']
-    },
-    { 
-      title: 'الرادار', 
-      path: '/dashboard/attendance/radar', 
-      icon: Users,
-      roles: ['vice_principal', 'principal']
-    },
-    { 
-      title: 'السجل', 
-      path: '/dashboard/student-record', 
-      icon: FileText,
-      roles: ['vice_principal', 'counselor', 'principal', 'admin']
-    },
-    { 
-      title: 'التقارير', 
-      path: '/dashboard/reports', 
-      icon: BarChart3,
-      roles: ['principal', 'admin']
-    },
-    { 
-      title: 'الإشعارات', 
-      path: '/dashboard/notifications', 
-      icon: Bell,
-      roles: ['teacher', 'vice_principal', 'counselor', 'principal', 'admin']
-    },
-    { 
-      title: 'حسابي', 
-      path: '/dashboard/settings', 
-      icon: UserCircle,
-      roles: ['teacher', 'vice_principal', 'counselor', 'principal', 'admin']
-    },
-  ];
-
-  const allowedItems = navItems.filter(item => item.roles.includes(user?.role || ''));
+const Layout: React.FC = () => {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 flex items-center justify-around px-2 py-3 z-50 lg:hidden safe-area-bottom">
-      {allowedItems.map((item) => (
-        <NavLink
-          key={item.path}
-          to={item.path}
-          className={({ isActive }) => `
-            flex flex-col items-center gap-1 px-3 py-1 rounded-xl transition-all
-            ${isActive ? 'text-primary' : 'text-slate-400'}
-          `}
-        >
-          <item.icon size={24} />
-          <span className="text-[10px] font-bold">{item.title}</span>
-        </NavLink>
-      ))}
-    </nav>
+    <div className="flex h-screen bg-slate-50 font-sans overflow-hidden print:h-auto print:overflow-visible">
+      {/* Mobile Drawer Overlay */}
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-slate-900/50 z-40 md:hidden backdrop-blur-sm transition-opacity"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <div className={`fixed inset-y-0 right-0 z-50 transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full'} md:block no-print`}>
+        <Sidebar onClose={() => setIsMobileMenuOpen(false)} />
+      </div>
+
+      <div className="flex-1 flex flex-col overflow-hidden relative print:overflow-visible">
+        <div className="no-print">
+          <Header onMenuClick={() => setIsMobileMenuOpen(true)} />
+        </div>
+        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-slate-50 p-4 md:p-6 pb-6 print:overflow-visible print:p-0">
+          <Outlet />
+        </main>
+      </div>
+    </div>
   );
 };
 
-export default BottomNav;
+export default Layout;

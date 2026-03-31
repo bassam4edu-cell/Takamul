@@ -1,4 +1,4 @@
-const https = require('https');
+import https from 'https';
 https.get('https://ibb.co/sdWJsnXC', (res) => {
   let data = '';
   res.on('data', (chunk) => { data += chunk; });

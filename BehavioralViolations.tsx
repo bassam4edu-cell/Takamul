@@ -1,96 +1,83 @@
-import React, { useState } from 'react';
-import { 
-  Users, 
-  Shield, 
-  UserCog,
-  Book
-} from 'lucide-react';
-import { motion } from 'motion/react';
-import SchoolUsers from './SchoolUsers';
-import SubjectManagement from '../components/admin/SubjectManagement';
-import StudentManagement from '../components/StudentManagement';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { apiFetch } from '../utils/api';
 
-const AdminDashboard: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'users' | 'subjects' | 'students'>('students');
+export interface SchoolSettings {
+  schoolName: string;
+  schoolLogo?: string;
+}
 
-  return (
-    <div className="space-y-10 pb-12">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">لوحة تحكم المسؤول</h1>
-          <p className="text-slate-500 mt-1 font-bold">إدارة المستخدمين وإدارة المواد المركزية.</p>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="bg-white p-2 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-2">
-            <div className="w-10 h-10 bg-primary/5 text-primary rounded-xl flex items-center justify-center">
-              <Shield size={20} />
-            </div>
-            <div className="pl-4">
-              <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">حالة النظام</p>
-              <p className="text-sm font-extrabold text-emerald-600 flex items-center gap-1.5">
-                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                متصل ومستقر
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
+interface SchoolContextType {
+  settings: SchoolSettings;
+  updateSettings: (newSettings: Partial<SchoolSettings>) => Promise<void>;
+  isLoading: boolean;
+}
 
-      {/* Tabs Navigation */}
-      <div className="flex flex-wrap items-center gap-2 bg-slate-100/80 p-1.5 rounded-2xl w-max mb-8">
-        <button 
-          onClick={() => setActiveTab('students')} 
-          className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'students' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
-        >
-          <Users size={18} />
-          إدارة الطلاب
-        </button>
-        <button 
-          onClick={() => setActiveTab('users')} 
-          className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'users' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
-        >
-          <UserCog size={18} />
-          إدارة الإسناد والمواد
-        </button>
-        <button 
-          onClick={() => setActiveTab('subjects')} 
-          className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'subjects' ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
-        >
-          <Book size={18} />
-          إدارة المواد
-        </button>
-      </div>
-
-      <div className="space-y-12">
-        {activeTab === 'students' && (
-          <motion.div 
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <StudentManagement />
-          </motion.div>
-        )}
-
-        {activeTab === 'users' && (
-          <motion.div 
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <SchoolUsers />
-          </motion.div>
-        )}
-
-        {activeTab === 'subjects' && (
-          <motion.div 
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <SubjectManagement />
-          </motion.div>
-        )}
-      </div>
-    </div>
-  );
+const defaultSettings: SchoolSettings = {
+  schoolName: '',
 };
 
-export default AdminDashboard;
+export const SchoolContext = createContext<SchoolContextType | undefined>(undefined);
+
+export const useSchoolSettings = () => {
+  const context = useContext(SchoolContext);
+  if (!context) throw new Error('useSchoolSettings must be used within SchoolProvider');
+  return context;
+};
+
+export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [settings, setSettings] = useState<SchoolSettings>(defaultSettings);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const response = await apiFetch('/api/settings');
+        if (response.ok) {
+          const data = await response.json();
+          setSettings({
+            schoolName: data.school_name || '',
+            schoolLogo: data.school_logo || '',
+          });
+        }
+      } catch (error) {
+        console.error('Failed to fetch school settings:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchSettings();
+  }, []);
+
+  const updateSettings = async (newSettings: Partial<SchoolSettings>) => {
+    try {
+      const payload = {
+        settings: {
+          school_name: newSettings.schoolName ?? settings.schoolName,
+          school_logo: newSettings.schoolLogo ?? settings.schoolLogo,
+        }
+      };
+
+      const response = await apiFetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        setSettings(prev => ({ ...prev, ...newSettings }));
+      } else {
+        throw new Error('Failed to save settings');
+      }
+    } catch (error) {
+      console.error('Error saving school settings:', error);
+      throw error;
+    }
+  };
+
+  return (
+    <SchoolContext.Provider value={{ settings, updateSettings, isLoading }}>
+      {children}
+    </SchoolContext.Provider>
+  );
+};
