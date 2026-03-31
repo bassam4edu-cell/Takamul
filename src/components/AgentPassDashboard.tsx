@@ -132,7 +132,7 @@ const AgentPassDashboard: React.FC = () => {
     fetchData();
   }, []);
 
-  const handleIssuePass = () => {
+  const handleIssuePass = async () => {
     if (!selectedStudent || !selectedTeacher) {
       alert('الرجاء اختيار الطالب والمعلم');
       return;
@@ -174,8 +174,37 @@ ${confirmUrl}
 الرجاء النقر على الرابط لتأكيد الحالة.
     `;
 
-    // In a real app, we would send this via WhatsApp API
-    console.log(`WhatsApp message for ${teacher?.name}:`, message);
+    // Send via WhatsApp
+    if (teacher?.phone_number) {
+      let phone = teacher.phone_number.replace(/\D/g, '');
+      if (phone.startsWith('05')) {
+        phone = '966' + phone.substring(1);
+      }
+      
+      try {
+        const response = await fetch('/api/whatsapp/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phoneNumber: phone,
+            message: message.trim()
+          })
+        });
+        
+        if (!response.ok) {
+          console.warn('WhatsApp API failed, falling back to wa.me link');
+          const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message.trim())}`;
+          window.open(whatsappUrl, '_blank');
+        }
+      } catch (err) {
+        console.error('Failed to send WhatsApp message:', err);
+        const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message.trim())}`;
+        window.open(whatsappUrl, '_blank');
+      }
+    } else {
+      console.warn('No phone number found for teacher:', teacher?.name);
+      alert('تم إنشاء الإذن، لكن لا يوجد رقم هاتف مسجل للمعلم لإرسال الإشعار عبر الواتساب.');
+    }
     
     // Reset form
     setSelectedStudent('');
