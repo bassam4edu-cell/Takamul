@@ -280,6 +280,33 @@ const BehaviorCard: React.FC<{
 const SmartTracker: React.FC = () => {
   const { user } = useAuth();
   const { logAction } = useAuditLog();
+
+  // --- Drag to Scroll State ---
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
+
+  // --- Drag Handlers ---
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!tableContainerRef.current) return;
+    setIsDragging(true);
+    setStartX(e.pageX - tableContainerRef.current.offsetLeft);
+    setScrollLeft(tableContainerRef.current.scrollLeft);
+  };
+
+  const handleMouseLeaveOrUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || !tableContainerRef.current) return;
+    e.preventDefault();
+    const x = e.pageX - tableContainerRef.current.offsetLeft;
+    const walk = (x - startX) * 1.5;
+    tableContainerRef.current.scrollLeft = scrollLeft - walk;
+  };
+
   // --- Header State ---
   const [grade, setGrade] = useState('');
   const [section, setSection] = useState('');
@@ -1124,7 +1151,15 @@ const SmartTracker: React.FC = () => {
               })}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div 
+              ref={tableContainerRef}
+              onMouseDown={handleMouseDown}
+              onMouseLeave={handleMouseLeaveOrUp}
+              onMouseUp={handleMouseLeaveOrUp}
+              onMouseMove={handleMouseMove}
+              className={`w-full overflow-x-auto overscroll-x-contain scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${isDragging ? 'cursor-grabbing select-none' : 'cursor-grab'}`}
+              style={{ WebkitOverflowScrolling: 'touch' }}
+            >
               <table className="w-full text-right border-collapse">
                 <thead className="bg-slate-100 text-slate-700 font-bold">
                   <tr>

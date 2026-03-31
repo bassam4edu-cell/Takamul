@@ -27,7 +27,7 @@ export const PrintableTracker: React.FC<PrintableTrackerProps> = ({ students, st
       <style>
         {`
           @media print {
-            @page { size: A4 portrait; margin: 5mm; }
+            @page { size: landscape; margin: 1cm; }
             body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             table { page-break-inside: auto; }
             tr { page-break-inside: avoid; page-break-after: auto; }
@@ -64,28 +64,28 @@ export const PrintableTracker: React.FC<PrintableTrackerProps> = ({ students, st
       {/* Master Table */}
       <table className="w-full border-collapse border-2 border-black text-center text-[9px]">
         <thead>
-          <tr className="bg-white text-black border-b-2 border-black">
-            <th rowSpan={2} className="w-6 border border-black p-0.5 font-bold">م</th>
-            <th rowSpan={2} className="w-32 border border-black p-0.5 font-bold text-right pr-1">اسم الطالب</th>
+          <tr className="bg-white text-black border-b-2 border-black print:break-inside-avoid">
+            <th rowSpan={2} className="w-6 border border-black p-0.5 font-bold print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap">م</th>
+            <th rowSpan={2} className="w-32 border border-black p-0.5 font-bold text-right pr-1 print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap">اسم الطالب</th>
             
             {(tasks.participation?.length || 0) > 0 && (
-              <th colSpan={tasks.participation?.length} className="border border-black p-0.5 font-bold">المشاركة</th>
+              <th colSpan={tasks.participation?.length} className="border border-black p-0.5 font-bold print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap">المشاركة</th>
             )}
             {(tasks.homework?.length || 0) > 0 && (
-              <th colSpan={tasks.homework?.length} className="border border-black p-0.5 font-bold">الواجبات</th>
+              <th colSpan={tasks.homework?.length} className="border border-black p-0.5 font-bold print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap">الواجبات</th>
             )}
             {(tasks.performance?.length || 0) > 0 && (
-              <th colSpan={tasks.performance?.length} className="border border-black p-0.5 font-bold">المهام الأدائية</th>
+              <th colSpan={tasks.performance?.length} className="border border-black p-0.5 font-bold print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap">المهام الأدائية</th>
             )}
             {(tasks.exams?.length || 0) > 0 && (
-              <th colSpan={tasks.exams?.length} className="border border-black p-0.5 font-bold">الاختبارات</th>
+              <th colSpan={tasks.exams?.length} className="border border-black p-0.5 font-bold print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap">الاختبارات</th>
             )}
             
-            <th rowSpan={2} className="w-12 border border-black p-0.5 font-bold">المجموع</th>
+            <th rowSpan={2} className="w-12 border border-black p-0.5 font-bold print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap">المجموع</th>
           </tr>
-          <tr className="bg-white text-black text-[7px] border-b-2 border-black">
+          <tr className="bg-white text-black text-[7px] border-b-2 border-black print:break-inside-avoid">
             {tasks.participation?.map(t => (
-              <th key={t.id} className="border border-black p-0.5 font-normal w-6" title={t.name}>
+              <th key={t.id} className="border border-black p-0.5 font-normal w-6 print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap" title={t.name}>
                 <div className="truncate max-w-[30px] mx-auto">{t.name}</div>
                 <div className="flex flex-col items-center gap-0">
                   <div className="text-[6px] text-gray-600 mt-0.5">({t.maxGrade})</div>
@@ -94,7 +94,7 @@ export const PrintableTracker: React.FC<PrintableTrackerProps> = ({ students, st
               </th>
             ))}
             {tasks.homework?.map(t => (
-              <th key={t.id} className="border border-black p-0.5 font-normal w-6" title={t.name}>
+              <th key={t.id} className="border border-black p-0.5 font-normal w-6 print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap" title={t.name}>
                 <div className="truncate max-w-[30px] mx-auto">{t.name}</div>
                 <div className="flex flex-col items-center gap-0">
                   <div className="text-[6px] text-gray-600 mt-0.5">({t.maxGrade})</div>
@@ -103,7 +103,7 @@ export const PrintableTracker: React.FC<PrintableTrackerProps> = ({ students, st
               </th>
             ))}
             {tasks.performance?.map(t => (
-              <th key={t.id} className="border border-black p-0.5 font-normal w-6" title={t.name}>
+              <th key={t.id} className="border border-black p-0.5 font-normal w-6 print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap" title={t.name}>
                 <div className="truncate max-w-[30px] mx-auto">{t.name}</div>
                 <div className="flex flex-col items-center gap-0">
                   <div className="text-[6px] text-gray-600 mt-0.5">({t.maxGrade})</div>
@@ -112,7 +112,7 @@ export const PrintableTracker: React.FC<PrintableTrackerProps> = ({ students, st
               </th>
             ))}
             {tasks.exams?.map(t => (
-              <th key={t.id} className="border border-black p-0.5 font-normal w-6" title={t.name}>
+              <th key={t.id} className="border border-black p-0.5 font-normal w-6 print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap" title={t.name}>
                 <div className="truncate max-w-[30px] mx-auto">{t.name}</div>
                 <div className="flex flex-col items-center gap-0">
                   <div className="text-[6px] text-gray-600 mt-0.5">({t.maxGrade})</div>
@@ -133,32 +133,32 @@ export const PrintableTracker: React.FC<PrintableTrackerProps> = ({ students, st
             const overall = partTotal + hwTotal + perfTotal + examTotal;
 
             return (
-              <tr key={student.id} className="bg-white">
-                <td className="border border-black p-0.5 font-bold text-black">{index + 1}</td>
-                <td className="border border-black p-0.5 text-right pr-1 font-bold text-black text-[10px]">{student.name}</td>
+              <tr key={student.id} className="bg-white print:break-inside-avoid">
+                <td className="border border-black p-0.5 font-bold text-black print:text-[10px] print:px-1 print:py-1">{index + 1}</td>
+                <td className="border border-black p-0.5 text-right pr-1 font-bold text-black text-[10px] print:text-xs print:px-2 print:py-1 print:whitespace-nowrap">{student.name}</td>
                 
                 {tasks.participation?.map(t => (
-                  <td key={t.id} className="border border-black p-0.5 text-black">
+                  <td key={t.id} className="border border-black p-0.5 text-black print:text-[10px] print:px-1 print:py-1">
                     {studentState?.grades?.[t.id] || '-'}
                   </td>
                 ))}
                 {tasks.homework?.map(t => (
-                  <td key={t.id} className="border border-black p-0.5 text-black">
+                  <td key={t.id} className="border border-black p-0.5 text-black print:text-[10px] print:px-1 print:py-1">
                     {studentState?.grades?.[t.id] || '-'}
                   </td>
                 ))}
                 {tasks.performance?.map(t => (
-                  <td key={t.id} className="border border-black p-0.5 text-black">
+                  <td key={t.id} className="border border-black p-0.5 text-black print:text-[10px] print:px-1 print:py-1">
                     {studentState?.grades?.[t.id] || '-'}
                   </td>
                 ))}
                 {tasks.exams?.map(t => (
-                  <td key={t.id} className="border border-black p-0.5 text-black">
+                  <td key={t.id} className="border border-black p-0.5 text-black print:text-[10px] print:px-1 print:py-1">
                     {studentState?.grades?.[t.id] || '-'}
                   </td>
                 ))}
 
-                <td className="border border-black p-0.5 font-black text-[10px] text-black">{overall}</td>
+                <td className="border border-black p-0.5 font-black text-[10px] text-black print:text-[10px] print:px-1 print:py-1">{overall}</td>
               </tr>
             );
           })}
