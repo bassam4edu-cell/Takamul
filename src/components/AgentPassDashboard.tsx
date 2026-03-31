@@ -234,23 +234,43 @@ ${confirmUrl}
   return (
     <div className="space-y-8" dir="rtl">
       {/* Print Styles */}
-      <style dangerouslySetInnerHTML={{ __html: `
-        @media print {
-          body { visibility: hidden !important; background: white !important; }
-          #printable-pass, #printable-report { 
-            visibility: visible !important; 
-            display: block !important;
-            position: absolute !important; 
-            left: 0 !important; 
-            top: 0 !important; 
-            width: 100% !important; 
-            margin: 0 !important;
-            padding: 0 !important;
+      <style type="text/css">
+        {`
+          @media print {
+            /* التمرير والتقسيم النظيف للصفحة الأساسية */
+            @page { size: portrait; margin: 1cm; }
+            
+            /* خدعة العزل: إذا كانت البطاقة موجودة في الشاشة، أخفِ كل شيء ما عداها */
+            body:has(#printable-pass) * {
+              visibility: hidden;
+            }
+            body:has(#printable-pass) #printable-pass, 
+            body:has(#printable-pass) #printable-pass * {
+              visibility: visible;
+            }
+            body:has(#printable-pass) #printable-pass {
+              position: absolute;
+              left: 0; top: 0; width: 100%; margin: 0; padding: 0;
+              box-shadow: none !important; border: none !important;
+            }
+
+            /* عزل التقرير بنفس الطريقة */
+            body:has(#printable-report) * {
+              visibility: hidden;
+            }
+            body:has(#printable-report) #printable-report, 
+            body:has(#printable-report) #printable-report * {
+              visibility: visible;
+            }
+            body:has(#printable-report) #printable-report {
+              position: absolute;
+              left: 0; top: 0; width: 100%; margin: 0; padding: 0;
+            }
+            
+            .no-print { display: none !important; }
           }
-          #printable-pass *, #printable-report * { visibility: visible !important; }
-          .no-print { display: none !important; }
-        }
-      `}} />
+        `}
+      </style>
 
       {/* Printable Report */}
       {isPrintingReport && (
@@ -264,30 +284,30 @@ ${confirmUrl}
             <p className="text-sm text-slate-500">ثانوية أم القرى - نظام تكامل</p>
           </div>
 
-          <table className="w-full border-collapse">
+          <table className="w-full border-collapse print:w-full print:table-auto">
             <thead>
               <tr className="bg-slate-100 border-2 border-slate-900">
-                <th className="border border-slate-900 p-3 text-right">التاريخ</th>
-                <th className="border border-slate-900 p-3 text-right">رقم الإذن</th>
-                <th className="border border-slate-900 p-3 text-right">اسم الطالب</th>
-                <th className="border border-slate-900 p-3 text-right">نوع الإذن</th>
-                <th className="border border-slate-900 p-3 text-right">المعلم</th>
-                <th className="border border-slate-900 p-3 text-right">الوقت</th>
-                <th className="border border-slate-900 p-3 text-right">الحالة</th>
+                <th className="border border-slate-900 p-3 text-right print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap">التاريخ</th>
+                <th className="border border-slate-900 p-3 text-right print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap">رقم الإذن</th>
+                <th className="border border-slate-900 p-3 text-right print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap">اسم الطالب</th>
+                <th className="border border-slate-900 p-3 text-right print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap">نوع الإذن</th>
+                <th className="border border-slate-900 p-3 text-right print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap">المعلم</th>
+                <th className="border border-slate-900 p-3 text-right print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap">الوقت</th>
+                <th className="border border-slate-900 p-3 text-right print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap">الحالة</th>
               </tr>
             </thead>
             <tbody>
               {filteredPasses.map((pass) => (
-                <tr key={pass.id} className="border border-slate-900">
-                  <td className="border border-slate-900 p-3 tabular-nums">{pass.date || 'قديم'}</td>
-                  <td className="border border-slate-900 p-3 tabular-nums">#{pass.id}</td>
-                  <td className="border border-slate-900 p-3 font-bold">{pass.studentName}</td>
-                  <td className="border border-slate-900 p-3">
+                <tr key={pass.id} className="border border-slate-900 print:break-inside-avoid">
+                  <td className="border border-slate-900 p-3 tabular-nums print:text-[10px] print:px-1 print:py-1 print:leading-tight">{pass.date || 'قديم'}</td>
+                  <td className="border border-slate-900 p-3 tabular-nums print:text-[10px] print:px-1 print:py-1 print:leading-tight">#{pass.id}</td>
+                  <td className="border border-slate-900 p-3 font-bold print:text-[10px] print:px-1 print:py-1 print:leading-tight">{pass.studentName}</td>
+                  <td className="border border-slate-900 p-3 print:text-[10px] print:px-1 print:py-1 print:leading-tight">
                     {PASS_TYPES.find(p => p.id === pass.type)?.label}
                   </td>
-                  <td className="border border-slate-900 p-3">{pass.teacherName}</td>
-                  <td className="border border-slate-900 p-3 tabular-nums">{pass.timestamp}</td>
-                  <td className="border border-slate-900 p-3">
+                  <td className="border border-slate-900 p-3 print:text-[10px] print:px-1 print:py-1 print:leading-tight">{pass.teacherName}</td>
+                  <td className="border border-slate-900 p-3 tabular-nums print:text-[10px] print:px-1 print:py-1 print:leading-tight">{pass.timestamp}</td>
+                  <td className="border border-slate-900 p-3 print:text-[10px] print:px-1 print:py-1 print:leading-tight">
                     {pass.status === 'confirmed' ? 'تم التأكيد ✅' : pass.status === 'rejected' ? 'مرفوض ❌' : 'بانتظار التأكيد ⏳'}
                   </td>
                 </tr>
@@ -379,72 +399,74 @@ ${confirmUrl}
       </AnimatePresence>
 
       {/* Hidden Printable Pass */}
-      <div id="printable-pass" className="hidden print:block">
-        <div className="border-4 border-double border-slate-900 p-8 rounded-3xl space-y-8 bg-white max-w-2xl mx-auto">
-          <div className="flex justify-between items-center border-b-2 border-slate-900 pb-6">
-            <div className="text-right">
-              <h1 className="text-3xl font-black text-slate-900">
-                {lastIssuedPass?.type === 'entry' ? 'بطاقة دخول للفصل' : 
-                 lastIssuedPass?.type === 'call' ? 'بطاقة استدعاء للوكيل' : 
-                 'بطاقة خروج من المدرسة'}
-              </h1>
-              <p className="text-lg font-bold text-slate-600">ثانوية أم القرى - نظام تكامل</p>
+      {showPrintModal && lastIssuedPass && (
+        <div id="printable-pass" className="hidden print:block">
+          <div className="border-4 border-double border-slate-900 p-8 rounded-3xl space-y-8 bg-white max-w-2xl mx-auto">
+            <div className="flex justify-between items-center border-b-2 border-slate-900 pb-6">
+              <div className="text-right">
+                <h1 className="text-3xl font-black text-slate-900">
+                  {lastIssuedPass?.type === 'entry' ? 'بطاقة دخول للفصل' : 
+                   lastIssuedPass?.type === 'call' ? 'بطاقة استدعاء للوكيل' : 
+                   'بطاقة خروج من المدرسة'}
+                </h1>
+                <p className="text-lg font-bold text-slate-600">ثانوية أم القرى - نظام تكامل</p>
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-bold text-slate-500">رقم الإذن: #{lastIssuedPass?.id}</p>
+                <p className="text-sm font-bold text-slate-500">التاريخ: {new Date().toLocaleDateString('ar-SA')}</p>
+              </div>
             </div>
-            <div className="text-left">
-              <p className="text-sm font-bold text-slate-500">رقم الإذن: #{lastIssuedPass?.id}</p>
-              <p className="text-sm font-bold text-slate-500">التاريخ: {new Date().toLocaleDateString('ar-SA')}</p>
-            </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-8 py-4">
-            <div className="space-y-2">
-              <span className="text-sm font-black text-slate-400">اسم الطالب:</span>
-              <p className="text-2xl font-black text-slate-900 border-b border-slate-200 pb-2">{lastIssuedPass?.studentName}</p>
+            <div className="grid grid-cols-2 gap-8 py-4">
+              <div className="space-y-2">
+                <span className="text-sm font-black text-slate-400">اسم الطالب:</span>
+                <p className="text-2xl font-black text-slate-900 border-b border-slate-200 pb-2">{lastIssuedPass?.studentName}</p>
+              </div>
+              <div className="space-y-2">
+                <span className="text-sm font-black text-slate-400">نوع الإذن:</span>
+                <p className="text-2xl font-black text-slate-900 border-b border-slate-200 pb-2">
+                  {PASS_TYPES.find(p => p.id === lastIssuedPass?.type)?.label}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <span className="text-sm font-black text-slate-400">المعلم المستلم:</span>
+                <p className="text-xl font-black text-slate-800 border-b border-slate-200 pb-2">{lastIssuedPass?.teacherName}</p>
+              </div>
+              <div className="space-y-2">
+                <span className="text-sm font-black text-slate-400">وقت الإصدار:</span>
+                <p className="text-xl font-black text-slate-800 border-b border-slate-200 pb-2 tabular-nums">{lastIssuedPass?.timestamp}</p>
+              </div>
             </div>
-            <div className="space-y-2">
-              <span className="text-sm font-black text-slate-400">نوع الإذن:</span>
-              <p className="text-2xl font-black text-slate-900 border-b border-slate-200 pb-2">
-                {PASS_TYPES.find(p => p.id === lastIssuedPass?.type)?.label}
+
+            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
+              <span className="text-sm font-black text-slate-400 block mb-2">سبب الإذن:</span>
+              <p className="text-lg font-bold text-slate-700 italic">
+                {lastIssuedPass?.reason || 'لا يوجد سبب محدد'}
               </p>
             </div>
-            <div className="space-y-2">
-              <span className="text-sm font-black text-slate-400">المعلم المستلم:</span>
-              <p className="text-xl font-black text-slate-800 border-b border-slate-200 pb-2">{lastIssuedPass?.teacherName}</p>
-            </div>
-            <div className="space-y-2">
-              <span className="text-sm font-black text-slate-400">وقت الإصدار:</span>
-              <p className="text-xl font-black text-slate-800 border-b border-slate-200 pb-2 tabular-nums">{lastIssuedPass?.timestamp}</p>
-            </div>
-          </div>
 
-          <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
-            <span className="text-sm font-black text-slate-400 block mb-2">سبب الإذن:</span>
-            <p className="text-lg font-bold text-slate-700 italic">
-              {lastIssuedPass?.reason || 'لا يوجد سبب محدد'}
-            </p>
-          </div>
-
-          <div className="flex justify-between items-end pt-8">
-            <div className="text-center space-y-4">
-              <div className="w-32 h-32 bg-white border-2 border-slate-200 rounded-xl flex items-center justify-center p-2">
-                {lastIssuedPass && (
-                  <QRCodeSVG 
-                    value={`${window.location.origin}/verify-pass/${lastIssuedPass.id}`}
-                    size={110}
-                    level="H"
-                    includeMargin={false}
-                  />
-                )}
+            <div className="flex justify-between items-end pt-8">
+              <div className="text-center space-y-4">
+                <div className="w-32 h-32 bg-white border-2 border-slate-200 rounded-xl flex items-center justify-center p-2">
+                  {lastIssuedPass && (
+                    <QRCodeSVG 
+                      value={`${window.location.origin}/verify-pass/${lastIssuedPass.id}`}
+                      size={110}
+                      level="H"
+                      includeMargin={false}
+                    />
+                  )}
+                </div>
+                <p className="text-xs font-black text-slate-400">تحقق من صحة الإذن</p>
               </div>
-              <p className="text-xs font-black text-slate-400">تحقق من صحة الإذن</p>
-            </div>
-            <div className="text-center space-y-2">
-              <p className="text-lg font-black text-slate-900">ختم الوكيل</p>
-              <div className="w-40 h-20 border-2 border-dashed border-slate-300 rounded-2xl" />
+              <div className="text-center space-y-2">
+                <p className="text-lg font-black text-slate-900">ختم الوكيل</p>
+                <div className="w-40 h-20 border-2 border-dashed border-slate-300 rounded-2xl" />
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 no-print">
@@ -644,16 +666,16 @@ ${confirmUrl}
               <p className="text-slate-400 font-bold">لا توجد أذونات في هذا التاريخ</p>
             </div>
           ) : (
-            <table className="w-full text-right">
+            <table className="w-full text-right print:w-full print:table-auto">
               <thead>
                 <tr className="bg-slate-50/50 text-slate-500 text-xs font-black uppercase tracking-wider border-b border-slate-100">
-                  <th className="px-6 py-4">التاريخ</th>
-                  <th className="px-6 py-4">الطالب</th>
-                  <th className="px-6 py-4">المعلم والحصة</th>
-                  <th className="px-6 py-4">نوع الإذن</th>
-                  <th className="px-6 py-4">وقت الإصدار</th>
-                  <th className="px-6 py-4">الحالة</th>
-                  <th className="px-6 py-4 text-center">إجراءات</th>
+                  <th className="px-6 py-4 print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap">التاريخ</th>
+                  <th className="px-6 py-4 print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap">الطالب</th>
+                  <th className="px-6 py-4 print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap">المعلم والحصة</th>
+                  <th className="px-6 py-4 print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap">نوع الإذن</th>
+                  <th className="px-6 py-4 print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap">وقت الإصدار</th>
+                  <th className="px-6 py-4 print:text-[10px] print:px-1 print:py-1 print:whitespace-nowrap">الحالة</th>
+                  <th className="px-6 py-4 text-center no-print">إجراءات</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -663,40 +685,40 @@ ${confirmUrl}
                       key={pass.id}
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: 'auto' }}
-                      className="hover:bg-slate-50/50 transition-colors group"
+                      className="hover:bg-slate-50/50 transition-colors group print:break-inside-avoid"
                     >
-                      <td className="px-6 py-4">
-                        <span className="text-xs font-bold text-slate-500 tabular-nums">{pass.date || 'قديم'}</span>
+                      <td className="px-6 py-4 print:text-[10px] print:px-1 print:py-1 print:leading-tight">
+                        <span className="text-xs font-bold text-slate-500 tabular-nums print:text-[10px]">{pass.date || 'قديم'}</span>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-4 print:text-[10px] print:px-1 print:py-1 print:leading-tight">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center text-xs font-black">
+                          <div className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center text-xs font-black no-print">
                             {pass.studentName.charAt(0)}
                           </div>
-                          <span className="text-sm font-black text-slate-700">{pass.studentName}</span>
+                          <span className="text-sm font-black text-slate-700 print:text-[10px]">{pass.studentName}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-4 print:text-[10px] print:px-1 print:py-1 print:leading-tight">
                         <div className="space-y-0.5">
-                          <span className="text-sm font-bold text-slate-600 block">{pass.teacherName}</span>
-                          <span className="text-[10px] text-slate-400 font-bold">{pass.period}</span>
+                          <span className="text-sm font-bold text-slate-600 block print:text-[10px]">{pass.teacherName}</span>
+                          <span className="text-[10px] text-slate-400 font-bold print:text-[10px]">{pass.period}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-4 print:text-[10px] print:px-1 print:py-1 print:leading-tight">
                         <div className="flex items-center gap-2">
-                          <div className={`w-2 h-2 rounded-full ${PASS_TYPES.find(p => p.id === pass.type)?.color}`} />
-                          <span className="text-xs font-bold text-slate-600">
+                          <div className={`w-2 h-2 rounded-full no-print ${PASS_TYPES.find(p => p.id === pass.type)?.color}`} />
+                          <span className="text-xs font-bold text-slate-600 print:text-[10px]">
                             {PASS_TYPES.find(p => p.id === pass.type)?.label}
                           </span>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        <span className="text-xs font-bold text-slate-500 tabular-nums">{pass.timestamp}</span>
+                      <td className="px-6 py-4 print:text-[10px] print:px-1 print:py-1 print:leading-tight">
+                        <span className="text-xs font-bold text-slate-500 tabular-nums print:text-[10px]">{pass.timestamp}</span>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-4 print:text-[10px] print:px-1 print:py-1 print:leading-tight">
                         <StatusBadge status={pass.status} />
                       </td>
-                      <td className="px-6 py-4 text-center">
+                      <td className="px-6 py-4 text-center no-print">
                         <div className="flex items-center justify-center gap-2">
                           {pass.status === 'pending' && (
                             <button 
