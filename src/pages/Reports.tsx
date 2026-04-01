@@ -15,6 +15,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { logAction } from '../services/auditLogger';
+import { useSchoolSettings } from '../context/SchoolContext';
 
 interface TopStudent {
   name: string;
@@ -47,6 +48,7 @@ interface TeacherStat {
 const Reports: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { settings } = useSchoolSettings();
   const [topStudents, setTopStudents] = useState<TopStudent[]>([]);
   const [referralStatus, setReferralStatus] = useState<ReferralStatus[]>([]);
   const [teacherStats, setTeacherStats] = useState<TeacherStat[]>([]);
@@ -130,8 +132,8 @@ const Reports: React.FC = () => {
           <div className="text-right space-y-1">
             <p className="text-sm font-black">المملكة العربية السعودية</p>
             <p className="text-sm font-black">وزارة التعليم</p>
-            <p className="text-sm font-black">الإدارة العامة للتعليم بمنطقة الرياض</p>
-            <p className="text-sm font-black">مدرسة ثانوية أم القرى</p>
+            <p className="text-sm font-black">{settings.generalDirectorateName || 'الإدارة العامة للتعليم بمنطقة الرياض'}</p>
+            <p className="text-sm font-black">{settings.schoolName ? `مدرسة ${settings.schoolName}` : 'مدرسة ثانوية أم القرى'}</p>
           </div>
           <div className="text-center">
             <img src="https://upload.wikimedia.org/wikipedia/ar/thumb/a/a3/Ministry_of_Education_%28Saudi_Arabia%29_Logo.svg/1200px-Ministry_of_Education_%28Saudi_Arabia%29_Logo.svg.png" alt="شعار الوزارة" className="w-20 h-auto mx-auto grayscale opacity-80" />

@@ -13,7 +13,10 @@ import {
   BookOpen,
   GraduationCap,
   X,
-  UserCircle
+  UserCircle,
+  Edit,
+  Trash2,
+  Save
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { formatHijriDate } from '../utils/dateUtils';
@@ -74,6 +77,25 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly =
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'referrals' | 'behavior' | 'attendance' | 'muwada_akademiya'>('referrals');
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editData, setEditData] = useState<any>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [filters, setFilters] = useState<Record<string, string[]>>({});
+
+  useEffect(() => {
+    const fetchFilters = async () => {
+      try {
+        const res = await apiFetch('/api/admin/students/filters');
+        if (res.ok) {
+          const data = await res.json();
+          setFilters(data.filters || {});
+        }
+      } catch (err) {
+        console.error("Failed to fetch filters", err);
+      }
+    };
+    fetchFilters();
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -137,6 +159,51 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly =
     return formatHijriDate(dateString).split('،')[0];
   };
 
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editData) return;
+
+    try {
+      const res = await apiFetch(`/api/admin/students/${student.id}/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editData)
+      });
+
+      if (res.ok) {
+        setStudent({ ...student, ...editData });
+        setIsEditing(false);
+      } else {
+        alert('فشل تحديث البيانات');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('حدث خطأ أثناء التحديث');
+    }
+  };
+
+  const handleDeleteStudent = async () => {
+    if (!window.confirm('هل أنت متأكد من فصل/حذف هذا الطالب؟ سيتم حذف جميع سجلاته ومخالفاته.')) return;
+    
+    setIsDeleting(true);
+    try {
+      const res = await apiFetch(`/api/admin/students/${student.id}`, {
+        method: 'DELETE'
+      });
+
+      if (res.ok) {
+        navigate('/dashboard/students');
+      } else {
+        alert('فشل حذف الطالب');
+        setIsDeleting(false);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('حدث خطأ أثناء الحذف');
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-20">
       {!isReadOnly && (
@@ -155,8 +222,37 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly =
       <motion.div 
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="bg-white rounded-3xl p-6 md:p-8 border border-slate-100 shadow-sm"
+        className="bg-white rounded-3xl p-6 md:p-8 border border-slate-100 shadow-sm relative"
       >
+        {user?.role === 'admin' && !isReadOnly && (
+          <div className="absolute top-4 left-4 flex gap-2">
+            <button
+              onClick={() => {
+                setEditData({
+                  name: student.name,
+                  national_id: student.national_id,
+                  grade: student.grade,
+                  section: student.section,
+                  parent_phone: (student as any).parent_phone || ''
+                });
+                setIsEditing(true);
+              }}
+              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              title="تعديل بيانات الطالب"
+            >
+              <Edit className="w-5 h-5" />
+            </button>
+            <button
+              onClick={handleDeleteStudent}
+              disabled={isDeleting}
+              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+              title="فصل/حذف الطالب"
+            >
+              <Trash2 className="w-5 h-5" />
+            </button>
+          </div>
+        )}
+
         <div className="flex flex-col md:flex-row gap-6 md:gap-8 items-center md:items-start text-center md:text-right">
           <div className="w-20 h-20 md:w-24 md:h-24 bg-primary/10 rounded-full flex items-center justify-center text-primary shadow-inner shrink-0">
             <User size={40} />
@@ -524,6 +620,101 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly =
           </AnimatePresence>
         </div>
       </div>
+      {/* Edit Modal */}
+      {isEditing && editData && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50">
+              <h3 className="font-bold text-slate-800">تعديل بيانات الطالب</h3>
+              <button 
+                onClick={() => setIsEditing(false)}
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleEditSubmit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">اسم الطالب</label>
+                <input
+                  type="text"
+                  required
+                  value={editData.name}
+                  onChange={(e) => setEditData({...editData, name: e.target.value})}
+                  className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">رقم الهوية</label>
+                <input
+                  type="text"
+                  required
+                  value={editData.national_id}
+                  onChange={(e) => setEditData({...editData, national_id: e.target.value})}
+                  className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 outline-none"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">الصف</label>
+                  <select
+                    required
+                    value={editData.grade}
+                    onChange={(e) => setEditData({...editData, grade: e.target.value, section: ''})}
+                    className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 outline-none"
+                  >
+                    <option value="">-- اختر الصف --</option>
+                    {Object.keys(filters).map(grade => (
+                      <option key={grade} value={grade}>{grade}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">الفصل</label>
+                  <select
+                    required
+                    value={editData.section}
+                    onChange={(e) => setEditData({...editData, section: e.target.value})}
+                    disabled={!editData.grade}
+                    className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 outline-none disabled:bg-slate-50 disabled:text-slate-400"
+                  >
+                    <option value="">-- اختر الفصل --</option>
+                    {(filters[editData.grade] || []).map(section => (
+                      <option key={section} value={section}>{section}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">رقم الجوال</label>
+                <input
+                  type="text"
+                  value={editData.parent_phone || ''}
+                  onChange={(e) => setEditData({...editData, parent_phone: e.target.value})}
+                  className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 outline-none"
+                  placeholder="رقم جوال ولي الأمر"
+                />
+              </div>
+              <div className="pt-4 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(false)}
+                  className="flex-1 py-3 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold transition-colors"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-3 text-white bg-primary hover:bg-primary/90 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
+                >
+                  <Save className="w-5 h-5" />
+                  حفظ التعديلات
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

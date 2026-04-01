@@ -7,6 +7,7 @@ import { formatHijriDate, formatHijriDateTime } from '../utils/dateUtils';
 import { apiFetch } from '../utils/api';
 import { logAction } from '../services/auditLogger';
 import { useAuth } from '../context/AuthContext';
+import { useSchoolSettings } from '../context/SchoolContext';
 
 const positiveBehaviors = ['مجتهد', 'مشاركة فعالة', 'مساعدة زميل'];
 
@@ -47,6 +48,7 @@ interface StudentProfileDrawerProps {
 
 export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ student, state, tasks, grade, section, date, onClose }) => {
   const { user: currentUser } = useAuth();
+  const { settings } = useSchoolSettings();
   if (!state) return null; // إضافة فحص أمان
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
@@ -503,8 +505,8 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
             <div className="text-right print:text-xs text-sm leading-relaxed font-bold">
               <p>المملكة العربية السعودية</p>
               <p>وزارة التعليم</p>
-              <p>إدارة التعليم بمحافظة الخرج</p>
-              <p>ثانوية أم القرى</p>
+              <p>{settings.generalDirectorateName || 'الإدارة العامة للتعليم بمنطقة الرياض'}</p>
+              <p>{settings.schoolName ? `مدرسة ${settings.schoolName}` : 'ثانوية أم القرى'}</p>
             </div>
             <div className="text-center flex flex-col items-center justify-center">
               <h1 className="print:text-lg text-2xl font-bold mt-2">التقرير التفصيلي لمستوى الطالب</h1>

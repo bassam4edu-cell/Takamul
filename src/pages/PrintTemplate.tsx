@@ -81,7 +81,8 @@ const PrintTemplate: React.FC = () => {
         <div className="text-right space-y-1">
           <p className="text-sm font-black">المملكة العربية السعودية</p>
           <p className="text-sm font-black">وزارة التعليم</p>
-          <p className="text-sm font-black">{settings.schoolName ? `مدرسة ${settings.schoolName}` : 'مدرسة ....................'}</p>
+          <p className="text-sm font-black">{settings.generalDirectorateName || 'الإدارة العامة للتعليم بمنطقة الرياض'}</p>
+          <p className="text-sm font-black">{settings.schoolName ? `${settings.schoolName}` : 'ثانوية أم القرى'}</p>
         </div>
         <div className="text-center">
           <img src="https://upload.wikimedia.org/wikipedia/ar/thumb/a/a3/Ministry_of_Education_%28Saudi_Arabia%29_Logo.svg/1200px-Ministry_of_Education_%28Saudi_Arabia%29_Logo.svg.png" alt="شعار الوزارة" className="w-20 h-auto mx-auto grayscale opacity-80" />

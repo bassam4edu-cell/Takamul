@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import * as XLSX from 'xlsx';
 import { 
@@ -10,10 +10,14 @@ import {
   Users, 
   CheckCircle2, 
   X,
-  Loader2
+  Loader2,
+  Building2,
+  UserCircle
 } from 'lucide-react';
+import { useSchoolSettings } from '../context/SchoolContext';
 
 const AdminSettings: React.FC = () => {
+  const { settings, updateSettings } = useSchoolSettings();
   const [clearExisting, setClearExisting] = useState(false);
   const [whatsappEnabled, setWhatsappEnabled] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -21,6 +25,17 @@ const AdminSettings: React.FC = () => {
   const [importMessage, setImportMessage] = useState<{text: string, type: 'success' | 'error'} | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+
+  // Local state for school settings
+  const [schoolName, setSchoolName] = useState(settings.schoolName);
+  const [generalDirectorateName, setGeneralDirectorateName] = useState(settings.generalDirectorateName);
+  const [principalName, setPrincipalName] = useState(settings.principalName);
+
+  useEffect(() => {
+    setSchoolName(settings.schoolName);
+    setGeneralDirectorateName(settings.generalDirectorateName);
+    setPrincipalName(settings.principalName);
+  }, [settings]);
 
   const processFile = async (file: File) => {
     setIsImporting(true);
@@ -183,9 +198,21 @@ const AdminSettings: React.FC = () => {
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setIsSaving(true);
-    setTimeout(() => setIsSaving(false), 1000);
+    try {
+      await updateSettings({
+        schoolName,
+        generalDirectorateName,
+        principalName,
+      });
+      // You could add a success message here
+    } catch (error) {
+      console.error("Failed to save settings:", error);
+      // You could add an error message here
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -279,6 +306,68 @@ const AdminSettings: React.FC = () => {
 
         {/* العمود الأيسر */}
         <div className="space-y-8">
+          {/* إعدادات المدرسة المركزية */}
+          <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-12 h-12 bg-primary/10 text-primary rounded-2xl flex items-center justify-center">
+                <Building2 size={24} />
+              </div>
+              <div>
+                <h2 className="text-xl font-extrabold text-slate-800">إعدادات المدرسة المركزية</h2>
+                <p className="text-sm text-slate-500 font-bold mt-1">تظهر هذه المعلومات في ترويسة جميع التقارير</p>
+              </div>
+            </div>
+
+            <div className="space-y-5">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">اسم الإدارة العامة</label>
+                <input
+                  type="text"
+                  value={generalDirectorateName}
+                  onChange={(e) => setGeneralDirectorateName(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all font-bold text-slate-800"
+                  placeholder="مثال: الإدارة العامة للتعليم بمنطقة الرياض"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">اسم المدرسة</label>
+                <input
+                  type="text"
+                  value={schoolName}
+                  onChange={(e) => setSchoolName(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all font-bold text-slate-800"
+                  placeholder="مثال: ثانوية أم القرى"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">اسم مدير المدرسة</label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">
+                    <UserCircle size={20} />
+                  </div>
+                  <input
+                    type="text"
+                    value={principalName}
+                    onChange={(e) => setPrincipalName(e.target.value)}
+                    className="w-full pr-10 pl-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all font-bold text-slate-800"
+                    placeholder="اسم مدير المدرسة"
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="w-full mt-6 bg-primary hover:bg-primary/90 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-colors shadow-lg shadow-primary/20"
+            >
+              <Save size={20} />
+              {isSaving ? 'جاري الحفظ...' : 'حفظ إعدادات المدرسة'}
+            </button>
+          </div>
+
           {/* إعدادات إشعارات الواتساب */}
           <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
             <h2 className="text-xl font-extrabold text-slate-800 mb-6">إعدادات إشعارات الواتساب</h2>

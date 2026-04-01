@@ -2,10 +2,12 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { useAuth } from '../context/AuthContext';
+import { useSchoolSettings } from '../context/SchoolContext';
 
 const Landing: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { settings } = useSchoolSettings();
 
   const handleSystemClick = () => {
     if (user) {
@@ -31,8 +33,8 @@ const Landing: React.FC = () => {
         >
           <h2 className="text-sm md:text-xl font-bold text-slate-800">المملكة العربية السعودية</h2>
           <h3 className="text-xs md:text-lg font-semibold text-slate-700">وزارة التعليم</h3>
-          <p className="text-[10px] md:text-base text-slate-600">الإدارة العامة للتعليم بمنطقة الرياض</p>
-          <p className="text-[10px] md:text-sm text-emerald-700 font-bold">ثانوية أم القرى بالخرج</p>
+          <p className="text-[10px] md:text-base text-slate-600">{settings.generalDirectorateName || 'الإدارة العامة للتعليم بمنطقة الرياض'}</p>
+          <p className="text-[10px] md:text-sm text-emerald-700 font-bold">{settings.schoolName ? `مدرسة ${settings.schoolName}` : 'ثانوية أم القرى بالخرج'}</p>
         </motion.div>
       </header>
 

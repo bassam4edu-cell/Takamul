@@ -272,8 +272,8 @@ const SubjectManagement: React.FC = () => {
               className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-primary/20 transition-all"
             >
               <option value="all">جميع الفصول</option>
-              <option value="الفصل الأول">الفصل الأول</option>
-              <option value="الفصل الثاني">الفصل الثاني</option>
+              <option value="الفصل الأول">الفصل الدراسي الأول</option>
+              <option value="الفصل الثاني">الفصل الدراسي الثاني</option>
             </select>
           </div>
         )}

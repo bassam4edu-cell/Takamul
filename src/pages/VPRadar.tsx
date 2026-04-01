@@ -7,6 +7,7 @@ import { CheckCircle2, XCircle, Clock, Save, UserCheck, AlertCircle, Printer, Fi
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatHijriDate, formatHijriDateTime } from '../utils/dateUtils';
 import HijriDatePicker from '../components/HijriDatePicker';
+import { useSchoolSettings } from '../context/SchoolContext';
 
 interface AttendanceRecord {
   studentId: number;
@@ -21,6 +22,7 @@ interface AttendanceRecord {
 const VPRadar: React.FC = () => {
   const { user } = useAuth();
   const { addLogEntry } = useMessageLog();
+  const { settings } = useSchoolSettings();
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedPeriod, setSelectedPeriod] = useState<number>(1);
   const [grade, setGrade] = useState('all');
@@ -904,8 +906,8 @@ const VPRadar: React.FC = () => {
               <div className="text-right space-y-1">
                 <p className="text-sm font-black">المملكة العربية السعودية</p>
                 <p className="text-sm font-black">وزارة التعليم</p>
-                <p className="text-sm font-black">الإدارة العامة للتعليم بمنطقة الرياض</p>
-                <p className="text-sm font-black">مدرسة ثانوية أم القرى</p>
+                <p className="text-sm font-black">{settings.generalDirectorateName || 'الإدارة العامة للتعليم بمنطقة الرياض'}</p>
+                <p className="text-sm font-black">{settings.schoolName ? `مدرسة ${settings.schoolName}` : 'مدرسة ثانوية أم القرى'}</p>
               </div>
               <div className="text-center">
                 <img src="https://upload.wikimedia.org/wikipedia/ar/thumb/a/a3/Ministry_of_Education_%28Saudi_Arabia%29_Logo.svg/1200px-Ministry_of_Education_%28Saudi_Arabia%29_Logo.svg.png" alt="شعار الوزارة" className="w-20 h-auto mx-auto grayscale opacity-80" />
@@ -961,6 +963,7 @@ const VPRadar: React.FC = () => {
             <div className="mt-16 print-grid grid-cols-3 gap-8 text-center page-break-inside-avoid">
               <div className="space-y-8">
                 <p className="print-label">مدير المدرسة</p>
+                <p className="text-sm font-bold">{settings.principalName || '....................'}</p>
                 <div className="h-px bg-black w-3/4 mx-auto"></div>
                 <p className="text-sm font-bold">التوقيع: .................</p>
               </div>
@@ -982,8 +985,8 @@ const VPRadar: React.FC = () => {
               <div className="text-right space-y-1">
                 <p className="text-xs font-black">المملكة العربية السعودية</p>
                 <p className="text-xs font-black">وزارة التعليم</p>
-                <p className="text-xs font-black">الإدارة العامة للتعليم بمنطقة الرياض</p>
-                <p className="text-xs font-black">مدرسة ثانوية أم القرى</p>
+                <p className="text-xs font-black">{settings.generalDirectorateName || 'الإدارة العامة للتعليم بمنطقة الرياض'}</p>
+                <p className="text-xs font-black">{settings.schoolName ? `مدرسة ${settings.schoolName}` : 'مدرسة ثانوية أم القرى'}</p>
               </div>
               <div className="text-right space-y-1 text-xs font-bold">
                 <p>الرقم: {Math.floor(Math.random() * 10000)}</p>

@@ -58,6 +58,7 @@ const SchoolUsers: React.FC = React.memo(() => {
   const [pendingAssignments, setPendingAssignments] = useState<PendingAssignment[]>([]);
   const [builderSubjectId, setBuilderSubjectId] = useState<number | ''>('');
   const [builderGrade, setBuilderGrade] = useState<string>('');
+  const [builderSemester, setBuilderSemester] = useState<string>('');
   const [builderSections, setBuilderSections] = useState<string[]>([]);
   const [availableSections, setAvailableSections] = useState<string[]>([]);
 
@@ -348,6 +349,7 @@ const SchoolUsers: React.FC = React.memo(() => {
     // Reset builder
     setBuilderSubjectId('');
     setBuilderGrade('');
+    setBuilderSemester('');
     setBuilderSections([]);
   };
 
@@ -622,6 +624,7 @@ const SchoolUsers: React.FC = React.memo(() => {
                                   // Reset modal state
                                   setBuilderSubjectId('');
                                   setBuilderGrade('');
+                                  setBuilderSemester('');
                                   setBuilderSections([]);
                                   setAvailableSections([]);
                                   
@@ -822,6 +825,7 @@ const SchoolUsers: React.FC = React.memo(() => {
                             // Reset modal state
                             setBuilderSubjectId('');
                             setBuilderGrade('');
+                            setBuilderSemester('');
                             setBuilderSections([]);
                             setAvailableSections([]);
                             
@@ -1097,22 +1101,24 @@ const SchoolUsers: React.FC = React.memo(() => {
                   بناء إسناد جديد
                 </h4>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Subject Dropdown */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Semester Dropdown */}
                   <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">المادة</label>
+                    <label className="block text-sm font-bold text-slate-700 mb-1">الفصل الدراسي</label>
                     <select
-                      value={builderSubjectId}
-                      onChange={(e) => setBuilderSubjectId(e.target.value ? Number(e.target.value) : '')}
+                      value={builderSemester}
+                      onChange={(e) => {
+                        setBuilderSemester(e.target.value);
+                        setBuilderSubjectId(''); // Reset subject when semester changes
+                      }}
                       className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
                     >
-                      <option value="">اختر المادة</option>
-                      {subjects.map(s => (
-                        <option key={s.id} value={s.id}>{s.name} ({s.grade} - {s.semester})</option>
-                      ))}
+                      <option value="">الكل</option>
+                      <option value="الفصل الأول">الفصل الدراسي الأول</option>
+                      <option value="الفصل الثاني">الفصل الدراسي الثاني</option>
                     </select>
                   </div>
-                  
+
                   {/* Grade Dropdown */}
                   <div>
                     <label className="block text-sm font-bold text-slate-700 mb-1">الصف</label>
@@ -1120,6 +1126,7 @@ const SchoolUsers: React.FC = React.memo(() => {
                       value={builderGrade}
                       onChange={(e) => {
                         setBuilderGrade(e.target.value);
+                        setBuilderSubjectId(''); // Reset subject when grade changes
                         setBuilderSections([]); // Reset sections when grade changes
                       }}
                       className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
@@ -1128,6 +1135,24 @@ const SchoolUsers: React.FC = React.memo(() => {
                       <option value="الصف الأول">الصف الأول</option>
                       <option value="الصف الثاني">الصف الثاني</option>
                       <option value="الصف الثالث">الصف الثالث</option>
+                    </select>
+                  </div>
+
+                  {/* Subject Dropdown */}
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-1">المادة</label>
+                    <select
+                      value={builderSubjectId}
+                      onChange={(e) => setBuilderSubjectId(e.target.value ? Number(e.target.value) : '')}
+                      className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                      disabled={!builderGrade}
+                    >
+                      <option value="">اختر المادة</option>
+                      {subjects
+                        .filter(s => (!builderSemester || s.semester === builderSemester) && (!builderGrade || s.grade === builderGrade))
+                        .map(s => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
                     </select>
                   </div>
                 </div>

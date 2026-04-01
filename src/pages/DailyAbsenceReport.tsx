@@ -6,16 +6,16 @@ import { useAuth } from '../context/AuthContext';
 import { useMessageLog } from '../context/MessageLogContext';
 import { formatHijriDate } from '../utils/dateUtils';
 import { logAction } from '../services/auditLogger';
+import { useSchoolSettings } from '../context/SchoolContext';
 
 const DailyAbsenceReport: React.FC = React.memo(() => {
   const { user } = useAuth();
   const { addLogEntry } = useMessageLog();
+  const { settings } = useSchoolSettings();
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
-  const [principalName, setPrincipalName] = useState('مدير المدرسة');
   const [absenceTemplate, setAbsenceTemplate] = useState("المكرم ولي أمر الطالب {اسم_الطالب}، نود إشعاركم بغياب ابنكم اليوم {التاريخ} عن {الحصة}. إدارة {اسم_المدرسة}.");
-  const [schoolName, setSchoolName] = useState('ثانوية أم القرى');
   const [periodFilter, setPeriodFilter] = useState<string>('');
   const itemsPerPage = 15;
   const [reportNumber] = useState(Math.floor(Math.random() * 1000000));
@@ -89,7 +89,7 @@ const DailyAbsenceReport: React.FC = React.memo(() => {
         .replace(/{اسم_الطالب}/g, studentName)
         .replace(/{التاريخ}/g, currentDate)
         .replace(/{الحصة}/g, periodName)
-        .replace(/{اسم_المدرسة}/g, schoolName);
+        .replace(/{اسم_المدرسة}/g, settings.schoolName || 'ثانوية أم القرى');
 
       const response = await apiFetch('/api/whatsapp/send', {
         method: 'POST',
@@ -258,8 +258,8 @@ const DailyAbsenceReport: React.FC = React.memo(() => {
           <div className="text-right space-y-1">
             <p className="text-xs font-black">المملكة العربية السعودية</p>
             <p className="text-xs font-black">وزارة التعليم</p>
-            <p className="text-xs font-black">الإدارة العامة للتعليم بمنطقة الرياض</p>
-            <p className="text-xs font-black">مدرسة ثانوية أم القرى</p>
+            <p className="text-xs font-black">{settings.generalDirectorateName || 'الإدارة العامة للتعليم بمنطقة الرياض'}</p>
+            <p className="text-xs font-black">{settings.schoolName ? `مدرسة ${settings.schoolName}` : 'مدرسة ثانوية أم القرى'}</p>
           </div>
           <div className="text-right space-y-1 text-xs font-bold">
             <p>الرقم: {reportNumber}</p>
@@ -273,9 +273,8 @@ const DailyAbsenceReport: React.FC = React.memo(() => {
           <div className="text-right space-y-1">
             <p className="font-bold text-sm">المملكة العربية السعودية</p>
             <p className="font-bold text-sm">وزارة التعليم</p>
-            <p className="font-bold text-sm">الإدارة العامة للتعليم بمنطقة الرياض</p>
-            <p className="font-bold text-sm">محافظة الخرج</p>
-            <p className="font-bold text-sm">المدرسة: ثانوية أم القرى</p>
+            <p className="font-bold text-sm">{settings.generalDirectorateName || 'الإدارة العامة للتعليم بمنطقة الرياض'}</p>
+            <p className="font-bold text-sm">{settings.schoolName ? `المدرسة: ${settings.schoolName}` : 'المدرسة: ثانوية أم القرى'}</p>
           </div>
           <div className="text-center">
             <img src="https://upload.wikimedia.org/wikipedia/ar/thumb/3/32/Ministry_of_Education_Saudi_Arabia.svg/1200px-Ministry_of_Education_Saudi_Arabia.svg.png" alt="شعار الوزارة" className="w-24 h-24 object-contain mx-auto mb-2 opacity-80" onError={(e) => e.currentTarget.style.display = 'none'} />

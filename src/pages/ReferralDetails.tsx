@@ -37,6 +37,7 @@ import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatHijriDate, formatHijriDateTime } from '../utils/dateUtils';
 import HijriDatePicker from '../components/HijriDatePicker';
+import { useSchoolSettings } from '../context/SchoolContext';
 
 interface Violation {
   id: number;
@@ -77,6 +78,7 @@ const ReferralDetails: React.FC = () => {
   const { id } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { settings } = useSchoolSettings();
   
   const [data, setData] = useState<{ referral: Referral, logs: ReferralLog[], studentReferralsCount: number, principalName: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -522,8 +524,8 @@ const ReferralDetails: React.FC = () => {
           <div className="text-right space-y-1">
             <p className="text-sm font-black">المملكة العربية السعودية</p>
             <p className="text-sm font-black">وزارة التعليم</p>
-            <p className="text-sm font-black">الإدارة العامة للتعليم بمنطقة الرياض</p>
-            <p className="text-sm font-black">ثانوية أم القرى</p>
+            <p className="text-sm font-black">{settings.generalDirectorateName || 'الإدارة العامة للتعليم بمنطقة الرياض'}</p>
+            <p className="text-sm font-black">{settings.schoolName ? `مدرسة ${settings.schoolName}` : 'ثانوية أم القرى'}</p>
           </div>
           <div className="text-left space-y-1">
             <h1 className="text-xl font-black mb-1">تقرير حالة طالب تفصيلي</h1>
@@ -633,13 +635,14 @@ const ReferralDetails: React.FC = () => {
           </div>
           <div className="space-y-8">
             <p className="print-label">مدير المدرسة</p>
+            <p className="text-sm font-bold">{settings.principalName || '....................'}</p>
             <div className="h-px bg-black w-3/4 mx-auto"></div>
             <p className="text-sm font-bold">التوقيع: .................</p>
           </div>
         </div>
 
         <div className="mt-8 text-center text-[8px] text-slate-400 border-t pt-2">
-          بوابة تكامل - ثانوية أم القرى
+          بوابة تكامل - {settings.schoolName || 'ثانوية أم القرى'}
         </div>
       </div>
 

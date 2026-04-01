@@ -331,6 +331,9 @@ async function initDb() {
       // Ignore if column already exists
     }
 
+    // Fix existing users created by admin before the fix
+    await sql`UPDATE users SET is_phone_verified = TRUE WHERE status = 'ACTIVE' AND is_phone_verified = FALSE`;
+
     await sql`
       CREATE TABLE IF NOT EXISTS passes (
         id TEXT PRIMARY KEY,
@@ -396,6 +399,17 @@ async function initDb() {
     const principalExists = await sql`SELECT * FROM users WHERE role = 'principal'`;
     if (principalExists.length === 0) {
       await sql`INSERT INTO users (name, email, password, role) VALUES ('د. خالد المنصور', 'principal@school.edu', 'password', 'principal')`;
+    }
+
+    // Ensure test teachers exist
+    const testTeacher1 = await sql`SELECT * FROM users WHERE email = 'teacher@test.com'`;
+    if (testTeacher1.length === 0) {
+      await sql`INSERT INTO users (name, email, password, role, is_active, is_phone_verified, status, national_id) VALUES ('معلم تجربة', 'teacher@test.com', '123', 'teacher', true, true, 'ACTIVE', '1000000001')`;
+    }
+    
+    const testTeacher2 = await sql`SELECT * FROM users WHERE email = 'teacher2@test.com'`;
+    if (testTeacher2.length === 0) {
+      await sql`INSERT INTO users (name, email, password, role, is_active, is_phone_verified, status, national_id) VALUES ('معلم تجربة 2', 'teacher2@test.com', '123', 'teacher', true, true, 'ACTIVE', '1000000006')`;
     }
 
     // Seed official subjects
@@ -638,6 +652,7 @@ async function startServer() {
     try {
       const users = [
         { name: 'معلم تجربة', email: 'teacher@test.com', password: '123', role: 'teacher', is_active: true, is_phone_verified: true, status: 'ACTIVE', national_id: '1000000001' },
+        { name: 'معلم تجربة 2', email: 'teacher2@test.com', password: '123', role: 'teacher', is_active: true, is_phone_verified: true, status: 'ACTIVE', national_id: '1000000006' },
         { name: 'وكيل تجربة', email: 'vp@test.com', password: '123', role: 'vice_principal', is_active: true, is_phone_verified: true, status: 'ACTIVE', national_id: '1000000002' },
         { name: 'موجه تجربة', email: 'counselor@test.com', password: '123', role: 'counselor', is_active: true, is_phone_verified: true, status: 'ACTIVE', national_id: '1000000003' },
         { name: 'مدير تجربة', email: 'principal@test.com', password: '123', role: 'principal', is_active: true, is_phone_verified: true, status: 'ACTIVE', national_id: '1000000004' },
@@ -2551,7 +2566,7 @@ async function startServer() {
     try {
       const schoolId = req.headers['x-school-id'] || '1';
       
-      const users = await sql`SELECT id, name, email, role, is_active, phone_number, whatsapp_enabled, status, is_phone_verified, national_id FROM users WHERE (is_phone_verified = TRUE OR role IN ('admin', 'principal')) AND school_id = ${schoolId}` as any[];
+      const users = await sql`SELECT id, name, email, role, is_active, phone_number, whatsapp_enabled, status, is_phone_verified, national_id FROM users WHERE (is_phone_verified = TRUE OR status = 'ACTIVE' OR role IN ('admin', 'principal')) AND school_id = ${schoolId}` as any[];
       const usersWithGrades = await Promise.all(users.map(async u => {
         const gradesResult = await sql`SELECT grade FROM user_grades WHERE user_id = ${u.id}`;
         const grades = gradesResult.map((g: any) => g.grade);
@@ -2826,7 +2841,7 @@ async function startServer() {
       if (existing.length > 0) {
         return res.status(400).json({ success: false, error: "البريد الإلكتروني موجود مسبقاً" });
       }
-      await sql`INSERT INTO users (name, email, password, role, phone_number, whatsapp_enabled, school_id) VALUES (${name}, ${email}, ${password}, ${role}, ${phone_number || null}, ${whatsapp_enabled !== undefined ? whatsapp_enabled : true}, ${schoolId})`;
+      await sql`INSERT INTO users (name, email, password, role, phone_number, whatsapp_enabled, school_id, is_phone_verified, status) VALUES (${name}, ${email}, ${password}, ${role}, ${phone_number || null}, ${whatsapp_enabled !== undefined ? whatsapp_enabled : true}, ${schoolId}, TRUE, 'ACTIVE')`;
       res.json({ success: true });
     } catch (err) {
       console.error("User creation failed:", err);
@@ -3859,7 +3874,12 @@ async function startServer() {
       const session = sessions[0];
       
       const tasks = await sql`SELECT * FROM smart_tracker_tasks WHERE session_id = ${session.id}`;
-      const studentStates = await sql`SELECT * FROM smart_tracker_student_states WHERE session_id = ${session.id}`;
+      const studentStates = await sql`
+        SELECT ss.*, s.name as student_name, s.national_id as student_national_id 
+        FROM smart_tracker_student_states ss
+        LEFT JOIN students s ON ss.student_id = s.id
+        WHERE ss.session_id = ${session.id}
+      `;
       
       const statesWithGrades = await Promise.all(studentStates.map(async (state: any) => {
         const grades = await sql`SELECT * FROM smart_tracker_student_grades WHERE student_state_id = ${state.id}`;

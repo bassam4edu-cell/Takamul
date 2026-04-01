@@ -31,6 +31,7 @@ import { logAction as globalLogAction } from '../services/auditLogger';
 import { formatHijriDate, formatShortHijriDate } from '../utils/dateUtils';
 import HijriDatePicker from '../components/HijriDatePicker';
 import toast from 'react-hot-toast';
+import { useSchoolSettings } from '../context/SchoolContext';
 
 // --- Types ---
 export interface Student {
@@ -283,6 +284,7 @@ const BehaviorCard: React.FC<{
 const SmartTracker: React.FC = () => {
   const { user } = useAuth();
   const { logAction } = useAuditLog();
+  const { settings } = useSchoolSettings();
 
   // --- Drag to Scroll State ---
   const tableContainerRef = useRef<HTMLDivElement>(null);
@@ -642,6 +644,17 @@ const SmartTracker: React.FC = () => {
 
                 // Restore student states
                 sessionData.studentStates.forEach((st: any) => {
+                  if (!initialState[st.student_id] && st.student_name) {
+                    // Student is in the session but no longer in the class (transferred)
+                    formattedStudents.push({
+                      id: st.student_id,
+                      name: st.student_name,
+                      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(st.student_name)}&background=f1f5f9&color=334155`,
+                      semesterAttendance: 100
+                    });
+                    initialState[st.student_id] = { attendance: 'present', grades: {}, behaviorChips: [] };
+                  }
+                  
                   if (initialState[st.student_id]) {
                     initialState[st.student_id].attendance = st.attendance;
                     initialState[st.student_id].behaviorChips = st.behavior_chips || [];
@@ -652,6 +665,10 @@ const SmartTracker: React.FC = () => {
                     }
                   }
                 });
+                
+                // Sort students by name after potentially adding transferred students
+                formattedStudents.sort((a: any, b: any) => a.name.localeCompare(b.name, 'ar'));
+                setStudents(formattedStudents);
               } else {
                 // Reset tasks if no session
                 setTasks({ participation: [], homework: [], performance: [], exams: [] });
@@ -2235,8 +2252,8 @@ const SmartTracker: React.FC = () => {
                 <div className="text-right">
                   <p className="font-bold">المملكة العربية السعودية</p>
                   <p className="font-bold">وزارة التعليم</p>
-                  <p className="font-bold">إدارة التعليم بمحافظة ............</p>
-                  <p className="font-bold">مدرسة ............................</p>
+                  <p className="font-bold">{settings.generalDirectorateName || 'الإدارة العامة للتعليم بمنطقة الرياض'}</p>
+                  <p className="font-bold">{settings.schoolName ? `مدرسة ${settings.schoolName}` : 'ثانوية أم القرى'}</p>
                 </div>
                 <div className="text-left">
                   <p><span className="font-bold">المادة:</span> {subject}</p>

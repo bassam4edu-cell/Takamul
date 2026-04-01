@@ -19,6 +19,7 @@ import {
 import { usePasses, PassStatus, PassType } from '../context/PassContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { QRCodeSVG } from 'qrcode.react';
+import { useSchoolSettings } from '../context/SchoolContext';
 
 // --- Pass Types ---
 const PASS_TYPES = [
@@ -69,6 +70,7 @@ const StatusBadge = ({ status }: { status: PassStatus }) => {
 
 const AgentPassDashboard: React.FC = () => {
   const { passes, addPass, updatePassStatus } = usePasses();
+  const { settings } = useSchoolSettings();
   const [selectedGrade, setSelectedGrade] = useState('');
   const [selectedSection, setSelectedSection] = useState('');
   const [selectedStudent, setSelectedStudent] = useState('');
@@ -384,6 +386,7 @@ ${confirmUrl}
             </div>
             <div className="text-center space-y-2">
               <p className="font-black">توقيع مدير المدرسة</p>
+              <p className="text-sm font-bold">{settings.principalName || '....................'}</p>
               <div className="w-40 h-20 border-2 border-dashed border-slate-300 rounded-2xl" />
             </div>
           </div>

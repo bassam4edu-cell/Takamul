@@ -4,6 +4,8 @@ import { apiFetch } from '../utils/api';
 export interface SchoolSettings {
   schoolName: string;
   schoolLogo?: string;
+  generalDirectorateName: string;
+  principalName: string;
 }
 
 interface SchoolContextType {
@@ -13,7 +15,9 @@ interface SchoolContextType {
 }
 
 const defaultSettings: SchoolSettings = {
-  schoolName: '',
+  schoolName: 'ثانوية أم القرى',
+  generalDirectorateName: 'الإدارة العامة للتعليم بمنطقة الرياض',
+  principalName: '',
 };
 
 export const SchoolContext = createContext<SchoolContextType | undefined>(undefined);
@@ -35,8 +39,10 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (response.ok) {
           const data = await response.json();
           setSettings({
-            schoolName: data.school_name || '',
+            schoolName: data.school_name || 'ثانوية أم القرى',
             schoolLogo: data.school_logo || '',
+            generalDirectorateName: data.general_directorate_name || 'الإدارة العامة للتعليم بمنطقة الرياض',
+            principalName: data.principal_name || '',
           });
         }
       } catch (error) {
@@ -55,6 +61,8 @@ export const SchoolProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         settings: {
           school_name: newSettings.schoolName ?? settings.schoolName,
           school_logo: newSettings.schoolLogo ?? settings.schoolLogo,
+          general_directorate_name: newSettings.generalDirectorateName ?? settings.generalDirectorateName,
+          principal_name: newSettings.principalName ?? settings.principalName,
         }
       };
 

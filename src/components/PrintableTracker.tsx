@@ -43,8 +43,8 @@ export const PrintableTracker: React.FC<PrintableTrackerProps> = ({ students, st
         <div className="flex flex-col text-[11px] font-bold leading-relaxed text-right text-black">
           <span>المملكة العربية السعودية</span>
           <span>وزارة التعليم</span>
-          <span>الإدارة العامة للتعليم بمنطقة الرياض</span>
-          <span>ثانوية أم القرى بالخرج</span>
+          <span>{settings.generalDirectorateName || 'الإدارة العامة للتعليم بمنطقة الرياض'}</span>
+          <span>{settings.schoolName ? `مدرسة ${settings.schoolName}` : 'ثانوية أم القرى'}</span>
         </div>
 
         {/* المنتصف */}
@@ -168,7 +168,7 @@ export const PrintableTracker: React.FC<PrintableTrackerProps> = ({ students, st
       {/* Footer */}
       <div className="flex justify-between mt-4 text-xs font-bold px-4 text-black">
         <div>توقيع المعلم: ........................................</div>
-        <div>توقيع مدير المدرسة: ........................................</div>
+        <div>مدير المدرسة: {settings.principalName || '........................................'}</div>
       </div>
     </div>
   );

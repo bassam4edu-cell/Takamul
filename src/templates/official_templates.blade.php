@@ -257,13 +257,13 @@
     <div class="header">
         <div class="header-right">
             المملكة العربية السعودية<br>
-            وزارة التعليم<br>
-            الإدارة العامة للتعليم بمنطقة الرياض<br>
-            محافظة الخرج<br>
-            المدرسة: ثانوية أم القرى
+            {{ $ministry_name }}<br>
+            {{ $general_directorate_name }}<br>
+            
+            المدرسة: {{ $school_name }}
         </div>
         <div class="header-left">
-                <img src="/moe-logo.png" alt="شعار وزارة التعليم" class="header-logo">
+                <img src="/moe-logo.png" alt="شعار {{ $ministry_name }}" class="header-logo">
                 <div class="header-date">التاريخ: {{ $current_date }}</div>
             </div>
     </div>
@@ -280,13 +280,13 @@
         <div class="header">
             <div class="header-right">
                 المملكة العربية السعودية<br>
-                وزارة التعليم<br>
-                الإدارة العامة للتعليم بمنطقة الرياض<br>
-                محافظة الخرج<br>
-                المدرسة: ثانوية أم القرى
+                {{ $ministry_name }}<br>
+                {{ $general_directorate_name }}<br>
+                
+                المدرسة: {{ $school_name }}
             </div>
             <div class="header-left">
-                <img src="/moe-logo.png" alt="شعار وزارة التعليم" class="header-logo">
+                <img src="/moe-logo.png" alt="شعار {{ $ministry_name }}" class="header-logo">
                 <div class="header-date">التاريخ: {{ $current_date }}</div>
             </div>
         </div>
@@ -327,13 +327,13 @@
         <div class="header">
             <div class="header-right">
                 المملكة العربية السعودية<br>
-                وزارة التعليم<br>
-                الإدارة العامة للتعليم بمنطقة الرياض<br>
-                محافظة الخرج<br>
-                المدرسة: ثانوية أم القرى
+                {{ $ministry_name }}<br>
+                {{ $general_directorate_name }}<br>
+                
+                المدرسة: {{ $school_name }}
             </div>
             <div class="header-left">
-                <img src="/moe-logo.png" alt="شعار وزارة التعليم" class="header-logo">
+                <img src="/moe-logo.png" alt="شعار {{ $ministry_name }}" class="header-logo">
                 <div class="header-date">التاريخ: {{ $current_date }}</div>
             </div>
         </div>
@@ -377,13 +377,13 @@
         <div class="header">
             <div class="header-right">
                 المملكة العربية السعودية<br>
-                وزارة التعليم<br>
-                الإدارة العامة للتعليم بمنطقة الرياض<br>
-                محافظة الخرج<br>
-                المدرسة: ثانوية أم القرى
+                {{ $ministry_name }}<br>
+                {{ $general_directorate_name }}<br>
+                
+                المدرسة: {{ $school_name }}
             </div>
             <div class="header-left">
-                <img src="/moe-logo.png" alt="شعار وزارة التعليم" class="header-logo">
+                <img src="/moe-logo.png" alt="شعار {{ $ministry_name }}" class="header-logo">
                 <div class="header-date">التاريخ: {{ $current_date }}</div>
             </div>
         </div>
@@ -421,13 +421,13 @@
         <div class="header">
             <div class="header-right">
                 المملكة العربية السعودية<br>
-                وزارة التعليم<br>
-                الإدارة العامة للتعليم بمنطقة الرياض<br>
-                محافظة الخرج<br>
-                المدرسة: ثانوية أم القرى
+                {{ $ministry_name }}<br>
+                {{ $general_directorate_name }}<br>
+                
+                المدرسة: {{ $school_name }}
             </div>
             <div class="header-left">
-                <img src="/moe-logo.png" alt="شعار وزارة التعليم" class="header-logo">
+                <img src="/moe-logo.png" alt="شعار {{ $ministry_name }}" class="header-logo">
                 <div class="header-date">التاريخ: {{ $current_date }}</div>
             </div>
         </div>
@@ -463,13 +463,13 @@
         <div class="header">
             <div class="header-right">
                 المملكة العربية السعودية<br>
-                وزارة التعليم<br>
-                الإدارة العامة للتعليم بمنطقة الرياض<br>
-                محافظة الخرج<br>
-                المدرسة: ثانوية أم القرى
+                {{ $ministry_name }}<br>
+                {{ $general_directorate_name }}<br>
+                
+                المدرسة: {{ $school_name }}
             </div>
             <div class="header-left">
-                <img src="/moe-logo.png" alt="شعار وزارة التعليم" class="header-logo">
+                <img src="/moe-logo.png" alt="شعار {{ $ministry_name }}" class="header-logo">
                 <div class="header-date">التاريخ: {{ $current_date }}</div>
             </div>
         </div>
@@ -496,13 +496,13 @@
         <div class="header">
             <div class="header-right">
                 المملكة العربية السعودية<br>
-                وزارة التعليم<br>
-                الإدارة العامة للتعليم بمنطقة الرياض<br>
-                محافظة الخرج<br>
-                المدرسة: ثانوية أم القرى
+                {{ $ministry_name }}<br>
+                {{ $general_directorate_name }}<br>
+                
+                المدرسة: {{ $school_name }}
             </div>
             <div class="header-left">
-                <img src="/moe-logo.png" alt="شعار وزارة التعليم" class="header-logo">
+                <img src="/moe-logo.png" alt="شعار {{ $ministry_name }}" class="header-logo">
                 <div class="header-date">التاريخ: {{ $current_date }}</div>
             </div>
         </div>
@@ -556,13 +556,13 @@
         <div class="header">
             <div class="header-right">
                 المملكة العربية السعودية<br>
-                وزارة التعليم<br>
-                الإدارة العامة للتعليم بمنطقة الرياض<br>
-                محافظة الخرج<br>
-                المدرسة: ثانوية أم القرى
+                {{ $ministry_name }}<br>
+                {{ $general_directorate_name }}<br>
+                
+                المدرسة: {{ $school_name }}
             </div>
             <div class="header-left">
-                <img src="/moe-logo.png" alt="شعار وزارة التعليم" class="header-logo">
+                <img src="/moe-logo.png" alt="شعار {{ $ministry_name }}" class="header-logo">
                 <div class="header-date">التاريخ: {{ $current_date }}</div>
             </div>
         </div>
@@ -612,13 +612,13 @@
         <div class="header">
             <div class="header-right">
                 المملكة العربية السعودية<br>
-                وزارة التعليم<br>
-                الإدارة العامة للتعليم بمنطقة الرياض<br>
-                محافظة الخرج<br>
-                المدرسة: ثانوية أم القرى
+                {{ $ministry_name }}<br>
+                {{ $general_directorate_name }}<br>
+                
+                المدرسة: {{ $school_name }}
             </div>
             <div class="header-left">
-                <img src="/moe-logo.png" alt="شعار وزارة التعليم" class="header-logo">
+                <img src="/moe-logo.png" alt="شعار {{ $ministry_name }}" class="header-logo">
                 <div class="header-date">التاريخ: {{ $current_date }}</div>
             </div>
         </div>
@@ -666,13 +666,13 @@
         <div class="header">
             <div class="header-right">
                 المملكة العربية السعودية<br>
-                وزارة التعليم<br>
-                الإدارة العامة للتعليم بمنطقة الرياض<br>
-                محافظة الخرج<br>
-                المدرسة: ثانوية أم القرى
+                {{ $ministry_name }}<br>
+                {{ $general_directorate_name }}<br>
+                
+                المدرسة: {{ $school_name }}
             </div>
             <div class="header-left">
-                <img src="/moe-logo.png" alt="شعار وزارة التعليم" class="header-logo">
+                <img src="/moe-logo.png" alt="شعار {{ $ministry_name }}" class="header-logo">
                 <div class="header-date">التاريخ: {{ $current_date }}</div>
             </div>
         </div>
@@ -716,13 +716,13 @@
         <div class="header">
             <div class="header-right">
                 المملكة العربية السعودية<br>
-                وزارة التعليم<br>
-                الإدارة العامة للتعليم بمنطقة الرياض<br>
-                محافظة الخرج<br>
-                المدرسة: ثانوية أم القرى
+                {{ $ministry_name }}<br>
+                {{ $general_directorate_name }}<br>
+                
+                المدرسة: {{ $school_name }}
             </div>
             <div class="header-left">
-                <img src="/moe-logo.png" alt="شعار وزارة التعليم" class="header-logo">
+                <img src="/moe-logo.png" alt="شعار {{ $ministry_name }}" class="header-logo">
                 <div class="header-date">التاريخ: {{ $current_date }}</div>
             </div>
         </div>
@@ -756,13 +756,13 @@
         <div class="header">
             <div class="header-right">
                 المملكة العربية السعودية<br>
-                وزارة التعليم<br>
-                الإدارة العامة للتعليم بمنطقة الرياض<br>
-                محافظة الخرج<br>
-                المدرسة: ثانوية أم القرى
+                {{ $ministry_name }}<br>
+                {{ $general_directorate_name }}<br>
+                
+                المدرسة: {{ $school_name }}
             </div>
             <div class="header-left">
-                <img src="/moe-logo.png" alt="شعار وزارة التعليم" class="header-logo">
+                <img src="/moe-logo.png" alt="شعار {{ $ministry_name }}" class="header-logo">
                 <div class="header-date">التاريخ: {{ $current_date }}</div>
             </div>
         </div>
@@ -811,13 +811,13 @@
         <div class="header">
             <div class="header-right">
                 المملكة العربية السعودية<br>
-                وزارة التعليم<br>
-                الإدارة العامة للتعليم بمنطقة الرياض<br>
-                محافظة الخرج<br>
-                المدرسة: ثانوية أم القرى
+                {{ $ministry_name }}<br>
+                {{ $general_directorate_name }}<br>
+                
+                المدرسة: {{ $school_name }}
             </div>
             <div class="header-left">
-                <img src="/moe-logo.png" alt="شعار وزارة التعليم" class="header-logo">
+                <img src="/moe-logo.png" alt="شعار {{ $ministry_name }}" class="header-logo">
                 <div class="header-date">التاريخ: {{ $current_date }}</div>
             </div>
         </div>
@@ -852,13 +852,13 @@
         <div class="header">
             <div class="header-right">
                 المملكة العربية السعودية<br>
-                وزارة التعليم<br>
-                الإدارة العامة للتعليم بمنطقة الرياض<br>
-                محافظة الخرج<br>
-                المدرسة: ثانوية أم القرى
+                {{ $ministry_name }}<br>
+                {{ $general_directorate_name }}<br>
+                
+                المدرسة: {{ $school_name }}
             </div>
             <div class="header-left">
-                <img src="/moe-logo.png" alt="شعار وزارة التعليم" class="header-logo">
+                <img src="/moe-logo.png" alt="شعار {{ $ministry_name }}" class="header-logo">
                 <div class="header-date">التاريخ: {{ $current_date }}</div>
             </div>
         </div>
@@ -894,13 +894,13 @@
         <div class="header">
             <div class="header-right">
                 المملكة العربية السعودية<br>
-                وزارة التعليم<br>
-                الإدارة العامة للتعليم بمنطقة الرياض<br>
-                محافظة الخرج<br>
-                المدرسة: ثانوية أم القرى
+                {{ $ministry_name }}<br>
+                {{ $general_directorate_name }}<br>
+                
+                المدرسة: {{ $school_name }}
             </div>
             <div class="header-left">
-                <img src="/moe-logo.png" alt="شعار وزارة التعليم" class="header-logo">
+                <img src="/moe-logo.png" alt="شعار {{ $ministry_name }}" class="header-logo">
                 <div class="header-date">التاريخ: {{ $current_date }}</div>
             </div>
         </div>
@@ -959,13 +959,13 @@
         <div class="header">
             <div class="header-right">
                 المملكة العربية السعودية<br>
-                وزارة التعليم<br>
-                الإدارة العامة للتعليم بمنطقة الرياض<br>
-                محافظة الخرج<br>
-                المدرسة: ثانوية أم القرى
+                {{ $ministry_name }}<br>
+                {{ $general_directorate_name }}<br>
+                
+                المدرسة: {{ $school_name }}
             </div>
             <div class="header-left">
-                <img src="/moe-logo.png" alt="شعار وزارة التعليم" class="header-logo">
+                <img src="/moe-logo.png" alt="شعار {{ $ministry_name }}" class="header-logo">
                 <div class="header-date">التاريخ: {{ $current_date }}</div>
             </div>
         </div>
@@ -1006,13 +1006,13 @@
         <div class="header">
             <div class="header-right">
                 المملكة العربية السعودية<br>
-                وزارة التعليم<br>
-                الإدارة العامة للتعليم بمنطقة الرياض<br>
-                محافظة الخرج<br>
-                المدرسة: ثانوية أم القرى
+                {{ $ministry_name }}<br>
+                {{ $general_directorate_name }}<br>
+                
+                المدرسة: {{ $school_name }}
             </div>
             <div class="header-left">
-                <img src="/moe-logo.png" alt="شعار وزارة التعليم" class="header-logo">
+                <img src="/moe-logo.png" alt="شعار {{ $ministry_name }}" class="header-logo">
                 <div class="header-date">التاريخ: {{ $current_date }}</div>
             </div>
         </div>
@@ -1049,13 +1049,13 @@
         <div class="header">
             <div class="header-right">
                 المملكة العربية السعودية<br>
-                وزارة التعليم<br>
-                الإدارة العامة للتعليم بمنطقة الرياض<br>
-                محافظة الخرج<br>
-                المدرسة: ثانوية أم القرى
+                {{ $ministry_name }}<br>
+                {{ $general_directorate_name }}<br>
+
+                المدرسة: {{ $school_name }}
             </div>
             <div class="header-left">
-                <img src="/moe-logo.png" alt="شعار وزارة التعليم" class="header-logo">
+                <img src="/moe-logo.png" alt="شعار {{ $ministry_name }}" class="header-logo">
                 <div class="header-date">التاريخ: {{ $current_date }}</div>
             </div>
         </div>
@@ -1095,13 +1095,13 @@
         <div class="header">
             <div class="header-right">
                 المملكة العربية السعودية<br>
-                وزارة التعليم<br>
-                الإدارة العامة للتعليم بمنطقة الرياض<br>
-                محافظة الخرج<br>
-                المدرسة: ثانوية أم القرى
+                {{ $ministry_name }}<br>
+                {{ $general_directorate_name }}<br>
+
+                المدرسة: {{ $school_name }}
             </div>
             <div class="header-left">
-                <img src="/moe-logo.png" alt="شعار وزارة التعليم" class="header-logo">
+                <img src="/moe-logo.png" alt="شعار {{ $ministry_name }}" class="header-logo">
                 <div class="header-date">التاريخ: {{ $current_date }}</div>
             </div>
         </div>
