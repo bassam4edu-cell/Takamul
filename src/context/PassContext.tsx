@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-export type PassStatus = 'pending' | 'confirmed' | 'rejected';
+export type PassStatus = 'pending' | 'confirmed' | 'rejected' | 'expired';
 export type PassType = 'entry' | 'call' | 'exit';
 
 export interface Pass {
@@ -17,11 +17,12 @@ export interface Pass {
   date: string;
   status: PassStatus;
   agentName: string;
+  expiresAt?: string;
 }
 
 interface PassContextType {
   passes: Pass[];
-  addPass: (pass: Omit<Pass, 'status' | 'timestamp' | 'date'>) => void;
+  addPass: (pass: Omit<Pass, 'status' | 'timestamp' | 'date'>) => Promise<void>;
   updatePassStatus: (id: string, status: PassStatus) => void;
 }
 
@@ -37,6 +38,9 @@ export const PassProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (response.ok) {
         const data = await response.json();
         setPasses(data);
+      } else {
+        const text = await response.text();
+        console.error('Failed to fetch passes (not ok):', response.status, text.substring(0, 100));
       }
     } catch (error) {
       console.error('Failed to fetch passes:', error);
@@ -79,12 +83,14 @@ export const PassProvider: React.FC<{ children: React.ReactNode }> = ({ children
         body: JSON.stringify(newPass),
       });
       if (!response.ok) {
-        throw new Error('Failed to save pass');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to save pass');
       }
     } catch (error) {
       console.error('Error adding pass:', error);
-      // Rollback or show error
-      fetchPasses();
+      // Rollback
+      setPasses(prev => prev.filter(p => p.id !== newPass.id));
+      throw error;
     }
   };
 

@@ -347,12 +347,25 @@ async function initDb() {
         status TEXT DEFAULT 'pending',
         agent_name TEXT,
         school_id INTEGER REFERENCES schools(id),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        expires_at TIMESTAMP
       )
     `;
 
     try {
       await sql`ALTER TABLE passes ADD COLUMN IF NOT EXISTS date TEXT`;
+    } catch (e) {
+      // Ignore if column already exists
+    }
+
+    try {
+      await sql`ALTER TABLE passes ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP`;
+    } catch (e) {
+      // Ignore if column already exists
+    }
+
+    try {
+      await sql`ALTER TABLE passes ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP`;
     } catch (e) {
       // Ignore if column already exists
     }
@@ -1699,7 +1712,7 @@ async function startServer() {
       const timeline = await sql`
         SELECT 
           'referral' as event_type,
-          r.id as event_id,
+          r.id::text as event_id,
           r.created_at as event_date,
           COALESCE(u.name, 'مستخدم محذوف') as actor_name,
           r.reason as description,
@@ -1713,7 +1726,7 @@ async function startServer() {
 
         SELECT 
           'attendance' as event_type,
-          a.id as event_id,
+          a.id::text as event_id,
           a.created_at as event_date,
           COALESCE(u.name, 'مستخدم محذوف') as actor_name,
           a.status as description,
@@ -1727,7 +1740,7 @@ async function startServer() {
 
         SELECT 
           'score_log' as event_type,
-          s.id as event_id,
+          s.id::text as event_id,
           s.created_at as event_date,
           COALESCE(u.name, 'مستخدم محذوف') as actor_name,
           s.reason_or_evidence as description,
@@ -1741,7 +1754,7 @@ async function startServer() {
 
         SELECT 
           'smart_grade' as event_type,
-          sg.id as event_id,
+          sg.id::text as event_id,
           COALESCE(sg.updated_at, s.created_at) as event_date,
           COALESCE(u.name, 'مستخدم محذوف') as actor_name,
           t.name || ': ' || sg.grade || ' / ' || t.max_grade as description,
@@ -1758,7 +1771,7 @@ async function startServer() {
 
         SELECT 
           'smart_behavior' as event_type,
-          ss.id as event_id,
+          ss.id::text as event_id,
           s.created_at as event_date,
           COALESCE(u.name, 'مستخدم محذوف') as actor_name,
           chip as description,
@@ -1769,6 +1782,23 @@ async function startServer() {
         JOIN smart_tracker_sessions s ON ss.session_id = s.id
         LEFT JOIN users u ON s.teacher_id = u.id
         WHERE ss.student_id = ${id} AND jsonb_array_length(ss.behavior_chips) > 0
+
+        UNION ALL
+
+        SELECT 
+          'pass' as event_type,
+          p.id::text as event_id,
+          p.created_at as event_date,
+          p.agent_name as actor_name,
+          CASE 
+            WHEN p.type = 'entry' THEN 'إذن دخول للفصل'
+            WHEN p.type = 'exit' THEN 'إذن خروج من المدرسة'
+            ELSE 'استدعاء للوكيل'
+          END || (CASE WHEN p.reason IS NOT NULL AND p.reason != '' THEN ' - ' || p.reason ELSE '' END) as description,
+          p.type as category,
+          p.status as status
+        FROM passes p
+        WHERE p.student_id::int = ${id}
 
         ORDER BY event_date DESC
       `;
@@ -3259,11 +3289,32 @@ async function startServer() {
         ORDER BY name ASC
       `;
 
+      const studentIds = students.map(s => s.id);
+      
+      let activePasses: any[] = [];
+      if (studentIds.length > 0) {
+        activePasses = await sql`
+          SELECT * FROM passes
+          WHERE student_id::int = ANY(${studentIds}) 
+            AND date = ${date as string} 
+            AND status != 'rejected'
+            AND status != 'expired'
+            AND (
+              (type = 'exit' AND status = 'confirmed') 
+              OR expires_at IS NULL 
+              OR expires_at > CURRENT_TIMESTAMP
+            )
+          ORDER BY created_at DESC
+        `;
+      }
+
       const studentsWithStatus = students.map(s => {
         const record = existingRecords.find(r => r.student_id === s.id);
+        const pass = activePasses.find(p => p.student_id === s.id.toString());
         return {
           ...s,
-          status: record ? record.status : 'حاضر'
+          status: record ? record.status : 'حاضر',
+          activePass: pass || null
         };
       });
 
@@ -3406,6 +3457,21 @@ async function startServer() {
   });
 
   // 3. Get Live Radar Data (VP Interface)
+  app.get("/api/attendance/student/:id/today", async (req, res) => {
+    try {
+      const records = await sql`
+        SELECT status, is_excused, excuse_reason, period
+        FROM attendance_records
+        WHERE student_id = ${req.params.id} AND date = CURRENT_DATE
+        ORDER BY period ASC
+      `;
+      res.json(records);
+    } catch (err) {
+      console.error("Failed to fetch student attendance:", err);
+      res.status(500).json({ error: "Failed to fetch student attendance" });
+    }
+  });
+
   app.get("/api/attendance/radar", async (req, res) => {
     const { date } = req.query;
     const targetDate = date || new Date().toISOString().split('T')[0];
@@ -3613,8 +3679,30 @@ async function startServer() {
   });
 
   // --- Smart Pass Endpoints ---
+  app.get("/api/test-pass", async (req, res) => {
+    try {
+      const expiresAt = new Date();
+      await sql`
+        INSERT INTO passes (id, student_id, student_name, teacher_id, teacher_name, teacher_phone, period, type, reason, timestamp, date, status, agent_name, expires_at)
+        VALUES ('test', '1', 'Test', '1', 'Test', '123', '1', 'entry', 'test', '10:00', '2023-10-10', 'pending', 'Test', ${expiresAt.toISOString()})
+      `;
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/passes", async (req, res) => {
     try {
+      // Auto-expire passes
+      await sql`
+        UPDATE passes 
+        SET status = 'expired' 
+        WHERE status = 'pending' 
+          AND expires_at IS NOT NULL 
+          AND expires_at < CURRENT_TIMESTAMP
+      `;
+
       const passes = await sql`SELECT * FROM passes ORDER BY created_at DESC`;
       // Map database fields to camelCase for frontend
       const mappedPasses = passes.map((p: any) => ({
@@ -3630,7 +3718,8 @@ async function startServer() {
         timestamp: p.timestamp,
         date: p.date || (p.created_at ? new Date(p.created_at).toISOString().split('T')[0] : null),
         status: p.status,
-        agentName: p.agent_name
+        agentName: p.agent_name,
+        expiresAt: p.expires_at ? new Date(p.expires_at).toISOString() : null
       }));
       res.json(mappedPasses);
     } catch (err) {
@@ -3659,7 +3748,8 @@ async function startServer() {
         timestamp: p.timestamp,
         date: p.date || (p.created_at ? new Date(p.created_at).toISOString().split('T')[0] : null),
         status: p.status,
-        agentName: p.agent_name
+        agentName: p.agent_name,
+        expiresAt: p.expires_at ? new Date(p.expires_at).toISOString() : null
       });
     } catch (err) {
       console.error("Failed to fetch pass:", err);
@@ -3670,14 +3760,47 @@ async function startServer() {
   app.post("/api/passes", async (req, res) => {
     const { id, studentId, studentName, teacherId, teacherName, teacherPhone, period, type, reason, timestamp, date, status, agentName } = req.body;
     try {
+      const targetDate = date || new Date().toISOString().split('T')[0];
+
+      if (type === 'exit') {
+        const existingExit = await sql`
+          SELECT * FROM passes 
+          WHERE student_id = ${studentId} 
+            AND type = 'exit' 
+            AND date = ${targetDate}
+            AND status != 'rejected'
+        `;
+        if (existingExit.length > 0) {
+          return res.status(400).json({ error: "الطالب لديه إذن خروج مسبق اليوم، ولا يمكن إصدار إذن آخر." });
+        }
+      }
+
+      // Calculate expires_at
+      let durationMinutes = 15; // default 15 mins for entry/summon
+      if (type === 'exit') {
+        durationMinutes = 30; // 30 mins to leave the school
+      }
+      const expiresAt = new Date();
+      expiresAt.setMinutes(expiresAt.getMinutes() + durationMinutes);
+
       await sql`
-        INSERT INTO passes (id, student_id, student_name, teacher_id, teacher_name, teacher_phone, period, type, reason, timestamp, date, status, agent_name)
-        VALUES (${id}, ${studentId}, ${studentName}, ${teacherId}, ${teacherName}, ${teacherPhone}, ${period}, ${type}, ${reason}, ${timestamp}, ${date}, ${status || 'pending'}, ${agentName})
+        INSERT INTO passes (id, student_id, student_name, teacher_id, teacher_name, teacher_phone, period, type, reason, timestamp, date, status, agent_name, expires_at)
+        VALUES (${id}, ${studentId}, ${studentName}, ${teacherId}, ${teacherName}, ${teacherPhone}, ${period}, ${type}, ${reason}, ${timestamp}, ${targetDate}, ${status || 'pending'}, ${agentName}, ${expiresAt.toISOString()})
       `;
+
+      // Auto-Sync Logic: If entry pass, update absent status to late with excuse
+      if (type === 'entry') {
+        await sql`
+          UPDATE attendance_records
+          SET status = 'متأخر', is_excused = true, excuse_reason = 'إذن دخول من الوكيل'
+          WHERE student_id = ${studentId} AND date = ${targetDate} AND status = 'غائب'
+        `;
+      }
+
       res.json({ success: true });
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to create pass:", err);
-      res.status(500).json({ error: "Failed to create pass" });
+      res.status(500).json({ error: err.message || "Failed to create pass" });
     }
   });
 

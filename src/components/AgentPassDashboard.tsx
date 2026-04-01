@@ -55,6 +55,7 @@ const StatusBadge = ({ status }: { status: PassStatus }) => {
     pending: { label: 'بانتظار تأكيد المعلم ⏳', color: 'bg-amber-100 text-amber-700 border-amber-200' },
     confirmed: { label: 'تم التأكيد ✅', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
     rejected: { label: 'مرفوض ❌', color: 'bg-rose-100 text-rose-700 border-rose-200' },
+    expired: { label: 'منتهي الصلاحية ⌛', color: 'bg-slate-100 text-slate-500 border-slate-200' },
   };
 
   const config = configs[status];
@@ -91,6 +92,9 @@ const AgentPassDashboard: React.FC = () => {
 
   const [selectedDate, setSelectedDate] = useState(getLocalDate());
   const [isPrintingReport, setIsPrintingReport] = useState(false);
+  const [isPrintingPass, setIsPrintingPass] = useState(false);
+  const [showAbsentWarningModal, setShowAbsentWarningModal] = useState(false);
+  const [pendingPassData, setPendingPassData] = useState<any>(null);
 
   // Derived data for filters
   const grades = Array.from(new Set(students.map(s => s.grade))).filter(Boolean).sort();
@@ -157,7 +161,33 @@ const AgentPassDashboard: React.FC = () => {
       agentName: 'وكيل المدرسة',
     };
 
-    addPass(newPass);
+    if (passType === 'exit') {
+      try {
+        const res = await fetch(`/api/attendance/student/${selectedStudent}/today`);
+        if (res.ok) {
+          const records = await res.json();
+          const isAbsent = records.some((r: any) => r.status === 'غائب');
+          if (isAbsent) {
+            setPendingPassData({ newPass, student, teacher, type, confirmUrl });
+            setShowAbsentWarningModal(true);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('Failed to check attendance:', err);
+      }
+    }
+
+    await executeIssuePass(newPass, student, teacher, type, confirmUrl);
+  };
+
+  const executeIssuePass = async (newPass: any, student: any, teacher: any, type: any, confirmUrl: string) => {
+    try {
+      await addPass(newPass);
+    } catch (error: any) {
+      alert(error.message || 'حدث خطأ أثناء إصدار الإذن');
+      return;
+    }
     setLastIssuedPass({ ...newPass, timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) });
     setShowPrintModal(true);
 
@@ -166,7 +196,7 @@ const AgentPassDashboard: React.FC = () => {
 --------------------------
 *الطالب:* ${student?.name}
 *الإجراء:* ${type?.label}
-*السبب:* ${reason || 'غير محدد'}
+*السبب:* ${newPass.reason || 'غير محدد'}
 --------------------------
 *رابط التأكيد السريع:*
 ${confirmUrl}
@@ -211,12 +241,25 @@ ${confirmUrl}
     setReason('');
   };
 
+  useEffect(() => {
+    const handleAfterPrint = () => {
+      setIsPrintingPass(false);
+      setIsPrintingReport(false);
+    };
+    window.addEventListener('afterprint', handleAfterPrint);
+    return () => window.removeEventListener('afterprint', handleAfterPrint);
+  }, []);
+
   const handlePrint = () => {
-    window.print();
+    setIsPrintingPass(true);
+    setTimeout(() => {
+      window.print();
+    }, 100);
   };
 
   const handlePrintPass = (pass: any) => {
     setLastIssuedPass(pass);
+    setIsPrintingPass(true);
     // Give state a moment to update before printing
     setTimeout(() => {
       window.print();
@@ -227,7 +270,6 @@ ${confirmUrl}
     setIsPrintingReport(true);
     setTimeout(() => {
       window.print();
-      setIsPrintingReport(false);
     }, 100);
   };
 
@@ -240,31 +282,42 @@ ${confirmUrl}
             /* التمرير والتقسيم النظيف للصفحة الأساسية */
             @page { size: portrait; margin: 1cm; }
             
+            * {
+              transform: none !important;
+              animation: none !important;
+              transition: none !important;
+            }
+            
             /* خدعة العزل: إذا كانت البطاقة موجودة في الشاشة، أخفِ كل شيء ما عداها */
             body:has(#printable-pass) * {
-              visibility: hidden;
+              visibility: hidden !important;
             }
             body:has(#printable-pass) #printable-pass, 
             body:has(#printable-pass) #printable-pass * {
-              visibility: visible;
+              visibility: visible !important;
             }
             body:has(#printable-pass) #printable-pass {
-              position: absolute;
-              left: 0; top: 0; width: 100%; margin: 0; padding: 0;
+              position: fixed !important;
+              left: 0 !important; top: 0 !important; width: 100% !important; margin: 0 !important; padding: 0 !important;
               box-shadow: none !important; border: none !important;
+              display: block !important;
+              z-index: 99999 !important;
+              background: white !important;
             }
 
             /* عزل التقرير بنفس الطريقة */
             body:has(#printable-report) * {
-              visibility: hidden;
+              visibility: hidden !important;
             }
             body:has(#printable-report) #printable-report, 
             body:has(#printable-report) #printable-report * {
-              visibility: visible;
+              visibility: visible !important;
             }
             body:has(#printable-report) #printable-report {
-              position: absolute;
-              left: 0; top: 0; width: 100%; margin: 0; padding: 0;
+              position: absolute !important;
+              left: 0 !important; top: 0 !important; width: 100% !important; margin: 0 !important; padding: 0 !important;
+              display: block !important;
+              background: white !important;
             }
             
             .no-print { display: none !important; }
@@ -306,9 +359,18 @@ ${confirmUrl}
                     {PASS_TYPES.find(p => p.id === pass.type)?.label}
                   </td>
                   <td className="border border-slate-900 p-3 print:text-[10px] print:px-1 print:py-1 print:leading-tight">{pass.teacherName}</td>
-                  <td className="border border-slate-900 p-3 tabular-nums print:text-[10px] print:px-1 print:py-1 print:leading-tight">{pass.timestamp}</td>
+                  <td className="border border-slate-900 p-3 tabular-nums print:text-[10px] print:px-1 print:py-1 print:leading-tight">
+                    <div className="flex flex-col gap-1">
+                      <span>{pass.timestamp}</span>
+                      {pass.expiresAt && pass.status === 'pending' && (
+                        <span className="text-[8px] text-slate-500">
+                          ينتهي: {new Date(pass.expiresAt).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td className="border border-slate-900 p-3 print:text-[10px] print:px-1 print:py-1 print:leading-tight">
-                    {pass.status === 'confirmed' ? 'تم التأكيد ✅' : pass.status === 'rejected' ? 'مرفوض ❌' : 'بانتظار التأكيد ⏳'}
+                    {pass.status === 'confirmed' ? 'تم التأكيد ✅' : pass.status === 'rejected' ? 'مرفوض ❌' : pass.status === 'expired' ? 'منتهي الصلاحية ⌛' : 'بانتظار التأكيد ⏳'}
                   </td>
                 </tr>
               ))}
@@ -327,6 +389,58 @@ ${confirmUrl}
           </div>
         </div>
       )}
+
+      {/* Absent Warning Modal */}
+      <AnimatePresence>
+        {showAbsentWarningModal && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden"
+            >
+              <div className="p-6">
+                <div className="w-12 h-12 rounded-full bg-rose-100 flex items-center justify-center mb-4 mx-auto">
+                  <AlertTriangle className="w-6 h-6 text-rose-600" />
+                </div>
+                <h3 className="text-xl font-black text-slate-800 text-center mb-2">تنبيه تضارب حالة</h3>
+                <p className="text-slate-600 text-center mb-6">
+                  الطالب غير محضر في المدرسة اليوم، هل أنت متأكد من إصدار إذن الخروج؟
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setShowAbsentWarningModal(false);
+                      setPendingPassData(null);
+                    }}
+                    className="flex-1 px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition-colors"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowAbsentWarningModal(false);
+                      if (pendingPassData) {
+                        executeIssuePass(
+                          pendingPassData.newPass,
+                          pendingPassData.student,
+                          pendingPassData.teacher,
+                          pendingPassData.type,
+                          pendingPassData.confirmUrl
+                        );
+                      }
+                    }}
+                    className="flex-1 px-4 py-2 bg-rose-600 text-white rounded-xl font-bold hover:bg-rose-700 transition-colors"
+                  >
+                    تأكيد الإصدار
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Print Modal */}
       <AnimatePresence>
@@ -399,7 +513,7 @@ ${confirmUrl}
       </AnimatePresence>
 
       {/* Hidden Printable Pass */}
-      {showPrintModal && lastIssuedPass && (
+      {(showPrintModal || isPrintingPass) && lastIssuedPass && (
         <div id="printable-pass" className="hidden print:block">
           <div className="border-4 border-double border-slate-900 p-8 rounded-3xl space-y-8 bg-white max-w-2xl mx-auto">
             <div className="flex justify-between items-center border-b-2 border-slate-900 pb-6">
@@ -713,7 +827,14 @@ ${confirmUrl}
                         </div>
                       </td>
                       <td className="px-6 py-4 print:text-[10px] print:px-1 print:py-1 print:leading-tight">
-                        <span className="text-xs font-bold text-slate-500 tabular-nums print:text-[10px]">{pass.timestamp}</span>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs font-bold text-slate-500 tabular-nums print:text-[10px]">{pass.timestamp}</span>
+                          {pass.expiresAt && pass.status === 'pending' && (
+                            <span className="text-[10px] text-slate-400">
+                              ينتهي: {new Date(pass.expiresAt).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 print:text-[10px] print:px-1 print:py-1 print:leading-tight">
                         <StatusBadge status={pass.status} />

@@ -2,7 +2,7 @@ import { apiFetch } from '../utils/api';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { logAction } from '../services/auditLogger';
-import { CheckCircle2, XCircle, Clock, Save, Lock, Users, AlertCircle, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, Save, Lock, Users, AlertCircle, AlertTriangle, Ticket } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const TeacherRollCall: React.FC = () => {
@@ -26,6 +26,7 @@ const TeacherRollCall: React.FC = () => {
   const [success, setSuccess] = useState(false);
 
   const [radarConfig, setRadarConfig] = useState<{type: 'all' | 'specific', active_period?: number} | null>(null);
+  const [selectedPass, setSelectedPass] = useState<any>(null);
 
   useEffect(() => {
     const handleStorageChange = () => {
@@ -320,7 +321,18 @@ const TeacherRollCall: React.FC = () => {
                   'border-amber-200 bg-amber-50/10'
                 } ${isSubmitted ? 'opacity-75' : ''}`}
               >
-                <div className="font-black text-slate-800">{student.name}</div>
+                <div className="flex items-center justify-between">
+                  <div className="font-black text-slate-800">{student.name}</div>
+                  {student.activePass && (
+                    <button
+                      onClick={() => setSelectedPass(student.activePass)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors border border-indigo-100"
+                    >
+                      <Ticket size={16} />
+                      <span className="text-xs font-bold">إذن نشط</span>
+                    </button>
+                  )}
+                </div>
                 <div className="flex gap-2">
                   <button
                     disabled={isSubmitted && user?.role !== 'admin'}
@@ -405,6 +417,81 @@ const TeacherRollCall: React.FC = () => {
       ) : (
         <div className="text-center p-10 bg-white rounded-3xl border border-slate-100 border-dashed">
           <p className="text-slate-400 font-bold">الرجاء اختيار الصف والفصل لعرض قائمة الطلاب</p>
+        </div>
+      )}
+
+      {/* Pass Details Modal */}
+      {selectedPass && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-3xl shadow-xl w-full max-w-md overflow-hidden"
+          >
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                  <Ticket className="text-indigo-600" />
+                  تفاصيل الإذن
+                </h3>
+                <button 
+                  onClick={() => setSelectedPass(null)}
+                  className="p-2 hover:bg-slate-100 rounded-full transition-colors"
+                >
+                  <XCircle className="text-slate-400" />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                  <div className="text-sm text-slate-500 mb-1 font-bold">الطالب</div>
+                  <div className="font-black text-slate-800">{selectedPass.student_name}</div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                    <div className="text-sm text-slate-500 mb-1 font-bold">نوع الإذن</div>
+                    <div className="font-black text-slate-800">
+                      {selectedPass.type === 'entry' ? 'دخول للفصل' : 
+                       selectedPass.type === 'exit' ? 'خروج من المدرسة' : 'استدعاء للوكيل'}
+                    </div>
+                  </div>
+                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                    <div className="text-sm text-slate-500 mb-1 font-bold">الوقت</div>
+                    <div className="font-black text-slate-800">{selectedPass.timestamp}</div>
+                  </div>
+                </div>
+
+                {selectedPass.expires_at && selectedPass.status === 'pending' && (
+                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                    <div className="text-sm text-slate-500 mb-1 font-bold">ينتهي الإذن في</div>
+                    <div className="font-black text-slate-800">
+                      {new Date(selectedPass.expires_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                    </div>
+                  </div>
+                )}
+
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                  <div className="text-sm text-slate-500 mb-1 font-bold">مصدر الإذن</div>
+                  <div className="font-black text-slate-800">{selectedPass.agent_name || 'وكيل المدرسة'}</div>
+                </div>
+
+                {selectedPass.reason && (
+                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                    <div className="text-sm text-slate-500 mb-1 font-bold">السبب</div>
+                    <div className="font-black text-slate-800">{selectedPass.reason}</div>
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={() => setSelectedPass(null)}
+                className="w-full mt-6 bg-slate-900 text-white rounded-xl py-3 font-bold hover:bg-slate-800 transition-colors"
+              >
+                إغلاق
+              </button>
+            </div>
+          </motion.div>
         </div>
       )}
     </div>

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Printer, Share2, BookOpen, Calculator, FlaskConical, Languages, Palette, ChevronLeft } from 'lucide-react';
 import * as htmlToImage from 'html-to-image';
 import { Student, StudentState, TaskCategory, Task } from '../pages/SmartTracker';
-import { formatHijriDate } from '../utils/dateUtils';
+import { formatHijriDate, formatHijriDateTime } from '../utils/dateUtils';
 import { apiFetch } from '../utils/api';
 import { logAction } from '../services/auditLogger';
 import { useAuth } from '../context/AuthContext';
@@ -26,7 +26,7 @@ interface AttendanceRecord {
 }
 
 interface TimelineEvent {
-  event_type: 'referral' | 'attendance' | 'score_log' | 'smart_grade' | 'smart_behavior';
+  event_type: 'referral' | 'attendance' | 'score_log' | 'smart_grade' | 'smart_behavior' | 'pass';
   event_id: number | string;
   event_date: string;
   actor_name: string;
@@ -234,6 +234,7 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
                   const isBehavior = event.event_type === 'referral' && event.category === 'behavior' || event.event_type === 'smart_behavior';
                   const isGrade = event.event_type === 'smart_grade' || event.event_type === 'score_log';
                   const isAttendance = event.event_type === 'attendance';
+                  const isPass = event.event_type === 'pass';
 
                   let iconColor = 'bg-slate-100 text-slate-600';
                   let typeLabel = 'حدث';
@@ -247,12 +248,15 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
                   } else if (isAttendance) {
                     iconColor = 'bg-red-50 text-red-700 border-red-100';
                     typeLabel = 'حضور';
+                  } else if (isPass) {
+                    iconColor = 'bg-indigo-50 text-indigo-700 border-indigo-100';
+                    typeLabel = 'إذن';
                   }
 
                   return (
                     <div key={`${event.event_type}-${event.event_id}-${idx}`} className="relative pr-6 border-r-2 border-slate-100 pb-4 last:pb-0">
                       <div className={`absolute top-0 -right-[9px] w-4 h-4 rounded-full border-2 border-white shadow-sm ${
-                        isBehavior ? 'bg-amber-500' : isGrade ? 'bg-emerald-500' : isAttendance ? 'bg-red-500' : 'bg-slate-400'
+                        isBehavior ? 'bg-amber-500' : isGrade ? 'bg-emerald-500' : isAttendance ? 'bg-red-500' : isPass ? 'bg-indigo-500' : 'bg-slate-400'
                       }`} />
                       
                       <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
@@ -262,7 +266,7 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
                               {typeLabel}
                             </span>
                             <span className="text-xs text-slate-400 font-medium">
-                              {formatHijriDate(dateObj)}
+                              {formatHijriDateTime(dateObj)}
                             </span>
                           </div>
                           <span className="text-[10px] text-slate-400">بواسطة: {event.actor_name}</span>
@@ -657,7 +661,7 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
                 timeline.slice(0, 15).map((event, idx) => (
                   <div key={idx} className="flex justify-between items-start print:text-[8pt] border-b border-gray-100 pb-0.5">
                     <div className="flex gap-2">
-                      <span className="font-bold min-w-[60px]">{formatHijriDate(new Date(event.event_date))}</span>
+                      <span className="font-bold min-w-[100px]">{formatHijriDateTime(new Date(event.event_date))}</span>
                       <span>{event.description}</span>
                     </div>
                     <span className="text-gray-500 italic">{event.actor_name}</span>
