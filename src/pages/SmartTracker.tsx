@@ -70,6 +70,10 @@ export interface StudentState {
   attendance: 'present' | 'late' | 'absent';
   grades: Record<string, number | ''>;
   behaviorChips: string[];
+  noorExportData?: {
+    performanceTotal: number;
+    evaluationTotal: number;
+  };
 }
 
 const negativeBehaviors = ['نوم', 'لم يحضر الكتاب', 'إزعاج', 'مقاطعة درس'];
@@ -390,6 +394,7 @@ const SmartTracker: React.FC = () => {
 
   // --- Bulk Setup Modal State ---
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [isNoorModalOpen, setIsNoorModalOpen] = useState(false);
   const [bulkTemplateTasks, setBulkTemplateTasks] = useState<Record<TaskCategory, Task[]>>({
     participation: [], homework: [], performance: [], exams: []
   });
@@ -970,8 +975,45 @@ const SmartTracker: React.FC = () => {
     setConfirmModalState('confirm');
   };
 
+  const calculateNoorTotals = (studentId: number) => {
+    const state = studentsState[studentId];
+    if (!state) return { performanceTotal: 0, evaluationTotal: 0 };
+
+    let performanceSum = 0;
+    ['participation', 'homework', 'performance'].forEach(cat => {
+      tasks[cat as TaskCategory].forEach(task => {
+        const val = state.grades[task.id];
+        if (val !== '' && val !== undefined) {
+          performanceSum += Number(val);
+        }
+      });
+    });
+    const performanceTotal = Math.min(performanceSum, 40);
+
+    let evaluationSum = 0;
+    tasks['exams'].forEach(task => {
+      const val = state.grades[task.id];
+      if (val !== '' && val !== undefined) {
+        evaluationSum += Number(val);
+      }
+    });
+    const evaluationTotal = Math.min(evaluationSum, 20);
+
+    return { performanceTotal, evaluationTotal };
+  };
+
   const confirmSubmit = async () => {
     if (!user?.id) return;
+    
+    const stateWithNoor = { ...studentsState };
+    Object.keys(stateWithNoor).forEach(studentId => {
+      const id = Number(studentId);
+      stateWithNoor[id] = {
+        ...stateWithNoor[id],
+        noorExportData: calculateNoorTotals(id)
+      };
+    });
+
     try {
       const res = await apiFetch('/api/tracker/session', {
         method: 'POST',
@@ -983,7 +1025,7 @@ const SmartTracker: React.FC = () => {
           subject,
           date,
           tasks,
-          studentsState
+          studentsState: stateWithNoor
         })
       });
       if (res.ok) {
@@ -1555,6 +1597,12 @@ const SmartTracker: React.FC = () => {
               >
                 إعداد التوزيع السريع
               </button>
+              <button
+                onClick={() => setIsNoorModalOpen(true)}
+                className="flex-1 bg-green-600 text-white hover:bg-green-700 px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors shadow-sm"
+              >
+                تصدير لنور
+              </button>
             </div>
           </div>
         )}
@@ -2026,6 +2074,12 @@ const SmartTracker: React.FC = () => {
             إعداد التوزيع السريع
           </button>
           <button
+            onClick={() => setIsNoorModalOpen(true)}
+            className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-xl flex items-center gap-2 shadow-sm transition-colors"
+          >
+            تصدير لنور
+          </button>
+          <button
             onClick={() => setIsPrintModalOpen(true)}
             className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-semibold py-3 px-6 rounded-xl flex items-center gap-2 shadow-sm transition-colors"
           >
@@ -2430,6 +2484,82 @@ const SmartTracker: React.FC = () => {
               >
                 <Printer size={20} />
                 بدء الطباعة الآن
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+
+    {/* Noor Export Modal */}
+    <AnimatePresence>
+      {isNoorModalOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm print:hidden" dir="rtl">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+          >
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center gap-3">
+                <div className="bg-green-100 text-green-600 p-2 rounded-lg">
+                  <Dices size={24} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800 text-lg">معاينة درجات نظام نور</h3>
+                  <p className="text-xs text-slate-500">الدرجات المجمعة جاهزة للرصد الآلي</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsNoorModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 transition-colors p-2 rounded-full hover:bg-slate-200"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-6">
+              <table className="w-full text-right border-collapse">
+                <thead className="bg-slate-100 text-slate-700 font-bold">
+                  <tr>
+                    <th className="border border-slate-300 p-3 text-sm">اسم الطالب</th>
+                    <th className="border border-slate-300 p-3 text-sm text-center">المهام والمشاركة (من 40)</th>
+                    <th className="border border-slate-300 p-3 text-sm text-center">التقويمات (من 20)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {students.map(student => {
+                    const totals = calculateNoorTotals(student.id);
+                    return (
+                      <tr key={student.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="border border-slate-300 p-3 text-sm font-bold text-slate-800">{student.name}</td>
+                        <td className="border border-slate-300 p-3 text-sm text-center font-bold text-teal-700">{totals.performanceTotal}</td>
+                        <td className="border border-slate-300 p-3 text-sm text-center font-bold text-indigo-700">{totals.evaluationTotal}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-2">
+              <button
+                onClick={() => setIsNoorModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-200 transition-colors"
+              >
+                إغلاق
+              </button>
+              <button
+                onClick={async () => {
+                  await confirmSubmit();
+                  setIsNoorModalOpen(false);
+                  toast.success("تم حفظ البيانات بنجاح. يرجى فتح نظام نور واستخدام إضافة تكامل لرصد الدرجات.", { duration: 5000 });
+                  window.open('https://noor.moe.gov.sa/Noor/Login.aspx', '_blank');
+                }}
+                className="px-6 py-2 rounded-xl text-sm font-bold bg-green-600 hover:bg-green-700 text-white shadow-sm transition-colors"
+              >
+                حفظ وبدء الرصد عبر الإضافة
               </button>
             </div>
           </motion.div>

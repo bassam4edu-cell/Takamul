@@ -4236,8 +4236,8 @@ async function startServer() {
             
             gradesData = students.map(student => {
               const state = states.find(s => s.student_id === student.id);
-              let oralScore = 0;
-              let performanceScore = 0;
+              let performanceSum = 0;
+              let evaluationSum = 0;
               
               if (state) {
                 const studentGrades = allGrades.filter(g => g.student_state_id === state.id);
@@ -4245,16 +4245,23 @@ async function startServer() {
                 studentGrades.forEach(g => {
                   const task = tasks.find(t => t.id === g.task_id);
                   if (task) {
-                    if (task.category === 'oral') oralScore += Number(g.grade) || 0;
-                    if (task.category === 'performance') performanceScore += Number(g.grade) || 0;
+                    if (['participation', 'homework', 'performance'].includes(task.category)) {
+                      performanceSum += Number(g.grade) || 0;
+                    }
+                    if (task.category === 'exams') {
+                      evaluationSum += Number(g.grade) || 0;
+                    }
                   }
                 });
               }
               
+              const performanceTotal = Math.min(performanceSum, 40);
+              const evaluationTotal = Math.min(evaluationSum, 20);
+              
               return {
                 nationalId: student.national_id,
-                oralScore: oralScore > 0 ? oralScore : Math.floor(Math.random() * 5) + 15, // Fallback to mock if 0
-                performanceScore: performanceScore > 0 ? performanceScore : Math.floor(Math.random() * 10) + 30 // Fallback to mock if 0
+                evaluationTotal: evaluationTotal > 0 ? evaluationTotal : Math.floor(Math.random() * 5) + 15, // Fallback to mock if 0
+                performanceTotal: performanceTotal > 0 ? performanceTotal : Math.floor(Math.random() * 10) + 30 // Fallback to mock if 0
               };
             });
           }
@@ -4269,16 +4276,16 @@ async function startServer() {
 
         gradesData = students.map(s => ({
           nationalId: s.national_id,
-          oralScore: Math.floor(Math.random() * 5) + 15, // 15-20
-          performanceScore: Math.floor(Math.random() * 10) + 30 // 30-40
+          evaluationTotal: Math.floor(Math.random() * 5) + 15, // 15-20
+          performanceTotal: Math.floor(Math.random() * 10) + 30 // 30-40
         }));
 
         // Add the specific mock student from the user's example if not present
         if (!gradesData.find(g => g.nationalId === "1234567890")) {
           gradesData.push({
             nationalId: "1234567890",
-            oralScore: 19,
-            performanceScore: 38
+            evaluationTotal: 19,
+            performanceTotal: 38
           });
         }
       }

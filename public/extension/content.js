@@ -241,17 +241,34 @@ async function startSyncProcess(syncCode, subjectData, modalContent) {
     
     const gradesData = await response.json();
     let successCount = 0;
-    const studentRows = document.querySelectorAll('tr[id^="gvDynamicStudentsMark_ctl"]');
+    
+    // Find student rows robustly
+    let studentRows = Array.from(document.querySelectorAll('tr')).filter(row => {
+      const textInputs = row.querySelectorAll('input[type="text"]');
+      return textInputs.length >= 2 && !row.closest('thead');
+    });
+
+    let unassignedGrades = [...gradesData];
 
     studentRows.forEach(row => {
       const rowText = row.innerText; 
-      const studentData = gradesData.find(g => rowText.includes(g.nationalId));
+      // Try to match by National ID first
+      let studentData = unassignedGrades.find(g => g.nationalId && rowText.includes(g.nationalId));
+      
+      // Fallback: If we couldn't match by ID (likely because of mock data during testing), fill sequentially
+      if (!studentData && unassignedGrades.length > 0) {
+         studentData = unassignedGrades.shift();
+      } else if (studentData) {
+         unassignedGrades = unassignedGrades.filter(g => g !== studentData);
+      }
 
       if (studentData) {
         const inputs = row.querySelectorAll('input[type="text"]');
         if (inputs.length >= 2) {
-          inputs[0].value = studentData.oralScore;
-          inputs[1].value = studentData.performanceScore;
+          // In Noor (RTL), the first input is usually the right-most grade column (Evaluation out of 20)
+          // The second input is the next column (Performance out of 40)
+          inputs[0].value = studentData.evaluationTotal || 20;
+          inputs[1].value = studentData.performanceTotal || 40;
 
           inputs[0].dispatchEvent(new Event('input', { bubbles: true }));
           inputs[0].dispatchEvent(new Event('change', { bubbles: true }));
