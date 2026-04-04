@@ -2555,7 +2555,6 @@ const SmartTracker: React.FC = () => {
                   await confirmSubmit();
                   setIsNoorModalOpen(false);
                   toast.success("تم حفظ البيانات بنجاح. يرجى فتح نظام نور واستخدام إضافة تكامل لرصد الدرجات.", { duration: 5000 });
-                  window.open('https://noor.moe.gov.sa/Noor/Login.aspx', '_blank');
                 }}
                 className="px-6 py-2 rounded-xl text-sm font-bold bg-green-600 hover:bg-green-700 text-white shadow-sm transition-colors"
               >

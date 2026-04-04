@@ -4230,31 +4230,32 @@ async function startServer() {
           WHERE grade = ${grade as string} AND section = ${section as string} AND national_id IS NOT NULL
         `;
 
-        // Get ALL sessions for this teacher, subject, grade, section to aggregate the entire semester
+        // Get the most recently saved session for this teacher, subject, grade, section
         const sessions = await sql`
           SELECT id FROM smart_tracker_sessions
           WHERE teacher_id = ${teacherId} AND subject = ${subject as string} AND grade = ${grade as string} AND section = ${section as string}
+          ORDER BY created_at DESC LIMIT 1
         `;
 
         if (sessions.length > 0 && students.length > 0) {
-          const sessionIds = sessions.map(s => s.id);
+          const sessionId = sessions[0].id;
           
-          // Get tasks for all these sessions
-          const tasks = await sql`SELECT id, category FROM smart_tracker_tasks WHERE session_id = ANY(${sessionIds as any})`;
+          // Get tasks for this session
+          const tasks = await sql`SELECT id, category FROM smart_tracker_tasks WHERE session_id = ${sessionId}`;
           
-          // Get student states for all these sessions
-          const states = await sql`SELECT id, student_id FROM smart_tracker_student_states WHERE session_id = ANY(${sessionIds as any})`;
+          // Get student states for this session
+          const states = await sql`SELECT id, student_id FROM smart_tracker_student_states WHERE session_id = ${sessionId}`;
           
           if (states.length > 0 && tasks.length > 0) {
             const stateIds = states.map(s => s.id);
             const allGrades = await sql`SELECT student_state_id, task_id, grade FROM smart_tracker_student_grades WHERE student_state_id = ANY(${stateIds as any})`;
             
             gradesData = students.map(student => {
-              const studentStates = states.filter(s => s.student_id === student.id);
+              const state = states.find(s => s.student_id === student.id);
               let performanceSum = 0;
               let evaluationSum = 0;
               
-              studentStates.forEach(state => {
+              if (state) {
                 const studentGrades = allGrades.filter(g => g.student_state_id === state.id);
                 
                 studentGrades.forEach(g => {
@@ -4268,7 +4269,7 @@ async function startServer() {
                     }
                   }
                 });
-              });
+              }
               
               const performanceTotal = Math.min(performanceSum, 40);
               const evaluationTotal = Math.min(evaluationSum, 20);
