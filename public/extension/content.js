@@ -222,6 +222,9 @@ async function fetchAndPopulateSubjects(syncCode, modalOverlay, modalContent) {
 }
 
 async function startSyncProcess(syncCode, subjectData, modalContent) {
+  // تصفير البيانات قبل البدء
+  let currentData = [];
+
   modalContent.innerHTML = `
     <h2 style="color: #059669; font-size: 24px; font-weight: bold; margin-bottom: 8px;">جاري الرصد...</h2>
     <p style="color: #64748b; margin-bottom: 24px; font-size: 15px;">${subjectData.subject} - ${subjectData.grade} - شعبة ${subjectData.section}</p>
@@ -234,12 +237,21 @@ async function startSyncProcess(syncCode, subjectData, modalContent) {
     url.searchParams.append('subject', subjectData.subject);
     url.searchParams.append('grade', subjectData.grade);
     url.searchParams.append('section', subjectData.section);
+    url.searchParams.append('timestamp', Date.now()); // تحديث منطق الحقن (No-Cache Injection)
     
-    const response = await fetch(url.toString());
+    // جلب البيانات الجديدة (Fetch latest)
+    const response = await fetch(url.toString(), {
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
+    });
     
     if (!response.ok) throw new Error('فشل جلب درجات الطلاب');
     
-    const gradesData = await response.json();
+    currentData = await response.json();
     let successCount = 0;
     
     // Find student rows robustly
@@ -248,19 +260,11 @@ async function startSyncProcess(syncCode, subjectData, modalContent) {
       return textInputs.length >= 2 && !row.closest('thead');
     });
 
-    let unassignedGrades = [...gradesData];
-
     studentRows.forEach(row => {
       const rowText = row.innerText; 
-      // Try to match by National ID first
-      let studentData = unassignedGrades.find(g => g.nationalId && rowText.includes(g.nationalId));
       
-      // Fallback: If we couldn't match by ID (likely because of mock data during testing), fill sequentially
-      if (!studentData && unassignedGrades.length > 0) {
-         studentData = unassignedGrades.shift();
-      } else if (studentData) {
-         unassignedGrades = unassignedGrades.filter(g => g !== studentData);
-      }
+      // المطابقة الصارمة برقم الهوية فقط
+      let studentData = currentData.find(g => g.nationalId && rowText.includes(g.nationalId));
 
       if (studentData) {
         const inputs = row.querySelectorAll('input[type="text"]');
