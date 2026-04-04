@@ -4142,7 +4142,7 @@ async function startServer() {
   app.options("/api/get-teacher-subjects", (req, res) => {
     res.header("Access-Control-Allow-Origin", "https://noor.moe.gov.sa");
     res.header("Access-Control-Allow-Methods", "GET, OPTIONS");
-    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, Cache-Control, Pragma, Expires");
     res.status(200).end();
   });
 
@@ -4150,7 +4150,7 @@ async function startServer() {
     try {
       res.header("Access-Control-Allow-Origin", "https://noor.moe.gov.sa");
       res.header("Access-Control-Allow-Methods", "GET, OPTIONS");
-      res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+      res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, Cache-Control, Pragma, Expires");
 
       const { syncCode } = req.query;
       if (!syncCode) return res.status(400).json({ error: "Missing syncCode parameter" });
@@ -4160,13 +4160,29 @@ async function startServer() {
 
       const teacherId = user[0].id;
 
-      // Get unique subjects and sections for this teacher
-      const subjects = await sql`
-        SELECT DISTINCT subject, grade, section 
-        FROM smart_tracker_sessions 
-        WHERE teacher_id = ${teacherId}
-        ORDER BY subject, grade, section
+      // Get unique subjects and sections for this teacher from current assignments
+      const assignments = await sql`
+        SELECT DISTINCT s.name as subject, ta.class_id
+        FROM teacher_assignments ta
+        JOIN subjects s ON ta.subject_id = s.id
+        WHERE ta.teacher_id = ${teacherId}
       `;
+
+      const subjects = assignments.map(a => {
+        const [grade, section] = a.class_id.split('|');
+        return {
+          subject: a.subject,
+          grade: grade || '',
+          section: section || ''
+        };
+      });
+
+      // Sort subjects by subject, grade, section
+      subjects.sort((a, b) => {
+        if (a.subject !== b.subject) return a.subject.localeCompare(b.subject);
+        if (a.grade !== b.grade) return a.grade.localeCompare(b.grade);
+        return a.section.localeCompare(b.section);
+      });
 
       res.status(200).json({
         teacherName: user[0].name,
@@ -4181,7 +4197,7 @@ async function startServer() {
   app.options("/api/get-takamol-grades", (req, res) => {
     res.header("Access-Control-Allow-Origin", "https://noor.moe.gov.sa");
     res.header("Access-Control-Allow-Methods", "GET, OPTIONS");
-    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, Cache-Control, Pragma, Expires");
     res.status(200).end();
   });
 
@@ -4190,7 +4206,7 @@ async function startServer() {
       // Set CORS headers specifically for this route
       res.header("Access-Control-Allow-Origin", "https://noor.moe.gov.sa");
       res.header("Access-Control-Allow-Methods", "GET, OPTIONS");
-      res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+      res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, Cache-Control, Pragma, Expires");
 
       const { syncCode, subject, grade, section } = req.query;
 
