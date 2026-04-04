@@ -66,9 +66,15 @@ export interface TeacherAssignment {
   semester: string;
 }
 
+export interface GradeRecord {
+  score: number | '';
+  recordedAtClassId?: string;
+  teacherId?: number;
+}
+
 export interface StudentState {
   attendance: 'present' | 'late' | 'absent';
-  grades: Record<string, number | ''>;
+  grades: Record<string, GradeRecord>;
   behaviorChips: string[];
   noorExportData?: {
     performanceTotal: number;
@@ -665,7 +671,11 @@ const SmartTracker: React.FC = () => {
                     initialState[st.student_id].behaviorChips = st.behavior_chips || [];
                     if (st.grades && Array.isArray(st.grades)) {
                       st.grades.forEach((g: any) => {
-                        initialState[st.student_id].grades[g.task_id] = Number(g.grade);
+                        initialState[st.student_id].grades[g.task_id] = {
+                          score: Number(g.grade),
+                          teacherId: g.teacher_id,
+                          recordedAtClassId: g.recorded_at_class_id
+                        };
                       });
                     }
                   }
@@ -743,15 +753,52 @@ const SmartTracker: React.FC = () => {
     window.dispatchEvent(new Event('takamol_logs_updated'));
   };
 
+  const [transferConfirmModal, setTransferConfirmModal] = useState<{
+    isOpen: boolean;
+    studentId: number;
+    taskId: string;
+    newValue: number | '';
+    maxGrade: number;
+    previousTeacherName?: string;
+    previousClassName?: string;
+  } | null>(null);
+
   const handleGradeChange = (studentId: number, taskId: string, value: string | number, maxGrade: number) => {
     let numValue: number | '' = value === '' ? '' : Number(value);
     if (numValue !== '' && numValue < 0) return; // Only prevent negative numbers
 
+    const currentClassId = `${grade} ${section}`;
+    const existingGrade = studentsState[studentId]?.grades[taskId];
+
+    if (existingGrade && existingGrade.recordedAtClassId && existingGrade.recordedAtClassId !== currentClassId) {
+      // Grade was recorded in a different class
+      setTransferConfirmModal({
+        isOpen: true,
+        studentId,
+        taskId,
+        newValue: numValue,
+        maxGrade,
+        previousClassName: existingGrade.recordedAtClassId
+      });
+      return;
+    }
+
+    applyGradeChange(studentId, taskId, numValue, currentClassId);
+  };
+
+  const applyGradeChange = (studentId: number, taskId: string, numValue: number | '', classId: string) => {
     setStudentsState(prev => ({
       ...prev,
       [studentId]: { 
         ...prev[studentId], 
-        grades: { ...prev[studentId].grades, [taskId]: numValue } 
+        grades: { 
+          ...prev[studentId].grades, 
+          [taskId]: {
+            score: numValue,
+            teacherId: user?.id,
+            recordedAtClassId: classId
+          } 
+        } 
       }
     }));
 
@@ -982,7 +1029,7 @@ const SmartTracker: React.FC = () => {
     let performanceSum = 0;
     ['participation', 'homework', 'performance'].forEach(cat => {
       tasks[cat as TaskCategory].forEach(task => {
-        const val = state.grades[task.id];
+        const val = state.grades[task.id]?.score;
         if (val !== '' && val !== undefined) {
           performanceSum += Number(val);
         }
@@ -992,7 +1039,7 @@ const SmartTracker: React.FC = () => {
 
     let evaluationSum = 0;
     tasks['exams'].forEach(task => {
-      const val = state.grades[task.id];
+      const val = state.grades[task.id]?.score;
       if (val !== '' && val !== undefined) {
         evaluationSum += Number(val);
       }
@@ -1464,17 +1511,37 @@ const SmartTracker: React.FC = () => {
                             className="flex items-center gap-2 cursor-pointer group"
                             onClick={() => setSelectedStudentId(student.id)}
                           >
-                            <span className="font-bold text-slate-800 text-sm truncate group-hover:text-indigo-600 transition-colors">{student.name}</span>
+                            <div className="flex flex-col">
+                              <span className="font-bold text-slate-800 text-sm truncate group-hover:text-indigo-600 transition-colors">{student.name}</span>
+                              {Object.values(state.grades).some(g => g.recordedAtClassId && g.recordedAtClassId !== `${grade} ${section}`) && (
+                                <span className="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full w-fit mt-0.5 flex items-center gap-1">
+                                  <RefreshCw size={8} />
+                                  منقول حديثاً
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </td>
                         
                         {activeTab === 'grades' && (
                           <>
                             {visibleTasks.map((task, tIdx) => {
-                              const val = state.grades[task.id] ?? '';
+                              const gradeRecord = state.grades[task.id];
+                              const val = gradeRecord?.score ?? '';
                               const isError = val !== '' && Number(val) > task.maxGrade;
+                              const isTransferred = gradeRecord?.recordedAtClassId && gradeRecord.recordedAtClassId !== `${grade} ${section}`;
+                              
                               return (
-                                <td key={task.id} className={`p-0 border border-slate-300 h-10 relative ${isError ? 'bg-red-50' : ''}`}>
+                                <td 
+                                  key={task.id} 
+                                  className={`p-0 border border-slate-300 h-10 relative group ${isError ? 'bg-red-50' : isTransferred ? 'bg-blue-50/50' : ''}`}
+                                  title={isTransferred ? `رُصدت مسبقاً في ${gradeRecord.recordedAtClassId}` : ''}
+                                >
+                                  {isTransferred && (
+                                    <div className="absolute top-1 right-1 text-blue-400 opacity-50 group-hover:opacity-100 transition-opacity">
+                                      <RefreshCw size={10} />
+                                    </div>
+                                  )}
                                   {task.type === 'number' ? (
                                     <input 
                                       type="number"
@@ -1482,7 +1549,7 @@ const SmartTracker: React.FC = () => {
                                       onChange={(e) => handleGradeChange(student.id, task.id, e.target.value, task.maxGrade)}
                                       onKeyDown={(e) => handleKeyDown(e, sIdx, tIdx)}
                                       id={`grade-input-${sIdx}-${tIdx}`}
-                                      className="w-full h-full text-center bg-transparent focus:bg-teal-50 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-inset m-0 border-none [&::-webkit-inner-spin-button]:appearance-none text-sm font-bold text-slate-700"
+                                      className={`w-full h-full text-center bg-transparent focus:bg-teal-50 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-inset m-0 border-none [&::-webkit-inner-spin-button]:appearance-none text-sm font-bold ${isTransferred ? 'text-blue-700' : 'text-slate-700'}`}
                                       placeholder="-"
                                     />
                                   ) : (
@@ -1516,7 +1583,7 @@ const SmartTracker: React.FC = () => {
                               <td className="p-0 border border-slate-300 h-10 bg-slate-50/50"></td>
                             )}
                             <td className="sticky left-0 z-10 bg-slate-50 shadow-[-1px_0_5px_rgba(0,0,0,0.1)] border border-slate-300 p-0 h-10 text-center font-black text-teal-700">
-                              {tasks[activeCategory].reduce((sum, t) => sum + (Number(state.grades[t.id]) || 0), 0)}
+                              {tasks[activeCategory].reduce((sum, t) => sum + (Number(state.grades[t.id]?.score) || 0), 0)}
                             </td>
                           </>
                         )}
@@ -1636,7 +1703,7 @@ const SmartTracker: React.FC = () => {
                     <div className="flex flex-col items-center bg-slate-50 px-3 py-1 rounded-lg border border-slate-200">
                       <span className="text-[10px] text-slate-500 font-bold">المجموع</span>
                       <span className="font-bold text-teal-700 text-lg">
-                        {tasks[activeCategory].reduce((sum, t) => sum + (Number(state.grades[t.id]) || 0), 0)}
+                        {tasks[activeCategory].reduce((sum, t) => sum + (Number(state.grades[t.id]?.score) || 0), 0)}
                       </span>
                     </div>
                   )}
@@ -1690,7 +1757,7 @@ const SmartTracker: React.FC = () => {
                 {activeTab === 'grades' && (
                   <div className="space-y-3">
                     {visibleTasks.map((task) => {
-                      const val = state.grades[task.id] ?? '';
+                      const val = state.grades[task.id]?.score ?? '';
                       const isError = val !== '' && Number(val) > task.maxGrade;
                       
                       return (
@@ -1837,7 +1904,7 @@ const SmartTracker: React.FC = () => {
 
               <div className="space-y-6">
                 {visibleTasks.map((task) => {
-                  const val = studentsState[mobileGradingStudentId]?.grades[task.id] ?? '';
+                  const val = studentsState[mobileGradingStudentId]?.grades[task.id]?.score ?? '';
                   return (
                     <div key={task.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-3">
                       <div className="flex justify-between items-center">
@@ -2484,6 +2551,61 @@ const SmartTracker: React.FC = () => {
               >
                 <Printer size={20} />
                 بدء الطباعة الآن
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+
+    {/* Transfer Confirm Modal */}
+    <AnimatePresence>
+      {transferConfirmModal && transferConfirmModal.isOpen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm print:hidden" dir="rtl">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-100"
+          >
+            <div className="p-6 bg-gradient-to-br from-blue-50 to-indigo-50 border-b border-blue-100">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center shadow-inner">
+                  <RefreshCw size={24} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-black text-slate-800">تعديل درجة مُرحّلة</h2>
+                  <p className="text-sm text-slate-500 mt-1">تأكيد تعديل درجة من فصل سابق</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-800 text-sm leading-relaxed">
+                هذه الدرجة رُصدت مسبقاً في <strong>{transferConfirmModal.previousClassName}</strong>. هل تريد تعديلها واعتمادها باسمك في هذا الفصل؟
+              </div>
+            </div>
+
+            <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+              <button
+                onClick={() => setTransferConfirmModal(null)}
+                className="px-6 py-2 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-200 transition-colors"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={() => {
+                  applyGradeChange(
+                    transferConfirmModal.studentId, 
+                    transferConfirmModal.taskId, 
+                    transferConfirmModal.newValue, 
+                    `${grade} ${section}`
+                  );
+                  setTransferConfirmModal(null);
+                }}
+                className="px-6 py-2 rounded-xl text-sm font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-colors"
+              >
+                تأكيد التعديل
               </button>
             </div>
           </motion.div>

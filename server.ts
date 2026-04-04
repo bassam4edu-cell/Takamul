@@ -319,6 +319,33 @@ async function initDb() {
       )
     `;
 
+    // New Identity-Centric Architecture Tables
+    await sql`
+      CREATE TABLE IF NOT EXISTS smart_tasks_v2 (
+        id TEXT PRIMARY KEY,
+        title TEXT,
+        max_score INTEGER,
+        noor_category TEXT,
+        term TEXT,
+        subject TEXT,
+        grade TEXT,
+        teacher_id INTEGER REFERENCES users(id)
+      )
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS smart_grade_records_v2 (
+        id SERIAL PRIMARY KEY,
+        student_national_id TEXT REFERENCES students(national_id),
+        task_id TEXT REFERENCES smart_tasks_v2(id) ON DELETE CASCADE,
+        score NUMERIC,
+        teacher_id INTEGER REFERENCES users(id),
+        recorded_at_class_id TEXT,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(student_national_id, task_id)
+      )
+    `;
+
     try {
       await sql`ALTER TABLE smart_tracker_student_grades ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`;
     } catch (e) {
@@ -2864,6 +2891,26 @@ async function startServer() {
     }
   });
 
+  app.post("/api/admin/students/transfer", async (req, res) => {
+    const { national_id, new_grade, new_section } = req.body;
+    try {
+      if (!national_id || !new_grade || !new_section) {
+        return res.status(400).json({ success: false, error: "Missing required fields" });
+      }
+
+      await sql`
+        UPDATE students 
+        SET grade = ${new_grade}, section = ${new_section}
+        WHERE national_id = ${national_id}
+      `;
+
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[TRANSFER STUDENT] Error:", err);
+      res.status(500).json({ error: "Failed to transfer student" });
+    }
+  });
+
   app.post("/api/admin/students/import", async (req, res) => {
     const { students } = req.body;
     const schoolId = req.headers['x-school-id'] || '1';
@@ -3864,29 +3911,80 @@ async function startServer() {
   app.get("/api/tracker/session", async (req, res) => {
     const { teacher_id, grade, section, subject, date } = req.query;
     try {
+      // 1. Get tasks for this subject and grade (global tasks)
+      const tasks = await sql`
+        SELECT * FROM smart_tasks_v2 
+        WHERE subject = ${subject as string} AND grade = ${grade as string} AND teacher_id = ${teacher_id}
+      `;
+
+      // 2. Get students currently in this class
+      const students = await sql`
+        SELECT id, name, national_id, grade, section 
+        FROM students 
+        WHERE grade = ${grade as string} AND section = ${section as string}
+      `;
+
+      // 3. Get session for attendance/behavior (daily)
       const sessions = await sql`
         SELECT * FROM smart_tracker_sessions
-        WHERE teacher_id = ${teacher_id} AND grade = ${grade} AND section = ${section} AND subject = ${subject} AND date = ${date}
+        WHERE teacher_id = ${teacher_id} AND grade = ${grade as string} AND section = ${section as string} AND subject = ${subject as string} AND date = ${date as string}
       `;
-      if (sessions.length === 0) {
-        return res.json(null);
+      let session = sessions.length > 0 ? sessions[0] : null;
+      let studentStatesMap: any = {};
+
+      if (session) {
+        const states = await sql`SELECT * FROM smart_tracker_student_states WHERE session_id = ${session.id}`;
+        states.forEach((st: any) => {
+          studentStatesMap[st.student_id] = st;
+        });
       }
-      const session = sessions[0];
-      
-      const tasks = await sql`SELECT * FROM smart_tracker_tasks WHERE session_id = ${session.id}`;
-      const studentStates = await sql`
-        SELECT ss.*, s.name as student_name, s.national_id as student_national_id 
-        FROM smart_tracker_student_states ss
-        LEFT JOIN students s ON ss.student_id = s.id
-        WHERE ss.session_id = ${session.id}
-      `;
-      
-      const statesWithGrades = await Promise.all(studentStates.map(async (state: any) => {
-        const grades = await sql`SELECT * FROM smart_tracker_student_grades WHERE student_state_id = ${state.id}`;
-        return { ...state, grades };
+
+      // 4. Get grades for these students from the new Identity-Centric table
+      const nationalIds = students.map(s => s.national_id).filter(Boolean);
+      let gradeRecords: any[] = [];
+      if (nationalIds.length > 0) {
+        gradeRecords = await sql`
+          SELECT * FROM smart_grade_records_v2 
+          WHERE student_national_id = ANY(${nationalIds as any})
+        `;
+      }
+
+      // 5. Format response to match frontend expectations
+      const formattedTasks = tasks.map((t: any) => ({
+        id: t.id,
+        category: t.noor_category,
+        name: t.title,
+        maxGrade: t.max_score,
+        type: t.term,
       }));
 
-      res.json({ session, tasks, studentStates: statesWithGrades });
+      const formattedStudentStates = students.map((student: any) => {
+        const state = studentStatesMap[student.id] || { attendance: 'present', behavior_chips: [] };
+        const studentGrades = gradeRecords.filter(g => g.student_national_id === student.national_id);
+        
+        const formattedGrades = studentGrades.map(g => ({
+          task_id: g.task_id,
+          grade: g.score,
+          teacher_id: g.teacher_id,
+          recorded_at_class_id: g.recorded_at_class_id
+        }));
+
+        return {
+          id: state.id || null,
+          student_id: student.id,
+          student_name: student.name,
+          student_national_id: student.national_id,
+          attendance: state.attendance || 'present',
+          behavior_chips: state.behavior_chips || [],
+          grades: formattedGrades
+        };
+      });
+
+      res.json({ 
+        session: session || { date }, 
+        tasks: formattedTasks, 
+        studentStates: formattedStudentStates 
+      });
     } catch (err) {
       console.error("[GET TRACKER SESSION] Error:", err);
       res.status(500).json({ error: "Failed to fetch tracker session" });
@@ -3896,7 +3994,7 @@ async function startServer() {
   app.post("/api/tracker/session", async (req, res) => {
     const { teacher_id, grade, section, subject, date, tasks, studentsState } = req.body;
     try {
-      // Upsert session
+      // Upsert session (for attendance/behavior)
       const sessions = await sql`
         INSERT INTO smart_tracker_sessions (teacher_id, grade, section, subject, date)
         VALUES (${teacher_id}, ${grade}, ${section}, ${subject}, ${date})
@@ -3914,25 +4012,24 @@ async function startServer() {
         }
       }
 
-      // Delete tasks that are NOT in the request
+      // Delete tasks that are NOT in the request (from v2)
       if (taskIds.length > 0) {
-        await sql`DELETE FROM smart_tracker_tasks WHERE session_id = ${sessionId} AND id != ALL(${taskIds})`;
+        await sql`DELETE FROM smart_tasks_v2 WHERE subject = ${subject} AND grade = ${grade} AND teacher_id = ${teacher_id} AND id != ALL(${taskIds as any})`;
       } else {
-        await sql`DELETE FROM smart_tracker_tasks WHERE session_id = ${sessionId}`;
+        await sql`DELETE FROM smart_tasks_v2 WHERE subject = ${subject} AND grade = ${grade} AND teacher_id = ${teacher_id}`;
       }
 
-      // Upsert tasks
+      // Upsert tasks (v2)
       for (const category in tasks) {
         for (const task of tasks[category]) {
           await sql`
-            INSERT INTO smart_tracker_tasks (id, session_id, category, name, max_grade, type, date)
-            VALUES (${task.id}, ${sessionId}, ${category}, ${task.name}, ${task.maxGrade}, ${task.type}, ${task.date || null})
+            INSERT INTO smart_tasks_v2 (id, title, max_score, noor_category, term, subject, grade, teacher_id)
+            VALUES (${task.id}, ${task.name}, ${task.maxGrade}, ${category}, ${task.type}, ${subject}, ${grade}, ${teacher_id})
             ON CONFLICT (id) DO UPDATE SET
-              category = EXCLUDED.category,
-              name = EXCLUDED.name,
-              max_grade = EXCLUDED.max_grade,
-              type = EXCLUDED.type,
-              date = EXCLUDED.date
+              title = EXCLUDED.title,
+              max_score = EXCLUDED.max_score,
+              noor_category = EXCLUDED.noor_category,
+              term = EXCLUDED.term
           `;
         }
       }
@@ -3942,35 +4039,50 @@ async function startServer() {
         const studentId = parseInt(studentIdStr);
         const state = studentsState[studentId];
         
-        const states = await sql`
+        // Upsert attendance/behavior
+        await sql`
           INSERT INTO smart_tracker_student_states (session_id, student_id, attendance, behavior_chips)
           VALUES (${sessionId}, ${studentId}, ${state.attendance}, ${JSON.stringify(state.behaviorChips)})
           ON CONFLICT (session_id, student_id) DO UPDATE SET
             attendance = EXCLUDED.attendance,
             behavior_chips = EXCLUDED.behavior_chips
-          RETURNING id
         `;
-        const stateId = states[0].id;
 
-        // Get all task IDs for this student's grades
-        const gradeTaskIds = Object.keys(state.grades).filter(taskId => state.grades[taskId] !== '');
+        // Get student national ID
+        const studentRes = await sql`SELECT national_id FROM students WHERE id = ${studentId}`;
+        const nationalId = studentRes[0]?.national_id;
 
-        // Delete grades that are NOT in the request
-        if (gradeTaskIds.length > 0) {
-          await sql`DELETE FROM smart_tracker_student_grades WHERE student_state_id = ${stateId} AND task_id != ALL(${gradeTaskIds})`;
-        } else {
-          await sql`DELETE FROM smart_tracker_student_grades WHERE student_state_id = ${stateId}`;
-        }
+        if (nationalId) {
+          // Get all task IDs for this student's grades
+          const gradeTaskIds = Object.keys(state.grades).filter(taskId => {
+            const val = state.grades[taskId]?.score;
+            return val !== '' && val !== undefined && val !== null;
+          });
 
-        for (const taskId of gradeTaskIds) {
-          const gradeVal = state.grades[taskId];
-          await sql`
-            INSERT INTO smart_tracker_student_grades (student_state_id, task_id, grade, updated_at)
-            VALUES (${stateId}, ${taskId}, ${gradeVal}, CURRENT_TIMESTAMP)
-            ON CONFLICT (student_state_id, task_id) DO UPDATE SET
-              grade = EXCLUDED.grade,
-              updated_at = CURRENT_TIMESTAMP
-          `;
+          // Delete grades for tasks that are no longer present or have been cleared
+          if (gradeTaskIds.length > 0) {
+            await sql`DELETE FROM smart_grade_records_v2 WHERE student_national_id = ${nationalId} AND task_id != ALL(${gradeTaskIds as any})`;
+          } else {
+            await sql`DELETE FROM smart_grade_records_v2 WHERE student_national_id = ${nationalId}`;
+          }
+
+          // Upsert grades
+          for (const taskId of gradeTaskIds) {
+            const gradeRecord = state.grades[taskId];
+            const score = gradeRecord.score;
+            const recordTeacherId = gradeRecord.teacherId || teacher_id;
+            const recordedAtClassId = gradeRecord.recordedAtClassId || `${grade} ${section}`;
+
+            await sql`
+              INSERT INTO smart_grade_records_v2 (student_national_id, task_id, score, teacher_id, recorded_at_class_id)
+              VALUES (${nationalId}, ${taskId}, ${score}, ${recordTeacherId}, ${recordedAtClassId})
+              ON CONFLICT (student_national_id, task_id) DO UPDATE SET
+                score = EXCLUDED.score,
+                teacher_id = EXCLUDED.teacher_id,
+                recorded_at_class_id = EXCLUDED.recorded_at_class_id,
+                updated_at = CURRENT_TIMESTAMP
+            `;
+          }
         }
       }
 
@@ -4221,7 +4333,7 @@ async function startServer() {
       }
 
       const teacherId = user[0].id;
-      let gradesData = [];
+      let gradesData: any[] = [];
 
       if (subject && grade && section) {
         // Get students for this grade and section
@@ -4230,57 +4342,48 @@ async function startServer() {
           WHERE grade = ${grade as string} AND section = ${section as string} AND national_id IS NOT NULL
         `;
 
-        // Get the most recently saved session for this teacher, subject, grade, section
-        const sessions = await sql`
-          SELECT id FROM smart_tracker_sessions
-          WHERE teacher_id = ${teacherId} AND subject = ${subject as string} AND grade = ${grade as string} AND section = ${section as string}
-          ORDER BY created_at DESC LIMIT 1
+        // Get tasks for this subject and grade
+        const tasks = await sql`
+          SELECT id, noor_category as category FROM smart_tasks_v2 
+          WHERE subject = ${subject as string} AND grade = ${grade as string} AND teacher_id = ${teacherId}
         `;
 
-        if (sessions.length > 0 && students.length > 0) {
-          const sessionId = sessions[0].id;
+        if (tasks.length > 0 && students.length > 0) {
+          const nationalIds = students.map(s => s.national_id);
           
-          // Get tasks for this session
-          const tasks = await sql`SELECT id, category FROM smart_tracker_tasks WHERE session_id = ${sessionId}`;
-          
-          // Get student states for this session
-          const states = await sql`SELECT id, student_id FROM smart_tracker_student_states WHERE session_id = ${sessionId}`;
-          
-          if (states.length > 0 && tasks.length > 0) {
-            const stateIds = states.map(s => s.id);
-            const allGrades = await sql`SELECT student_state_id, task_id, grade FROM smart_tracker_student_grades WHERE student_state_id = ANY(${stateIds as any})`;
+          // Get grades for these students
+          const gradeRecords = await sql`
+            SELECT * FROM smart_grade_records_v2 
+            WHERE student_national_id = ANY(${nationalIds as any})
+          `;
+
+          // Format data for the extension
+          gradesData = students.map(student => {
+            const studentGrades = gradeRecords.filter(g => g.student_national_id === student.national_id);
+            let performanceSum = 0;
+            let evaluationSum = 0;
             
-            gradesData = students.map(student => {
-              const state = states.find(s => s.student_id === student.id);
-              let performanceSum = 0;
-              let evaluationSum = 0;
-              
-              if (state) {
-                const studentGrades = allGrades.filter(g => g.student_state_id === state.id);
-                
-                studentGrades.forEach(g => {
-                  const task = tasks.find(t => t.id === g.task_id);
-                  if (task) {
-                    if (['participation', 'homework', 'performance'].includes(task.category)) {
-                      performanceSum += Number(g.grade) || 0;
-                    }
-                    if (task.category === 'exams') {
-                      evaluationSum += Number(g.grade) || 0;
-                    }
-                  }
-                });
+            studentGrades.forEach(g => {
+              const task = tasks.find(t => t.id === g.task_id);
+              if (task && g.score !== null) {
+                if (['participation', 'homework', 'performance'].includes(task.category)) {
+                  performanceSum += Number(g.score) || 0;
+                }
+                if (task.category === 'exams') {
+                  evaluationSum += Number(g.score) || 0;
+                }
               }
-              
-              const performanceTotal = Math.min(performanceSum, 40);
-              const evaluationTotal = Math.min(evaluationSum, 20);
-              
-              return {
-                nationalId: student.national_id,
-                evaluationTotal: evaluationTotal, 
-                performanceTotal: performanceTotal 
-              };
             });
-          }
+            
+            const performanceTotal = Math.min(performanceSum, 40);
+            const evaluationTotal = Math.min(evaluationSum, 20);
+            
+            return {
+              nationalId: student.national_id,
+              evaluationTotal: evaluationTotal, 
+              performanceTotal: performanceTotal 
+            };
+          });
         }
       }
 
