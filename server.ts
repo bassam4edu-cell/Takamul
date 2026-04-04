@@ -2797,6 +2797,7 @@ async function startServer() {
       await sql`DELETE FROM attendance_records`;
       await sql`DELETE FROM smart_tracker_student_states`;
       await sql`DELETE FROM smart_tracker_sessions`;
+      await sql`DELETE FROM smart_grade_records_v2`;
       // Finally delete all students
       await sql`DELETE FROM students`;
       
@@ -3015,6 +3016,28 @@ async function startServer() {
     }
   });
 
+  app.post("/api/admin/classes/rename", async (req, res) => {
+    const { old_grade, old_section, new_grade, new_section } = req.body;
+    if (!old_grade || !old_section || !new_grade || !new_section) {
+      return res.status(400).json({ error: "All grade and section fields are required" });
+    }
+
+    try {
+      console.log(`[ADMIN] Request to rename class: ${old_grade} - ${old_section} to ${new_grade} - ${new_section}`);
+      
+      await sql`
+        UPDATE students 
+        SET grade = ${new_grade}, section = ${new_section}
+        WHERE grade = ${old_grade} AND section = ${old_section}
+      `;
+      
+      res.json({ success: true });
+    } catch (err) {
+      console.error(`[ADMIN] Failed to rename class:`, err);
+      res.status(500).json({ success: false, error: "فشل تعديل اسم الصف" });
+    }
+  });
+
   app.post("/api/admin/classes/delete", async (req, res) => {
     const { grade, section } = req.body;
     if (!grade || !section) return res.status(400).json({ error: "Grade and section are required" });
@@ -3023,10 +3046,11 @@ async function startServer() {
       console.log(`[ADMIN] Request to delete entire class: ${grade} - ${section}`);
       
       // 1. Find all students in this class
-      const studentsInClass = await sql`SELECT id FROM students WHERE grade = ${grade} AND section = ${section}`;
+      const studentsInClass = await sql`SELECT id, national_id FROM students WHERE grade = ${grade} AND section = ${section}`;
       
       if (studentsInClass.length > 0) {
         const studentIds = studentsInClass.map((s: any) => s.id);
+        const nationalIds = studentsInClass.map((s: any) => s.national_id).filter(Boolean);
         
         // 2. Find all referrals for these students
         const referrals = await sql`SELECT id FROM referrals WHERE student_id = ANY(${studentIds})`;
@@ -3046,6 +3070,10 @@ async function startServer() {
         await sql`DELETE FROM attendance_records WHERE student_id = ANY(${studentIds})`;
         await sql`DELETE FROM smart_tracker_student_states WHERE student_id = ANY(${studentIds})`;
         await sql`DELETE FROM smart_tracker_sessions WHERE grade = ${grade} AND section = ${section}`;
+
+        if (nationalIds.length > 0) {
+          await sql`DELETE FROM smart_grade_records_v2 WHERE student_national_id = ANY(${nationalIds})`;
+        }
 
         // 6. Delete the students
         await sql`DELETE FROM students WHERE id = ANY(${studentIds})`;

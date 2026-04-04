@@ -15,6 +15,25 @@ const StudentManagement: React.FC = () => {
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const [editingStudent, setEditingStudent] = useState<any | null>(null);
   const [isDeleting, setIsDeleting] = useState<number | null>(null);
+  
+  // Class Management States
+  const [isRenamingClass, setIsRenamingClass] = useState(false);
+  const [newGradeName, setNewGradeName] = useState('');
+  const [newSectionName, setNewSectionName] = useState('');
+  const [isDeletingClass, setIsDeletingClass] = useState(false);
+  const [isDeletingDatabase, setIsDeletingDatabase] = useState(false);
+
+  const fetchFilters = async () => {
+    try {
+      const res = await apiFetch('/api/admin/students/filters');
+      if (res.ok) {
+        const data = await res.json();
+        setFilters(data.filters || {});
+      }
+    } catch (err) {
+      console.error("Failed to fetch filters", err);
+    }
+  };
 
   const fetchStudents = async () => {
     if (selectedGrade === "" || selectedSection === "") {
@@ -41,17 +60,6 @@ const StudentManagement: React.FC = () => {
 
   useEffect(() => {
     if (activeTab === 'view') {
-      const fetchFilters = async () => {
-        try {
-          const res = await apiFetch('/api/admin/students/filters');
-          if (res.ok) {
-            const data = await res.json();
-            setFilters(data.filters || {});
-          }
-        } catch (err) {
-          console.error("Failed to fetch filters", err);
-        }
-      };
       fetchFilters();
     }
   }, [activeTab]);
@@ -243,6 +251,105 @@ const StudentManagement: React.FC = () => {
     }
   };
 
+  const handleRenameClass = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedGrade || !selectedSection || !newGradeName || !newSectionName) return;
+
+    try {
+      const res = await apiFetch('/api/admin/classes/rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          old_grade: selectedGrade,
+          old_section: selectedSection,
+          new_grade: newGradeName,
+          new_section: newSectionName
+        })
+      });
+
+      if (res.ok) {
+        toast.success('تم تعديل اسم الصف بنجاح');
+        setIsRenamingClass(false);
+        setSelectedGrade(newGradeName);
+        setSelectedSection(newSectionName);
+        await fetchFilters();
+        fetchStudents();
+      } else {
+        const data = await res.json();
+        toast.error(data.error || 'فشل تعديل اسم الصف');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('حدث خطأ أثناء التعديل');
+    }
+  };
+
+  const handleDeleteClass = async () => {
+    if (!selectedGrade || !selectedSection) return;
+    if (!window.confirm(`هل أنت متأكد من حذف الصف (${selectedGrade} - ${selectedSection}) بالكامل؟ سيتم حذف جميع الطلاب وسجلاتهم.`)) return;
+
+    setIsDeletingClass(true);
+    try {
+      const res = await apiFetch('/api/admin/classes/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          grade: selectedGrade,
+          section: selectedSection
+        })
+      });
+
+      if (res.ok) {
+        toast.success('تم حذف الصف بنجاح');
+        setSelectedGrade('');
+        setSelectedSection('');
+        await fetchFilters();
+      } else {
+        const data = await res.json();
+        toast.error(data.error || 'فشل حذف الصف');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('حدث خطأ أثناء الحذف');
+    } finally {
+      setIsDeletingClass(false);
+    }
+  };
+
+  const handleDeleteDatabase = async () => {
+    if (!window.confirm('تحذير خطير: هل أنت متأكد من حذف قاعدة بيانات الطلاب بالكامل؟ سيتم مسح جميع الطلاب، الدرجات، والمخالفات. هذا الإجراء لا يمكن التراجع عنه!')) return;
+    
+    // Double confirmation
+    const confirmText = window.prompt('لتأكيد الحذف، اكتب "حذف قاعدة البيانات"');
+    if (confirmText !== 'حذف قاعدة البيانات') {
+      toast.error('تم إلغاء عملية الحذف');
+      return;
+    }
+
+    setIsDeletingDatabase(true);
+    try {
+      const res = await apiFetch('/api/admin/database/students/delete', {
+        method: 'POST'
+      });
+
+      if (res.ok) {
+        toast.success('تم مسح قاعدة بيانات الطلاب بنجاح');
+        setSelectedGrade('');
+        setSelectedSection('');
+        setStudentsList([]);
+        await fetchFilters();
+      } else {
+        const data = await res.json();
+        toast.error(data.error || 'فشل مسح قاعدة البيانات');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('حدث خطأ أثناء مسح قاعدة البيانات');
+    } finally {
+      setIsDeletingDatabase(false);
+    }
+  };
+
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
       <Toaster position="top-center" />
@@ -289,31 +396,67 @@ const StudentManagement: React.FC = () => {
 
         {activeTab === 'view' && (
           <div className="space-y-6">
-            <div className="flex gap-4">
-              <select 
-                value={selectedGrade} 
-                onChange={(e) => {
-                  setSelectedGrade(e.target.value);
-                  setSelectedSection(''); // Reset section when grade changes
-                }}
-                className="flex-1 p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 outline-none"
-              >
-                <option value="">-- اختر الصف --</option>
-                {Object.keys(filters).map(grade => (
-                  <option key={grade} value={grade}>{grade}</option>
-                ))}
-              </select>
-              <select 
-                value={selectedSection}
-                onChange={(e) => setSelectedSection(e.target.value)}
-                disabled={!selectedGrade}
-                className="flex-1 p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 outline-none disabled:bg-slate-50 disabled:text-slate-400"
-              >
-                <option value="">-- اختر الفصل --</option>
-                {(filters[selectedGrade] || []).map(section => (
-                  <option key={section} value={section}>{section}</option>
-                ))}
-              </select>
+            <div className="flex flex-col sm:flex-row gap-4 items-center justify-between bg-slate-50 p-4 rounded-2xl border border-slate-100">
+              <div className="flex flex-1 gap-4 w-full">
+                <select 
+                  value={selectedGrade} 
+                  onChange={(e) => {
+                    setSelectedGrade(e.target.value);
+                    setSelectedSection(''); // Reset section when grade changes
+                  }}
+                  className="flex-1 p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 outline-none"
+                >
+                  <option value="">-- اختر الصف --</option>
+                  {Object.keys(filters).map(grade => (
+                    <option key={grade} value={grade}>{grade}</option>
+                  ))}
+                </select>
+                <select 
+                  value={selectedSection}
+                  onChange={(e) => setSelectedSection(e.target.value)}
+                  disabled={!selectedGrade}
+                  className="flex-1 p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 outline-none disabled:bg-slate-50 disabled:text-slate-400"
+                >
+                  <option value="">-- اختر الفصل --</option>
+                  {(filters[selectedGrade] || []).map(section => (
+                    <option key={section} value={section}>{section}</option>
+                  ))}
+                </select>
+              </div>
+              
+              <div className="flex gap-2 w-full sm:w-auto">
+                {selectedGrade && selectedSection && (
+                  <>
+                    <button
+                      onClick={() => {
+                        setNewGradeName(selectedGrade);
+                        setNewSectionName(selectedSection);
+                        setIsRenamingClass(true);
+                      }}
+                      className="flex items-center gap-2 px-4 py-3 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-xl font-bold text-sm transition-colors"
+                    >
+                      <Edit className="w-4 h-4" />
+                      تعديل اسم الصف
+                    </button>
+                    <button
+                      onClick={handleDeleteClass}
+                      disabled={isDeletingClass}
+                      className="flex items-center gap-2 px-4 py-3 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl font-bold text-sm transition-colors disabled:opacity-50"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      حذف الصف
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={handleDeleteDatabase}
+                  disabled={isDeletingDatabase}
+                  className="flex items-center gap-2 px-4 py-3 bg-red-600 text-white hover:bg-red-700 rounded-xl font-bold text-sm transition-colors disabled:opacity-50 mr-auto sm:mr-4"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  حذف قاعدة الطلاب
+                </button>
+              </div>
             </div>
 
             {selectedGrade === "" || selectedSection === "" ? (
@@ -459,6 +602,65 @@ const StudentManagement: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setEditingStudent(null)}
+                  className="flex-1 py-3 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold transition-colors"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-3 text-white bg-primary hover:bg-primary/90 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
+                >
+                  <Save className="w-5 h-5" />
+                  حفظ التعديلات
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Rename Class Modal */}
+      {isRenamingClass && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50">
+              <h3 className="font-bold text-slate-800">تعديل اسم الصف</h3>
+              <button 
+                onClick={() => setIsRenamingClass(false)}
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleRenameClass} className="p-6 space-y-4">
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-sm text-blue-800 mb-4">
+                أنت تقوم بتعديل اسم الصف: <strong>{selectedGrade} - {selectedSection}</strong>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">اسم الصف الجديد</label>
+                <input
+                  type="text"
+                  required
+                  value={newGradeName}
+                  onChange={(e) => setNewGradeName(e.target.value)}
+                  className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 outline-none"
+                  placeholder="مثال: الصف الأول"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">اسم الفصل الجديد</label>
+                <input
+                  type="text"
+                  required
+                  value={newSectionName}
+                  onChange={(e) => setNewSectionName(e.target.value)}
+                  className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 outline-none"
+                  placeholder="مثال: 1"
+                />
+              </div>
+              <div className="pt-4 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsRenamingClass(false)}
                   className="flex-1 py-3 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold transition-colors"
                 >
                   إلغاء
