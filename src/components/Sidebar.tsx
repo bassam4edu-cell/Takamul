@@ -15,7 +15,8 @@ import {
   Bell,
   FileText,
   MessageSquare,
-  Puzzle
+  Puzzle,
+  Ticket
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { logAction } from '../services/auditLogger';
@@ -40,6 +41,12 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
       path: '/dashboard', 
       icon: LayoutDashboard,
       roles: ['teacher', 'vice_principal', 'counselor', 'principal', 'super_admin']
+    },
+    { 
+      title: 'الملف الشامل للطالب', 
+      path: '/dashboard/students', 
+      icon: UserCircle,
+      roles: ['teacher', 'vice_principal', 'counselor', 'principal', 'admin']
     },
     { 
       title: 'تحويل جديد', 
@@ -102,8 +109,8 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
       roles: ['admin', 'principal', 'management', 'vice_principal']
     },
     { 
-      title: 'السجل الشامل للطالب', 
-      path: '/dashboard/student-record', 
+      title: 'سجل الغياب والتأخر', 
+      path: '/dashboard/absence-record', 
       icon: FileText,
       roles: ['vice_principal', 'counselor', 'principal', 'admin']
     },
@@ -130,6 +137,12 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
       path: '/dashboard/extension-setup', 
       icon: Puzzle,
       roles: ['teacher', 'vice_principal']
+    },
+    { 
+      title: 'نظام الأذونات', 
+      path: '/dashboard/smart-pass', 
+      icon: Ticket,
+      roles: ['vice_principal', 'principal', 'admin', 'management']
     },
     { 
       title: 'الإعدادات', 

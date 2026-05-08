@@ -1,6 +1,6 @@
-import { SubjectDetailedLogView } from '../components/SubjectDetailedLogView';
+import SubjectDetailedLogView from '../components/SubjectDetailedLogView';
 import { apiFetch } from '../utils/api';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -8,6 +8,7 @@ import {
   Calendar, 
   FileText, 
   ArrowRight,
+  ArrowLeft,
   ShieldAlert,
   Clock,
   BookOpen,
@@ -16,7 +17,8 @@ import {
   UserCircle,
   Edit,
   Trash2,
-  Save
+  Save,
+  Activity
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { formatHijriDate } from '../utils/dateUtils';
@@ -74,8 +76,9 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly =
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [behaviorRecords, setBehaviorRecords] = useState<BehaviorRecord[]>([]);
   const [trackerData, setTrackerData] = useState<any[]>([]);
+  const [assignedSubjects, setAssignedSubjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'referrals' | 'behavior' | 'attendance' | 'muwada_akademiya'>('referrals');
+  const [activeTab, setActiveTab] = useState<'summary' | 'referrals' | 'behavior' | 'attendance' | 'muwada_akademiya'>('summary');
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<any>(null);
@@ -115,6 +118,7 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly =
         setReferrals(data.referrals || []);
         setAttendanceRecords(data.attendanceRecords || []);
         setBehaviorRecords(data.behaviorRecords || []);
+        setAssignedSubjects(data.assignedSubjects || []);
         
         const localLogs = JSON.parse(localStorage.getItem('takamol_student_logs') || '[]');
         const studentLocalLogs = localLogs.filter((log: any) => log.studentId === Number(id));
@@ -280,6 +284,15 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly =
       <div className="space-y-6">
         <div className="flex overflow-x-auto no-scrollbar gap-2 pb-2 border-b border-slate-100">
           <button
+            onClick={() => setActiveTab('summary')}
+            className={`flex items-center gap-2 px-6 py-4 font-bold text-sm whitespace-nowrap transition-all border-b-2 ${
+              activeTab === 'summary' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <Activity size={18} />
+            <span>ملخص الحالة</span>
+          </button>
+          <button
             onClick={() => setActiveTab('referrals')}
             className={`flex items-center gap-2 px-6 py-4 font-bold text-sm whitespace-nowrap transition-all border-b-2 ${
               activeTab === 'referrals' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -319,6 +332,113 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly =
 
         <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden min-h-[300px]">
           <AnimatePresence mode="wait">
+            {activeTab === 'summary' && (
+              <motion.div
+                key="tab-summary"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="p-6 space-y-8"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="p-5 rounded-2xl bg-emerald-50 border border-emerald-100">
+                    <div className="flex items-center gap-3 mb-3 text-emerald-700">
+                      <Clock size={20} />
+                      <h4 className="font-bold">ملخص الحضور</h4>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm font-bold">
+                        <span className="text-slate-500">إجمالي الغياب:</span>
+                        <span className="text-rose-600">{attendanceRecords.filter(r => r.status === 'غائب').length} أيام</span>
+                      </div>
+                      <div className="flex justify-between text-sm font-bold">
+                        <span className="text-slate-500">بعذر:</span>
+                        <span className="text-blue-600">{attendanceRecords.filter(r => r.status === 'غائب' && r.is_excused).length}</span>
+                      </div>
+                      <div className="flex justify-between text-sm font-bold">
+                        <span className="text-slate-500">بدون عذر:</span>
+                        <span className="text-rose-600">{attendanceRecords.filter(r => r.status === 'غائب' && !r.is_excused).length}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-5 rounded-2xl bg-amber-50 border border-amber-100">
+                    <div className="flex items-center gap-3 mb-3 text-amber-700">
+                      <ShieldAlert size={20} />
+                      <h4 className="font-bold">ملخص السلوك</h4>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm font-bold">
+                        <span className="text-slate-500">المخالفات المرصودة:</span>
+                        <span className="text-rose-600">{behaviorRecords.length}</span>
+                      </div>
+                      <div className="flex justify-between text-sm font-bold">
+                        <span className="text-slate-500">تحويلات المعلمين:</span>
+                        <span className="text-amber-600">{referrals.length}</span>
+                      </div>
+                      <div className="flex justify-between text-sm font-bold">
+                        <span className="text-slate-500">الدرجة الحالية:</span>
+                        <span className="text-primary">{student.live_behavior_score} / 100</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-5 rounded-2xl bg-indigo-50 border border-indigo-100">
+                    <div className="flex items-center gap-3 mb-3 text-indigo-700">
+                      <GraduationCap size={20} />
+                      <h4 className="font-bold">المستوى الأكاديمي</h4>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm font-bold">
+                        <span className="text-slate-500">المواد المسندة:</span>
+                        <span className="text-indigo-600">{assignedSubjects.length} مواد</span>
+                      </div>
+                      <div className="flex justify-between text-sm font-bold">
+                        <span className="text-slate-500">المهام المنجزة:</span>
+                        <span className="text-emerald-600">{trackerData.length} سجل</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h4 className="font-bold text-slate-800 flex items-center gap-2">
+                    <Activity size={18} className="text-primary" />
+                    <span>آخر النشاطات</span>
+                  </h4>
+                  <div className="space-y-3">
+                    {attendanceRecords.slice(0, 3).map(record => (
+                      <div key={`att-${record.id}`} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${record.status === 'غائب' ? 'bg-rose-100 text-rose-600' : 'bg-amber-100 text-amber-600'}`}>
+                            <Clock size={14} />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-slate-700">{record.status === 'غائب' ? 'غياب' : 'تأخر'} - {formatHijriDate(record.date)}</p>
+                            <p className="text-[10px] text-slate-400 font-bold">المعلم: {record.teacher_name}</p>
+                          </div>
+                        </div>
+                        {record.is_excused && <span className="text-[10px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-bold">بعذر</span>}
+                      </div>
+                    ))}
+                    {referrals.slice(0, 2).map(ref => (
+                      <div key={`ref-${ref.id}`} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center">
+                            <FileText size={14} />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-slate-700">تحويل جديد: {ref.reason.substring(0, 30)}...</p>
+                            <p className="text-[10px] text-slate-400 font-bold">{formatHijriDate(ref.created_at)}</p>
+                          </div>
+                        </div>
+                        <span className="text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full font-bold">{getStatusText(ref.status)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+            )}
             {activeTab === 'muwada_akademiya' && (
               <motion.div
                 key="tab-muwada_akademiya"
@@ -328,39 +448,77 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ studentId, isReadOnly =
                 className="p-6"
               >
                 {selectedSubject ? (
-                  <SubjectDetailedLogView 
-                    subject={selectedSubject}
-                    studentName={student.name}
-                    studentId={student.id}
-                    serverLogs={trackerData}
-                    onBack={() => setSelectedSubject(null)}
-                  />
+                  <div className="space-y-6">
+                    <button
+                      onClick={() => setSelectedSubject(null)}
+                      className="flex items-center gap-2 text-primary hover:underline font-bold text-sm mb-4"
+                    >
+                      <ArrowRight size={18} />
+                      <span>العودة لقائمة المواد</span>
+                    </button>
+                    
+                    <Suspense fallback={<div className="h-64 flex items-center justify-center"><div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin"></div></div>}>
+                      <SubjectDetailedLogView 
+                        subject={selectedSubject}
+                        studentName={student.name}
+                        studentId={student.id}
+                        serverLogs={trackerData}
+                        onBack={() => setSelectedSubject(null)}
+                      />
+                    </Suspense>
+                  </div>
                 ) : (
-                  <div>
-                    <h3 className="font-bold text-slate-800 mb-4">المواد الدراسية</h3>
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-black text-slate-800">المواد الدراسية والنتائج</h3>
+                      <div className="text-xs font-bold text-slate-400">إجمالي المواد: {assignedSubjects.length} مواد</div>
+                    </div>
+                    
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {Array.from(new Set(trackerData.map(log => log.subject))).map(subject => {
-                        const subjectLog = trackerData.find(log => log.subject === subject);
-                        const teacherName = subjectLog?.teacher_name || subjectLog?.teacherName || 'أ. معلم المادة';
+                      {assignedSubjects.map((subject, idx) => {
+                        const subjectLogs = trackerData.filter(log => log.subject === subject.subject_name);
+                        const avgGrade = subjectLogs.length > 0 
+                          ? (subjectLogs.reduce((acc, curr) => acc + (curr.student_grade / curr.max_grade), 0) / subjectLogs.length * 100).toFixed(1)
+                          : null;
 
                         return (
-                          <div 
-                            key={subject as string}
-                            className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm cursor-pointer hover:shadow-md hover:border-primary/30 transition-all flex flex-col gap-3"
-                            onClick={() => setSelectedSubject(subject as string)}
+                          <button
+                            key={`subject-${idx}`}
+                            onClick={() => setSelectedSubject(subject.subject_name)}
+                            className="flex items-center justify-between p-5 bg-slate-50 hover:bg-indigo-50 border border-slate-100 hover:border-indigo-200 rounded-2xl transition-all group text-right w-full"
                           >
-                            <div className="flex justify-between items-start">
-                              <p className="font-bold text-lg text-slate-800">{subject as string}</p>
+                            <div className="flex items-center gap-4">
+                              <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-indigo-600 shadow-sm group-hover:scale-110 transition-transform">
+                                <BookOpen size={24} />
+                              </div>
+                              <div className="text-right">
+                                <h4 className="font-black text-slate-800">{subject.subject_name}</h4>
+                                <p className="text-xs text-slate-400 font-bold mt-1">المعلم: {subject.teacher_name || 'غير محدد'}</p>
+                              </div>
                             </div>
-                            
-                            <div className="flex items-center gap-2 text-slate-500 text-sm mt-auto pt-2 border-t border-slate-50">
-                              <UserCircle size={16} className="text-slate-400" />
-                              <span>{teacherName}</span>
+                            <div className="text-left">
+                              {avgGrade ? (
+                                <div className="flex flex-col items-end">
+                                  <span className="text-lg font-black text-indigo-600">{avgGrade}%</span>
+                                  <span className="text-[10px] text-slate-400 font-bold uppercase">متوسط الأداء</span>
+                                </div>
+                              ) : (
+                                <span className="text-[10px] text-slate-300 font-bold uppercase">لا توجد بيانات</span>
+                              )}
                             </div>
-                          </div>
+                          </button>
                         );
                       })}
                     </div>
+
+                    {assignedSubjects.length === 0 && (
+                      <div className="text-center py-12 bg-slate-50 rounded-3xl border border-dashed border-slate-200">
+                        <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300 shadow-sm">
+                          <BookOpen size={32} />
+                        </div>
+                        <p className="text-slate-500 font-bold">لم يتم العثور على مواد مسندة لهذا الفصل</p>
+                      </div>
+                    )}
                   </div>
                 )}
               </motion.div>

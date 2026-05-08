@@ -22,7 +22,7 @@ interface Props {
   onBack: () => void;
 }
 
-export const SubjectDetailedLogView: React.FC<Props> = ({ subject, studentName, studentId, serverLogs = [], onBack }) => {
+const SubjectDetailedLogView: React.FC<Props> = ({ subject, studentName, studentId, serverLogs = [], onBack }) => {
   const [combinedLogs, setCombinedLogs] = React.useState<any[]>([]);
 
   React.useEffect(() => {
@@ -204,3 +204,5 @@ export const SubjectDetailedLogView: React.FC<Props> = ({ subject, studentName, 
     </motion.div>
   );
 };
+
+export default SubjectDetailedLogView;

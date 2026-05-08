@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Printer, Share2, BookOpen, Calculator, FlaskConical, Languages, Palette, ChevronLeft } from 'lucide-react';
 import * as htmlToImage from 'html-to-image';
-import { Student, StudentState, TaskCategory, Task } from '../pages/SmartTracker';
+import type { Student, StudentState, TaskCategory, Task } from '../types/tracker';
 import { formatHijriDate, formatHijriDateTime } from '../utils/dateUtils';
 import { apiFetch } from '../utils/api';
 import { logAction } from '../services/auditLogger';
@@ -49,7 +49,7 @@ interface StudentProfileDrawerProps {
 export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ student, state, tasks, grade, section, date, onClose }) => {
   const { user: currentUser } = useAuth();
   const { settings } = useSchoolSettings();
-  if (!state) return null; // إضافة فحص أمان
+  
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
   const [selectedSubject, setSelectedSubject] = useState<any | null>(null);
@@ -124,7 +124,7 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
     // Check if the current session's date is already in the records
     const hasCurrentDate = records.some(r => r.date && r.date.startsWith(date));
     
-    if (!hasCurrentDate && state.attendance !== 'present') {
+    if (!hasCurrentDate && state?.attendance && state.attendance !== 'present') {
       records.unshift({
         id: Date.now(), // mock ID
         date: date,
@@ -134,10 +134,10 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
     }
     
     return records;
-  }, [attendanceRecords, date, state.attendance]);
+  }, [attendanceRecords, date, state?.attendance]);
 
   const getCategoryTotal = (category: TaskCategory) => {
-    return (tasks?.[category] || []).reduce((sum, t) => sum + (Number(state.grades?.[t.id]) || 0), 0);
+    return (tasks?.[category] || []).reduce((sum, t) => sum + (Number(state?.grades?.[t.id]?.score) || 0), 0);
   };
 
   const getCategoryMax = (category: TaskCategory) => {
@@ -163,6 +163,8 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
 
   // Collect all tasks for the timeline
   const allTasks = Object.values(tasks || {}).flat();
+
+  if (!state) return null;
 
   return (
     <>
@@ -357,7 +359,7 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
                 <div className="flex flex-col gap-2">
                   {tasks.participation.length > 0 ? (
                     tasks.participation.map(task => {
-                      const grade = state.grades?.[task.id];
+                      const grade = state?.grades?.[task.id];
                       return (
                         <div key={task.id} className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-100">
                           <div className="flex flex-col">
@@ -365,7 +367,7 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
                             <span className="text-xs text-slate-400">{task.date ? formatHijriDate(new Date(task.date)) : formatHijriDate(new Date(date))}</span>
                           </div>
                           <div className="flex items-baseline gap-1 bg-white px-3 py-1 rounded-md border border-slate-200 shadow-sm">
-                            <span className="text-sm font-bold text-slate-800">{grade !== undefined && grade !== '' ? grade : '-'}</span>
+                            <span className="text-sm font-bold text-slate-800">{grade?.score !== undefined && grade?.score !== '' ? grade.score : '-'}</span>
                             <span className="text-xs text-slate-400">/ {task.maxGrade}</span>
                           </div>
                         </div>
@@ -386,7 +388,7 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
                 <div className="flex flex-col gap-2">
                   {tasks.homework.length > 0 ? (
                     tasks.homework.map(task => {
-                      const grade = state.grades?.[task.id];
+                      const grade = state?.grades?.[task.id];
                       return (
                         <div key={task.id} className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-100">
                           <div className="flex flex-col">
@@ -394,7 +396,7 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
                             <span className="text-xs text-slate-400">{task.date ? formatHijriDate(new Date(task.date)) : formatHijriDate(new Date(date))}</span>
                           </div>
                           <div className="flex items-baseline gap-1 bg-white px-3 py-1 rounded-md border border-slate-200 shadow-sm">
-                            <span className="text-sm font-bold text-slate-800">{grade !== undefined && grade !== '' ? grade : '-'}</span>
+                            <span className="text-sm font-bold text-slate-800">{grade?.score !== undefined && grade?.score !== '' ? grade.score : '-'}</span>
                             <span className="text-xs text-slate-400">/ {task.maxGrade}</span>
                           </div>
                         </div>
@@ -415,7 +417,7 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
                 <div className="flex flex-col gap-2">
                   {tasks.performance.length > 0 ? (
                     tasks.performance.map(task => {
-                      const grade = state.grades?.[task.id];
+                      const grade = state?.grades?.[task.id];
                       return (
                         <div key={task.id} className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-100">
                           <div className="flex flex-col">
@@ -423,7 +425,7 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
                             <span className="text-xs text-slate-400">{task.date ? formatHijriDate(new Date(task.date)) : formatHijriDate(new Date(date))}</span>
                           </div>
                           <div className="flex items-baseline gap-1 bg-white px-3 py-1 rounded-md border border-slate-200 shadow-sm">
-                            <span className="text-sm font-bold text-slate-800">{grade !== undefined && grade !== '' ? grade : '-'}</span>
+                            <span className="text-sm font-bold text-slate-800">{grade?.score !== undefined && grade?.score !== '' ? grade.score : '-'}</span>
                             <span className="text-xs text-slate-400">/ {task.maxGrade}</span>
                           </div>
                         </div>
@@ -444,7 +446,7 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
                 <div className="flex flex-col gap-2">
                   {tasks.exams.length > 0 ? (
                     tasks.exams.map(task => {
-                      const grade = state.grades?.[task.id];
+                      const grade = state?.grades?.[task.id];
                       return (
                         <div key={task.id} className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-100">
                           <div className="flex flex-col">
@@ -452,7 +454,7 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
                             <span className="text-xs text-slate-400">{task.date ? formatHijriDate(new Date(task.date)) : formatHijriDate(new Date(date))}</span>
                           </div>
                           <div className="flex items-baseline gap-1 bg-white px-3 py-1 rounded-md border border-slate-200 shadow-sm">
-                            <span className="text-sm font-bold text-slate-800">{grade !== undefined && grade !== '' ? grade : '-'}</span>
+                            <span className="text-sm font-bold text-slate-800">{grade?.score !== undefined && grade?.score !== '' ? grade.score : '-'}</span>
                             <span className="text-xs text-slate-400">/ {task.maxGrade}</span>
                           </div>
                         </div>
@@ -470,7 +472,7 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
           <div>
             <h3 className="text-lg font-bold text-slate-800 border-b border-slate-200 pb-2 mb-4">سجل السلوك</h3>
             <div className="flex flex-col gap-3">
-              {state.behaviorChips?.length > 0 ? (
+              {state?.behaviorChips?.length > 0 ? (
                 state.behaviorChips.map((chip, idx) => {
                   const isPositive = positiveBehaviors.includes(chip) || chip.startsWith('🌟 ');
                   return (
@@ -539,12 +541,12 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
               <h3 className="font-bold print:text-sm text-lg print:mb-1 mb-2 border-b print:pb-1 pb-2">المشاركة</h3>
               <div className="space-y-1 print:space-y-0.5 print:mb-1 mb-3">
                 {tasks.participation?.map(t => {
-                  const grade = state.grades?.[t.id];
-                  const isDone = grade !== undefined && grade !== '' && Number(grade) > 0;
+                  const grade = state?.grades?.[t.id];
+                  const isDone = grade?.score !== undefined && grade?.score !== '' && Number(grade.score) > 0;
                   return (
                     <div key={t.id} className="flex justify-between print:text-xs text-sm">
                       <span>{t.name} <span className="print:text-[10px] text-xs text-gray-500 mr-1">({isDone ? 'نفذ' : 'لم ينفذ'})</span></span>
-                      <span className="font-medium">{grade || 0} / {t.maxGrade}</span>
+                      <span className="font-medium">{grade?.score || 0} / {t.maxGrade}</span>
                     </div>
                   );
                 })}
@@ -559,12 +561,12 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
               <h3 className="font-bold print:text-sm text-lg print:mb-1 mb-2 border-b print:pb-1 pb-2">الواجبات</h3>
               <div className="space-y-1 print:space-y-0.5 print:mb-1 mb-3">
                 {tasks.homework?.map(t => {
-                  const grade = state.grades?.[t.id];
-                  const isDone = grade !== undefined && grade !== '' && Number(grade) > 0;
+                  const grade = state?.grades?.[t.id];
+                  const isDone = grade?.score !== undefined && grade?.score !== '' && Number(grade.score) > 0;
                   return (
                     <div key={t.id} className="flex justify-between print:text-xs text-sm">
                       <span>{t.name} <span className="print:text-[10px] text-xs text-gray-500 mr-1">({isDone ? 'نفذ' : 'لم ينفذ'})</span></span>
-                      <span className="font-medium">{grade || 0} / {t.maxGrade}</span>
+                      <span className="font-medium">{grade?.score || 0} / {t.maxGrade}</span>
                     </div>
                   );
                 })}
@@ -579,12 +581,12 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
               <h3 className="font-bold print:text-sm text-lg print:mb-1 mb-2 border-b print:pb-1 pb-2">المهام الأدائية</h3>
               <div className="space-y-1 print:space-y-0.5 print:mb-1 mb-3">
                 {tasks.performance?.map(t => {
-                  const grade = state.grades?.[t.id];
-                  const isDone = grade !== undefined && grade !== '' && Number(grade) > 0;
+                  const grade = state?.grades?.[t.id];
+                  const isDone = grade?.score !== undefined && grade?.score !== '' && Number(grade.score) > 0;
                   return (
                     <div key={t.id} className="flex justify-between print:text-xs text-sm">
                       <span>{t.name} <span className="print:text-[10px] text-xs text-gray-500 mr-1">({isDone ? 'نفذ' : 'لم ينفذ'})</span></span>
-                      <span className="font-medium">{grade || 0} / {t.maxGrade}</span>
+                      <span className="font-medium">{grade?.score || 0} / {t.maxGrade}</span>
                     </div>
                   );
                 })}
@@ -599,12 +601,12 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
               <h3 className="font-bold print:text-sm text-lg print:mb-1 mb-2 border-b print:pb-1 pb-2">الاختبارات</h3>
               <div className="space-y-1 print:space-y-0.5 print:mb-1 mb-3">
                 {tasks.exams?.map(t => {
-                  const grade = state.grades?.[t.id];
-                  const isDone = grade !== undefined && grade !== '' && Number(grade) > 0;
+                  const grade = state?.grades?.[t.id];
+                  const isDone = grade?.score !== undefined && grade?.score !== '' && Number(grade.score) > 0;
                   return (
                     <div key={t.id} className="flex justify-between print:text-xs text-sm">
                       <span>{t.name} <span className="print:text-[10px] text-xs text-gray-500 mr-1">({isDone ? 'نفذ' : 'لم ينفذ'})</span></span>
-                      <span className="font-medium">{grade || 0} / {t.maxGrade}</span>
+                      <span className="font-medium">{grade?.score || 0} / {t.maxGrade}</span>
                     </div>
                   );
                 })}
@@ -649,7 +651,7 @@ export const StudentProfileDrawer: React.FC<StudentProfileDrawerProps> = ({ stud
               ملاحظات وتوجيهات المعلم:
             </h3>
             <p className="text-gray-700 print:text-xs leading-relaxed whitespace-pre-wrap print:text-black">
-              {state.behaviorChips?.length > 0 ? state.behaviorChips.join('\n') : 'لا توجد ملاحظات مسجلة.'}
+              {state?.behaviorChips?.length > 0 ? state.behaviorChips.join('\n') : 'لا توجد ملاحظات مسجلة.'}
             </p>
           </div>
 

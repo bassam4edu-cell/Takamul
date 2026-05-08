@@ -41,7 +41,12 @@ const KanbanColumn = ({ title, icon: Icon, color, cases, count }: any) => (
           >
             <div className="flex justify-between items-start mb-3">
               <div>
-                <h3 className="font-extrabold text-slate-800">{referral.student_name}</h3>
+                <Link 
+                  to={`/dashboard/student/${referral.student_id}`}
+                  className="font-extrabold text-slate-800 hover:text-primary transition-colors"
+                >
+                  {referral.student_name}
+                </Link>
                 <p className="text-xs text-slate-500 font-bold mt-1">
                   {referral.student_grade} - {referral.student_section}
                 </p>

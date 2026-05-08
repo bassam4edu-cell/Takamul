@@ -1,5 +1,5 @@
 import React from 'react';
-import { Student, StudentState, TaskCategory, Task } from '../pages/SmartTracker';
+import type { Student, StudentState, TaskCategory, Task } from '../types/tracker';
 import { useSchoolSettings } from '../context/SchoolContext';
 import { formatHijriDate, formatShortHijriDate } from '../utils/dateUtils';
 
@@ -19,7 +19,7 @@ export const PrintableTracker: React.FC<PrintableTrackerProps> = ({ students, st
   const getCategoryTotal = (studentId: number, category: TaskCategory) => {
     const studentState = studentsState[studentId];
     if (!studentState) return 0;
-    return (tasks?.[category] || []).reduce((sum, t) => sum + (Number(studentState.grades?.[t.id]) || 0), 0);
+    return (tasks?.[category] || []).reduce((sum, t) => sum + (Number(studentState.grades?.[t.id]?.score) || 0), 0);
   };
 
   return (
@@ -139,22 +139,22 @@ export const PrintableTracker: React.FC<PrintableTrackerProps> = ({ students, st
                 
                 {tasks.participation?.map(t => (
                   <td key={t.id} className="border border-black p-0.5 text-black print:text-[8px] print:p-0.5">
-                    {studentState?.grades?.[t.id] || '-'}
+                    {studentState?.grades?.[t.id]?.score ?? '-'}
                   </td>
                 ))}
                 {tasks.homework?.map(t => (
                   <td key={t.id} className="border border-black p-0.5 text-black print:text-[8px] print:p-0.5">
-                    {studentState?.grades?.[t.id] || '-'}
+                    {studentState?.grades?.[t.id]?.score ?? '-'}
                   </td>
                 ))}
                 {tasks.performance?.map(t => (
                   <td key={t.id} className="border border-black p-0.5 text-black print:text-[8px] print:p-0.5">
-                    {studentState?.grades?.[t.id] || '-'}
+                    {studentState?.grades?.[t.id]?.score ?? '-'}
                   </td>
                 ))}
                 {tasks.exams?.map(t => (
                   <td key={t.id} className="border border-black p-0.5 text-black print:text-[8px] print:p-0.5">
-                    {studentState?.grades?.[t.id] || '-'}
+                    {studentState?.grades?.[t.id]?.score ?? '-'}
                   </td>
                 ))}
 

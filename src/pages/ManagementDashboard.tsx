@@ -11,7 +11,10 @@ import {
   AlertTriangle,
   RefreshCw,
   Ticket,
-  LayoutDashboard
+  LayoutDashboard,
+  UserCircle,
+  FileText,
+  MessageSquare
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -188,6 +191,29 @@ const ManagementDashboard: React.FC = () => {
             transition={{ duration: 0.2 }}
             className="space-y-8"
           >
+            {/* Quick Access Links */}
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-8">
+              {[
+                { label: 'الملف الشامل', icon: UserCircle, link: '/dashboard/students', color: 'text-primary', bg: 'bg-primary/5' },
+                { label: 'رادار التحضير', icon: Activity, link: '/dashboard/attendance/radar', color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                { label: 'سجل الغياب', icon: FileText, link: '/dashboard/absence-record', color: 'text-rose-600', bg: 'bg-rose-50' },
+                { label: 'إدارة التحويلات', icon: ShieldAlert, link: '/dashboard/referrals', color: 'text-amber-600', bg: 'bg-amber-50' },
+                { label: 'نظام الأذونات', icon: Ticket, link: '/dashboard/smart-pass', color: 'text-indigo-600', bg: 'bg-indigo-50' },
+                { label: 'مركز الرسائل', icon: MessageSquare, link: '/dashboard/message-center', color: 'text-slate-600', bg: 'bg-slate-100' },
+              ].map((item, idx) => (
+                <button
+                  key={`link-${idx}`}
+                  onClick={() => navigate(item.link)}
+                  className="flex flex-col items-center gap-3 p-6 bg-white rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all group"
+                >
+                  <div className={`w-12 h-12 ${item.bg} ${item.color} rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform`}>
+                    <item.icon size={24} />
+                  </div>
+                  <span className="text-xs font-black text-slate-700">{item.label}</span>
+                </button>
+              ))}
+            </div>
+
             {/* Live Pulse KPIs */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
               <motion.div 

@@ -20,9 +20,11 @@ import {
   GraduationCap,
   Calendar,
   Maximize2,
-  Minimize2
+  Minimize2,
+  RefreshCw
 } from 'lucide-react';
 import { PrintableTracker } from '../components/PrintableTracker';
+import { PrintableAttendanceTracker } from '../components/PrintableAttendanceTracker';
 import { StudentProfileDrawer } from '../components/StudentProfileDrawer';
 import { apiFetch } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
@@ -32,55 +34,15 @@ import { formatHijriDate, formatShortHijriDate } from '../utils/dateUtils';
 import HijriDatePicker from '../components/HijriDatePicker';
 import toast from 'react-hot-toast';
 import { useSchoolSettings } from '../context/SchoolContext';
+import type { Student, TaskCategory, Task, TeacherAssignment, GradeRecord, StudentState } from '../types/tracker';
 
 // --- Types ---
-export interface Student {
-  id: number;
-  name: string;
-  avatar: string;
-  semesterAttendance: number;
-}
-
-export type TaskCategory = 'participation' | 'homework' | 'performance' | 'exams';
-
 const CATEGORY_NAMES: Record<TaskCategory, string> = {
   participation: 'المشاركة',
   homework: 'الواجبات',
   performance: 'المهام الأدائية',
   exams: 'اختبار الفترة'
 };
-
-export interface Task {
-  id: string;
-  name: string;
-  maxGrade: number;
-  type: 'number' | 'binary';
-  date?: string;
-}
-
-export interface TeacherAssignment {
-  class_id: string;
-  subject_name: string;
-  subject_id: number;
-  grade: string;
-  semester: string;
-}
-
-export interface GradeRecord {
-  score: number | '';
-  recordedAtClassId?: string;
-  teacherId?: number;
-}
-
-export interface StudentState {
-  attendance: 'present' | 'late' | 'absent';
-  grades: Record<string, GradeRecord>;
-  behaviorChips: string[];
-  noorExportData?: {
-    performanceTotal: number;
-    evaluationTotal: number;
-  };
-}
 
 const negativeBehaviors = ['نوم', 'لم يحضر الكتاب', 'إزعاج', 'مقاطعة درس'];
 const positiveBehaviors = ['مجتهد', 'مشاركة فعالة', 'مساعدة زميل'];
@@ -226,15 +188,21 @@ const ProgressBar = ({ label, current, max }: { label: string, current: number, 
   );
 };
 
-
-
 const BehaviorCard: React.FC<{
   student: Student;
   chips: string[];
   onAddClick: () => void;
   onRemoveChip: (chip: string) => void;
   onStudentClick: () => void;
-}> = ({ student, chips, onAddClick, onRemoveChip, onStudentClick }) => {
+  readOnly?: boolean;
+}> = ({ 
+  student, 
+  chips, 
+  onAddClick, 
+  onRemoveChip, 
+  onStudentClick,
+  readOnly = false 
+}) => {
   return (
     <div className="bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow p-4 flex flex-col gap-4 border border-slate-100">
       {/* Header */}
@@ -251,14 +219,16 @@ const BehaviorCard: React.FC<{
       </div>
 
       {/* Action Area */}
-      <div>
-        <button
-          onClick={onAddClick}
-          className="w-full py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 text-sm font-medium transition-colors flex items-center justify-center gap-2"
-        >
-          <Plus size={16} /> إضافة ملاحظة
-        </button>
-      </div>
+      {!readOnly && (
+        <div>
+          <button
+            onClick={onAddClick}
+            className="w-full py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 text-sm font-medium transition-colors flex items-center justify-center gap-2"
+          >
+            <Plus size={16} /> إضافة ملاحظة
+          </button>
+        </div>
+      )}
 
       {/* History Container */}
       <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
@@ -275,9 +245,11 @@ const BehaviorCard: React.FC<{
                 }`}
               >
                 {chip}
-                <button onClick={() => onRemoveChip(chip)} className="hover:opacity-75 transition-opacity ml-1">
-                  <X size={10} />
-                </button>
+                {!readOnly && (
+                  <button onClick={() => onRemoveChip(chip)} className="hover:opacity-75 transition-opacity ml-1">
+                    <X size={10} />
+                  </button>
+                )}
               </span>
             );
           })
@@ -294,6 +266,7 @@ const BehaviorCard: React.FC<{
 const SmartTracker: React.FC = () => {
   const { user } = useAuth();
   const { logAction } = useAuditLog();
+  const isReadOnly = user?.role !== 'teacher';
   const { settings } = useSchoolSettings();
 
   // --- Drag to Scroll State ---
@@ -302,7 +275,8 @@ const SmartTracker: React.FC = () => {
   const [startX, setStartX] = useState(0);
   const [scrollLeft, setScrollLeft] = useState(0);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
-  const [printReportType, setPrintReportType] = useState<'all' | 'single'>('all');
+  const [printReportType, setPrintReportType] = useState<'all' | 'single' | 'attendance'>('all');
+  const [attendanceHistory, setAttendanceHistory] = useState<any[]>([]);
   const [selectedPrintTaskId, setSelectedPrintTaskId] = useState<string>('');
 
   // --- Drag Handlers ---
@@ -330,6 +304,24 @@ const SmartTracker: React.FC = () => {
   const [section, setSection] = useState('');
   const [subject, setSubject] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // Fetch attendance history when opening the print modal if needed
+  useEffect(() => {
+    if (isPrintModalOpen && printReportType === 'attendance' && user?.id && grade && section && subject) {
+      const fetchHistory = async () => {
+        try {
+          const res = await apiFetch(`/api/tracker/attendance-history?teacher_id=${user.id}&grade=${encodeURIComponent(grade)}&section=${encodeURIComponent(section)}&subject=${encodeURIComponent(subject)}`);
+          if (res.ok) {
+            const data = await res.json();
+            setAttendanceHistory(data);
+          }
+        } catch (err) {
+          console.error("Failed to fetch attendance history", err);
+        }
+      };
+      fetchHistory();
+    }
+  }, [isPrintModalOpen, printReportType, user?.id, grade, section, subject]);
 
   const [teacherAssignments, setTeacherAssignments] = useState<TeacherAssignment[]>([]);
   const [adminGrades, setAdminGrades] = useState<string[]>([]);
@@ -704,6 +696,7 @@ const SmartTracker: React.FC = () => {
 
   // --- Handlers ---
   const handleMarkAllPresent = () => {
+    if (isReadOnly) return;
     setStudentsState(prev => {
       const newState = { ...prev };
       Object.keys(newState).forEach(id => {
@@ -714,6 +707,7 @@ const SmartTracker: React.FC = () => {
   };
 
   const handleAttendanceChange = (studentId: number, status: 'present' | 'late' | 'absent') => {
+    if (isReadOnly) return;
     setStudentsState(prev => ({
       ...prev,
       [studentId]: { ...prev[studentId], attendance: status }
@@ -783,10 +777,11 @@ const SmartTracker: React.FC = () => {
       return;
     }
 
-    applyGradeChange(studentId, taskId, numValue, currentClassId);
+    applyGradeChange(studentId, taskId, numValue, currentClassId, value, maxGrade);
   };
 
-  const applyGradeChange = (studentId: number, taskId: string, numValue: number | '', classId: string) => {
+  const applyGradeChange = (studentId: number, taskId: string, numValue: number | '', classId: string, value: string | number, maxGrade: number) => {
+    if (isReadOnly) return;
     setStudentsState(prev => ({
       ...prev,
       [studentId]: { 
@@ -843,6 +838,8 @@ const SmartTracker: React.FC = () => {
   };
 
   const handleSelectAll = (taskId: string, maxGrade: number) => {
+    if (isReadOnly) return;
+    const currentClassId = `${grade} ${section}`;
     setStudentsState(prev => {
       const newState = { ...prev };
       Object.keys(newState).forEach(id => {
@@ -851,7 +848,11 @@ const SmartTracker: React.FC = () => {
           ...newState[studentId],
           grades: {
             ...newState[studentId].grades,
-            [taskId]: maxGrade
+            [taskId]: {
+              score: maxGrade,
+              teacherId: user?.id,
+              recordedAtClassId: currentClassId
+            }
           }
         };
       });
@@ -860,7 +861,7 @@ const SmartTracker: React.FC = () => {
   };
 
   const handleAddTask = () => {
-    if (!newTask.name) return;
+    if (isReadOnly || !newTask.name) return;
     
     if (editingTaskId) {
       setTasks(prev => ({
@@ -910,6 +911,7 @@ const SmartTracker: React.FC = () => {
   };
 
   const deleteTask = (taskId: string) => {
+    if (isReadOnly) return;
     if (focusedColumnId === taskId) {
       setFocusedColumnId(null);
     }
@@ -956,6 +958,7 @@ const SmartTracker: React.FC = () => {
   };
 
   const toggleBehaviorChip = (studentId: number, chip: string) => {
+    if (isReadOnly) return;
     setStudentsState(prev => {
       const chips = prev[studentId].behaviorChips;
       const isAdding = !chips.includes(chip);
@@ -1005,7 +1008,7 @@ const SmartTracker: React.FC = () => {
   };
 
   const handleSaveBehaviorNote = () => {
-    if (behaviorModalStudent === null) return;
+    if (isReadOnly || behaviorModalStudent === null) return;
     
     if (behaviorModalNote.trim()) {
       // Add custom note
@@ -1019,6 +1022,7 @@ const SmartTracker: React.FC = () => {
   };
 
   const handleFinalSubmit = () => {
+    if (isReadOnly) return;
     setConfirmModalState('confirm');
   };
 
@@ -1329,7 +1333,7 @@ const SmartTracker: React.FC = () => {
               <Printer size={16} />
               مركز الطباعة 🖨️
             </button>
-            {activeTab === 'attendance' && (
+            {activeTab === 'attendance' && !isReadOnly && (
               <button
                 onClick={handleMarkAllPresent}
                 className="rounded-full bg-slate-50 hover:bg-slate-100 text-teal-700 border border-slate-200 px-4 py-2 text-sm font-bold shadow-sm transition-colors flex items-center gap-2"
@@ -1387,17 +1391,19 @@ const SmartTracker: React.FC = () => {
                   </button>
                 ))}
               </div>
-              <button
-                onClick={() => {
-                  setEditingTaskId(null);
-                  setNewTask({ name: '', maxGrade: 5, type: 'number' });
-                  setIsTaskModalOpen(true);
-                }}
-                className="shrink-0 bg-teal-700 text-white hover:bg-teal-800 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors mr-4 shadow-sm"
-              >
-                <Plus size={16} />
-                إضافة مهمة جديدة
-              </button>
+              {!isReadOnly && (
+                <button
+                  onClick={() => {
+                    setEditingTaskId(null);
+                    setNewTask({ name: '', maxGrade: 5, type: 'number' });
+                    setIsTaskModalOpen(true);
+                  }}
+                  className="shrink-0 bg-teal-700 text-white hover:bg-teal-800 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors mr-4 shadow-sm"
+                >
+                  <Plus size={16} />
+                  إضافة مهمة جديدة
+                </button>
+              )}
             </div>
           )}
 
@@ -1415,6 +1421,7 @@ const SmartTracker: React.FC = () => {
                     onAddClick={() => setBehaviorModalStudent(student.id)}
                     onRemoveChip={(chip) => toggleBehaviorChip(student.id, chip)}
                     onStudentClick={() => setSelectedStudentId(student.id)}
+                    readOnly={isReadOnly}
                   />
                 );
               })}
@@ -1440,9 +1447,9 @@ const SmartTracker: React.FC = () => {
                         {visibleTasks.map((task, tIdx) => (
                           <th 
                             key={task.id} 
-                            onClick={() => handleEditTask(task)}
-                            className="border border-slate-300 bg-slate-100 p-2 text-sm h-auto py-2 whitespace-nowrap min-w-[100px] cursor-pointer hover:bg-slate-200 transition-colors relative group"
-                            title="انقر لتعديل المهمة"
+                            onClick={() => !isReadOnly && handleEditTask(task)}
+                            className={`border border-slate-300 bg-slate-100 p-2 text-sm h-auto py-2 whitespace-nowrap min-w-[100px] transition-colors relative group ${!isReadOnly ? 'cursor-pointer hover:bg-slate-200' : ''}`}
+                            title={!isReadOnly ? "انقر لتعديل المهمة" : ""}
                           >
                             <div className="absolute top-1 left-1 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                               <button
@@ -1455,13 +1462,15 @@ const SmartTracker: React.FC = () => {
                               >
                                 {focusedColumnId === task.id ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
                               </button>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); deleteTask(task.id); }}
-                                className="p-1 bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 rounded-md transition-colors"
-                                title="حذف المهمة"
-                              >
-                                <Trash2 size={12} />
-                              </button>
+                              {!isReadOnly && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); deleteTask(task.id); }}
+                                  className="p-1 bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 rounded-md transition-colors"
+                                  title="حذف المهمة"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              )}
                             </div>
                             <div className="flex flex-col items-center justify-center gap-1 font-bold text-slate-800">
                               {/* اسم المهمة */}
@@ -1548,6 +1557,7 @@ const SmartTracker: React.FC = () => {
                                       value={val}
                                       onChange={(e) => handleGradeChange(student.id, task.id, e.target.value, task.maxGrade)}
                                       onKeyDown={(e) => handleKeyDown(e, sIdx, tIdx)}
+                                      readOnly={isReadOnly}
                                       id={`grade-input-${sIdx}-${tIdx}`}
                                       className={`w-full h-full text-center bg-transparent focus:bg-teal-50 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-inset m-0 border-none [&::-webkit-inner-spin-button]:appearance-none text-sm font-bold ${isTransferred ? 'text-blue-700' : 'text-slate-700'}`}
                                       placeholder="-"
@@ -1556,20 +1566,22 @@ const SmartTracker: React.FC = () => {
                                     <div className="flex items-center justify-center gap-2">
                                       <button
                                         onClick={() => handleGradeChange(student.id, task.id, task.maxGrade, task.maxGrade)}
+                                        disabled={isReadOnly}
                                         className={`rounded-full p-1.5 transition-all ${
                                           val === task.maxGrade 
                                             ? 'bg-green-500 text-white shadow-sm ring-2 ring-green-200' 
-                                            : 'text-slate-400 bg-slate-50 hover:bg-green-50 hover:text-green-600'
+                                            : 'text-slate-400 bg-slate-50 hover:bg-green-50 hover:text-green-600 disabled:hover:bg-slate-50 disabled:hover:text-slate-400'
                                         }`}
                                       >
                                         <Check size={14} />
                                       </button>
                                       <button
                                         onClick={() => handleGradeChange(student.id, task.id, 0, task.maxGrade)}
+                                        disabled={isReadOnly}
                                         className={`rounded-full p-1.5 transition-all ${
                                           val === 0 
                                             ? 'bg-red-500 text-white shadow-sm ring-2 ring-red-200' 
-                                            : 'text-slate-400 bg-slate-50 hover:bg-red-50 hover:text-red-600'
+                                            : 'text-slate-400 bg-slate-50 hover:bg-red-50 hover:text-red-600 disabled:hover:bg-slate-50 disabled:hover:text-red-400'
                                         }`}
                                       >
                                         <X size={14} />
@@ -1593,24 +1605,27 @@ const SmartTracker: React.FC = () => {
                             <div className="flex items-center gap-2 p-2 min-h-[3rem]">
                               <button
                                 onClick={() => handleAttendanceChange(student.id, 'present')}
+                                disabled={isReadOnly}
                                 className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${
-                                  state.attendance === 'present' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                                  state.attendance === 'present' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400 hover:bg-slate-200 disabled:hover:bg-slate-100'
                                 }`}
                               >
                                 حاضر
                               </button>
                               <button
                                 onClick={() => handleAttendanceChange(student.id, 'late')}
+                                disabled={isReadOnly}
                                 className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${
-                                  state.attendance === 'late' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                                  state.attendance === 'late' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-400 hover:bg-slate-200 disabled:hover:bg-slate-100'
                                 }`}
                               >
                                 متأخر
                               </button>
                               <button
                                 onClick={() => handleAttendanceChange(student.id, 'absent')}
+                                disabled={isReadOnly}
                                 className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${
-                                  state.attendance === 'absent' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                                  state.attendance === 'absent' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-400 hover:bg-slate-200 disabled:hover:bg-slate-100'
                                 }`}
                               >
                                 غائب
@@ -1647,23 +1662,27 @@ const SmartTracker: React.FC = () => {
               ))}
             </div>
             <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  setEditingTaskId(null);
-                  setNewTask({ name: '', maxGrade: 5, type: 'number', date: new Date().toISOString().split('T')[0] });
-                  setIsTaskModalOpen(true);
-                }}
-                className="flex-1 bg-teal-700 text-white hover:bg-teal-800 px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors shadow-sm"
-              >
-                <Plus size={16} />
-                إضافة مهمة جديدة
-              </button>
-              <button
-                onClick={() => setIsBulkModalOpen(true)}
-                className="flex-1 bg-indigo-600 text-white hover:bg-indigo-700 px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors shadow-sm"
-              >
-                إعداد التوزيع السريع
-              </button>
+              {!isReadOnly && (
+                <>
+                  <button
+                    onClick={() => {
+                      setEditingTaskId(null);
+                      setNewTask({ name: '', maxGrade: 5, type: 'number', date: new Date().toISOString().split('T')[0] });
+                      setIsTaskModalOpen(true);
+                    }}
+                    className="flex-1 bg-teal-700 text-white hover:bg-teal-800 px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors shadow-sm"
+                  >
+                    <Plus size={16} />
+                    إضافة مهمة جديدة
+                  </button>
+                  <button
+                    onClick={() => setIsBulkModalOpen(true)}
+                    className="flex-1 bg-indigo-600 text-white hover:bg-indigo-700 px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors shadow-sm"
+                  >
+                    إعداد التوزيع السريع
+                  </button>
+                </>
+              )}
               <button
                 onClick={() => setIsNoorModalOpen(true)}
                 className="flex-1 bg-green-600 text-white hover:bg-green-700 px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors shadow-sm"
@@ -2025,7 +2044,8 @@ const SmartTracker: React.FC = () => {
         <div className="w-px h-8 bg-slate-100 mx-2" />
         <button 
           onClick={handleFinalSubmit}
-          className="bg-indigo-600 text-white p-3 rounded-2xl shadow-lg shadow-indigo-100 active:scale-95 transition-all"
+          disabled={isReadOnly}
+          className={`p-3 rounded-2xl shadow-lg transition-all ${isReadOnly ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 text-white shadow-indigo-100 active:scale-95'}`}
         >
           <Save size={20} />
         </button>
@@ -2134,12 +2154,14 @@ const SmartTracker: React.FC = () => {
       {/* Final Submit Button (Fixed at bottom) - Desktop Only */}
       <div className="hidden md:block fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-slate-200 z-30 print:hidden">
         <div className="max-w-5xl mx-auto flex flex-wrap justify-end gap-3">
-          <button
-            onClick={() => setIsBulkModalOpen(true)}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-xl flex items-center gap-2 shadow-sm transition-colors"
-          >
-            إعداد التوزيع السريع
-          </button>
+          {!isReadOnly && (
+            <button
+              onClick={() => setIsBulkModalOpen(true)}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-xl flex items-center gap-2 shadow-sm transition-colors"
+            >
+              إعداد التوزيع السريع
+            </button>
+          )}
           <button
             onClick={() => setIsNoorModalOpen(true)}
             className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-xl flex items-center gap-2 shadow-sm transition-colors"
@@ -2153,13 +2175,15 @@ const SmartTracker: React.FC = () => {
             <Printer size={18} />
             مركز الطباعة 🖨️
           </button>
-          <button
-            onClick={handleFinalSubmit}
-            className="bg-slate-800 hover:bg-slate-900 text-white font-semibold py-3 px-8 rounded-xl flex items-center justify-center gap-2 shadow-sm transition-colors w-full md:w-auto"
-          >
-            <Save size={18} />
-            اعتماد وحفظ السجل
-          </button>
+          {!isReadOnly && (
+            <button
+              onClick={handleFinalSubmit}
+              className="bg-slate-800 hover:bg-slate-900 text-white font-semibold py-3 px-8 rounded-xl flex items-center justify-center gap-2 shadow-sm transition-colors w-full md:w-auto"
+            >
+              <Save size={18} />
+              اعتماد وحفظ السجل
+            </button>
+          )}
         </div>
       </div>
 
@@ -2343,6 +2367,17 @@ const SmartTracker: React.FC = () => {
       />
     )}
 
+    {!selectedStudentId && printReportType === 'attendance' && (
+      <PrintableAttendanceTracker 
+        students={students} 
+        attendanceHistory={attendanceHistory} 
+        subject={subject}
+        grade={grade}
+        section={section}
+        teacherName={user?.name || ''}
+      />
+    )}
+
     {!selectedStudentId && printReportType === 'single' && selectedPrintTaskId && (
       <div className="hidden print:block print:w-full print:bg-white" dir="rtl">
         <style>
@@ -2361,8 +2396,8 @@ const SmartTracker: React.FC = () => {
           const completedCount = students.filter(s => {
             const val = studentsState[s.id]?.grades?.[task.id];
             return task.type === 'binary' 
-              ? Number(val) === task.maxGrade 
-              : (val !== undefined && val !== null && val !== '');
+              ? Number(val?.score) === task.maxGrade 
+              : (val?.score !== undefined && val?.score !== null && val?.score !== '');
           }).length;
           const notCompletedCount = students.length - completedCount;
 
@@ -2421,10 +2456,10 @@ const SmartTracker: React.FC = () => {
                     const val = studentsState[student.id]?.grades?.[task.id];
                     let displayVal = '-';
                     if (task.type === 'number') {
-                      displayVal = (val !== undefined && val !== null && val !== '') ? val.toString() : '-';
+                      displayVal = (val?.score !== undefined && val?.score !== null && val?.score !== '') ? val.score.toString() : '-';
                     } else if (task.type === 'binary') {
-                      if (Number(val) === task.maxGrade) displayVal = `نفذ (${task.maxGrade})`;
-                      else if (Number(val) === 0 && val !== '' && val !== undefined && val !== null) displayVal = "لم ينفذ";
+                      if (Number(val?.score) === task.maxGrade) displayVal = `نفذ (${task.maxGrade})`;
+                      else if (Number(val?.score) === 0 && val?.score !== '' && val?.score !== undefined && val?.score !== null) displayVal = "لم ينفذ";
                     }
 
                     return (
@@ -2487,11 +2522,12 @@ const SmartTracker: React.FC = () => {
                 <label className="block text-sm font-bold text-slate-700 mb-2">نوع التقرير</label>
                 <select
                   value={printReportType}
-                  onChange={(e) => setPrintReportType(e.target.value as 'all' | 'single')}
+                  onChange={(e) => setPrintReportType(e.target.value as 'all' | 'single' | 'attendance')}
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-slate-700 font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                 >
                   <option value="all">كشف المتابعة التفصيلي الشامل</option>
                   <option value="single">تقرير إنجاز مهمة مفردة</option>
+                  <option value="attendance">سجل الحضور والغياب الشامل</option>
                 </select>
               </div>
 
@@ -2599,7 +2635,9 @@ const SmartTracker: React.FC = () => {
                     transferConfirmModal.studentId, 
                     transferConfirmModal.taskId, 
                     transferConfirmModal.newValue, 
-                    `${grade} ${section}`
+                    `${grade} ${section}`,
+                    transferConfirmModal.newValue,
+                    transferConfirmModal.maxGrade
                   );
                   setTransferConfirmModal(null);
                 }}

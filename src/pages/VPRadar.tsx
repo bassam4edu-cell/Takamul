@@ -1,6 +1,7 @@
 import { apiFetch } from '../utils/api';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { Link } from 'react-router-dom';
 import { useMessageLog } from '../context/MessageLogContext';
 import { logAction } from '../services/auditLogger';
 import { CheckCircle2, XCircle, Clock, Save, UserCheck, AlertCircle, Printer, Filter, Calendar, MessageSquare, AlertTriangle, Search, Hourglass, Trash2, Info, Unlock, Lock, Zap, PowerOff } from 'lucide-react';
@@ -1409,7 +1410,12 @@ const VPRadar: React.FC = () => {
                     >
                       {/* الخلية الأولى */}
                       <td className="px-6 py-4">
-                        <span className="font-black text-slate-800 text-lg block mb-1">{student.name}</span>
+                        <Link 
+                          to={`/dashboard/student/${student.id}`}
+                          className="font-black text-slate-800 text-lg block mb-1 hover:text-primary transition-colors"
+                        >
+                          {student.name}
+                        </Link>
                         <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-lg inline-block">
                           {student.grade} - {student.section}
                         </span>

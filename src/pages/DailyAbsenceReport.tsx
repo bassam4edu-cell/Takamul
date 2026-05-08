@@ -51,14 +51,8 @@ const DailyAbsenceReport: React.FC = React.memo(() => {
 
         if (settingsRes.ok) {
           const settingsJson = await settingsRes.json();
-          if (settingsJson.principal_name) {
-            setPrincipalName(settingsJson.principal_name);
-          }
           if (settingsJson.absence_template) {
             setAbsenceTemplate(settingsJson.absence_template);
-          }
-          if (settingsJson.school_name) {
-            setSchoolName(settingsJson.school_name);
           }
         }
       } catch (err) {

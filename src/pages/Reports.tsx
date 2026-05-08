@@ -52,9 +52,10 @@ const Reports: React.FC = () => {
   const [topStudents, setTopStudents] = useState<TopStudent[]>([]);
   const [referralStatus, setReferralStatus] = useState<ReferralStatus[]>([]);
   const [teacherStats, setTeacherStats] = useState<TeacherStat[]>([]);
+  const [absenceRecords, setAbsenceRecords] = useState<any[]>([]);
   const [kpiStats, setKpiStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [activeReport, setActiveReport] = useState<'comprehensive' | 'repeat' | 'teachers'>('comprehensive');
+  const [activeReport, setActiveReport] = useState<'comprehensive' | 'repeat' | 'teachers' | 'absence'>('comprehensive');
 
   useEffect(() => {
     if (user?.role !== 'principal' && user?.role !== 'admin') {
@@ -64,14 +65,15 @@ const Reports: React.FC = () => {
 
     const fetchData = async () => {
       try {
-        const [topRes, statusRes, teacherRes, kpiRes] = await Promise.all([
+        const [topRes, statusRes, teacherRes, kpiRes, absenceRes] = await Promise.all([
           apiFetch('/api/reports/top-students'),
           apiFetch('/api/reports/referral-status'),
           apiFetch('/api/reports/teacher-stats'),
-          apiFetch('/api/reports/kpi-stats')
+          apiFetch('/api/reports/kpi-stats'),
+          apiFetch('/api/attendance/absences')
         ]);
 
-        if (!topRes.ok || !statusRes.ok || !teacherRes.ok || !kpiRes.ok) {
+        if (!topRes.ok || !statusRes.ok || !teacherRes.ok || !kpiRes.ok || !absenceRes.ok) {
           throw new Error('Failed to fetch reports');
         }
 
@@ -79,6 +81,7 @@ const Reports: React.FC = () => {
         setReferralStatus(await statusRes.json().catch(() => []));
         setTeacherStats(await teacherRes.json().catch(() => []));
         setKpiStats(await kpiRes.json().catch(() => ({})));
+        setAbsenceRecords(await absenceRes.json().catch(() => []));
       } catch (err) {
         console.error('Failed to fetch reports', err);
       } finally {
@@ -94,7 +97,7 @@ const Reports: React.FC = () => {
       'أخرى',
       'READ',
       'التقارير والإحصائيات',
-      `قام بطباعة التقرير: ${activeReport === 'comprehensive' ? 'التقرير الشامل' : activeReport === 'repeat' ? 'الطلاب متكرري المخالفات' : 'إحصائيات المعلمين'}`
+      `قام بطباعة التقرير: ${activeReport === 'comprehensive' ? 'التقرير الشامل' : activeReport === 'repeat' ? 'الطلاب متكرري المخالفات' : activeReport === 'absence' ? 'تقرير الغياب والتأخر' : 'إحصائيات المعلمين'}`
     );
     window.print();
   };
@@ -148,6 +151,7 @@ const Reports: React.FC = () => {
         <h1 className="text-xl font-black text-center mb-8 underline underline-offset-8">
           {activeReport === 'comprehensive' ? 'تقرير السجل الشامل للحالات' : 
            activeReport === 'repeat' ? 'تقرير الطلاب الأكثر تحويلاً' : 
+           activeReport === 'absence' ? 'تقرير الغياب والتأخر (حسب إدخال المعلم)' :
            'تقرير أداء المعلمين والتحويلات'}
         </h1>
 
@@ -225,6 +229,33 @@ const Reports: React.FC = () => {
                   <td className="p-3 border border-slate-300 text-xs font-black text-center">{stat.total_referrals}</td>
                   <td className="p-3 border border-slate-300 text-xs font-bold text-center text-emerald-600">{stat.resolved_count}</td>
                   <td className="p-3 border border-slate-300 text-xs font-bold text-center text-indigo-600">{stat.escalated_count}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        {activeReport === 'absence' && (
+          <table className="w-full text-right border-collapse border border-slate-300">
+            <thead>
+              <tr className="bg-slate-100">
+                <th className="p-3 border border-slate-300 text-xs font-black">اسم الطالب</th>
+                <th className="p-3 border border-slate-300 text-xs font-black">الصف والفصل</th>
+                <th className="p-3 border border-slate-300 text-xs font-black">التاريخ</th>
+                <th className="p-3 border border-slate-300 text-xs font-black">الحصة</th>
+                <th className="p-3 border border-slate-300 text-xs font-black">الحالة</th>
+                <th className="p-3 border border-slate-300 text-xs font-black">المعلم</th>
+              </tr>
+            </thead>
+            <tbody>
+              {absenceRecords.map((record) => (
+                <tr key={`print-absence-${record.id}`} className="border-b border-slate-200">
+                  <td className="p-3 border border-slate-300 text-xs font-black">{record.student_name}</td>
+                  <td className="p-3 border border-slate-300 text-xs font-bold">{record.grade} - {record.section}</td>
+                  <td className="p-3 border border-slate-300 text-xs font-bold">{record.date}</td>
+                  <td className="p-3 border border-slate-300 text-xs font-bold">{record.period}</td>
+                  <td className="p-3 border border-slate-300 text-xs font-bold">{record.status}</td>
+                  <td className="p-3 border border-slate-300 text-xs font-bold">{record.teacher_name}</td>
                 </tr>
               ))}
             </tbody>
@@ -314,6 +345,12 @@ const Reports: React.FC = () => {
           className={`px-6 py-3 rounded-2xl font-black text-sm transition-all ${activeReport === 'teachers' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-white text-slate-500 border border-slate-100 hover:bg-slate-50'}`}
         >
           أداء المعلمين
+        </button>
+        <button 
+          onClick={() => setActiveReport('absence')}
+          className={`px-6 py-3 rounded-2xl font-black text-sm transition-all ${activeReport === 'absence' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-white text-slate-500 border border-slate-100 hover:bg-slate-50'}`}
+        >
+          تقرير الغياب والتأخر
         </button>
       </div>
 
@@ -472,6 +509,65 @@ const Reports: React.FC = () => {
                     <td className="p-5 text-center font-black">{stat.total_referrals}</td>
                     <td className="p-5 text-center font-black text-emerald-600">{stat.resolved_count}</td>
                     <td className="p-5 text-center font-black text-indigo-600">{stat.escalated_count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {activeReport === 'absence' && (
+          <div className="overflow-x-auto">
+            {/* Mobile Card View */}
+            <div className="md:hidden divide-y divide-slate-100">
+              {absenceRecords.map((record) => (
+                <div key={`mobile-absence-${record.id}`} className="p-4 space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-black text-slate-800 text-sm">{record.student_name}</p>
+                      <p className="text-xs font-bold text-slate-500 mt-1">{record.grade} - {record.section}</p>
+                    </div>
+                    <span className={`px-2 py-1 rounded-md text-[10px] font-black ${
+                      record.status === 'غائب' ? 'bg-rose-100 text-rose-700' : 'bg-orange-100 text-orange-700'
+                    }`}>
+                      {record.status}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-500 font-bold">{record.date} - {record.period}</span>
+                    <span className="text-slate-500 font-bold">المعلم: {record.teacher_name}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table View */}
+            <table className="w-full text-right hidden md:table">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-100">
+                  <th className="p-5 font-black text-slate-600">اسم الطالب</th>
+                  <th className="p-5 font-black text-slate-600">الصف والفصل</th>
+                  <th className="p-5 font-black text-slate-600">التاريخ</th>
+                  <th className="p-5 font-black text-slate-600">الحصة</th>
+                  <th className="p-5 font-black text-slate-600">الحالة</th>
+                  <th className="p-5 font-black text-slate-600">المعلم</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {absenceRecords.map((record) => (
+                  <tr key={`screen-absence-${record.id}`} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="p-5 font-black text-slate-800">{record.student_name}</td>
+                    <td className="p-5 text-slate-600 font-bold">{record.grade} - {record.section}</td>
+                    <td className="p-5 text-slate-600 font-bold">{record.date}</td>
+                    <td className="p-5 text-slate-600 font-bold">{record.period}</td>
+                    <td className="p-5">
+                      <span className={`px-3 py-1 rounded-lg text-[10px] font-black ${
+                        record.status === 'غائب' ? 'bg-rose-100 text-rose-700' : 'bg-orange-100 text-orange-700'
+                      }`}>
+                        {record.status}
+                      </span>
+                    </td>
+                    <td className="p-5 text-slate-600 font-bold">{record.teacher_name}</td>
                   </tr>
                 ))}
               </tbody>

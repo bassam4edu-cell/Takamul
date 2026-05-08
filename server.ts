@@ -221,6 +221,7 @@ async function initDb() {
 
     try {
       await sql`ALTER TABLE attendance_records ADD COLUMN IF NOT EXISTS excuse_reason TEXT`;
+      await sql`ALTER TABLE attendance_records ADD COLUMN IF NOT EXISTS period INTEGER`;
       await sql`ALTER TABLE attendance_records ADD COLUMN IF NOT EXISTS modified_by INTEGER REFERENCES users(id)`;
       await sql`ALTER TABLE attendance_records ADD COLUMN IF NOT EXISTS modified_at TIMESTAMP`;
     } catch (e) {
@@ -1619,20 +1620,34 @@ async function startServer() {
   });
 
   app.get("/api/student-search", async (req, res) => {
-    const { query } = req.query;
+    const { query, grade, section } = req.query;
     const schoolId = req.headers['x-school-id'];
     
-    if (!query) return res.json([]);
     if (!schoolId) return res.status(400).json({ error: "School ID is required" });
     
     try {
-      const students = await sql`
-        SELECT * FROM students 
-        WHERE school_id = ${schoolId}
-        AND (name ILIKE ${`%${query}%`} 
-        OR national_id = ${query})
-        LIMIT 20
-      `;
+      let students;
+      if (query) {
+        students = await sql`
+          SELECT * FROM students 
+          WHERE school_id = ${schoolId}
+          AND (name ILIKE ${`%${query}%`} 
+          OR national_id = ${query})
+          ${grade && grade !== 'all' ? sql`AND grade = ${grade}` : sql``}
+          ${section && section !== 'all' ? sql`AND section = ${section}` : sql``}
+          LIMIT 50
+        `;
+      } else if (grade && grade !== 'all') {
+        students = await sql`
+          SELECT * FROM students 
+          WHERE school_id = ${schoolId}
+          AND grade = ${grade}
+          ${section && section !== 'all' ? sql`AND section = ${section}` : sql``}
+          LIMIT 100
+        `;
+      } else {
+        return res.json([]);
+      }
       res.json(students);
     } catch (err) {
       console.error("Search failed:", err);
@@ -1797,17 +1812,16 @@ async function startServer() {
         SELECT 
           'smart_grade' as event_type,
           sg.id::text as event_id,
-          COALESCE(sg.updated_at, s.created_at) as event_date,
+          sg.updated_at as event_date,
           COALESCE(u.name, 'مستخدم محذوف') as actor_name,
-          t.name || ': ' || sg.grade || ' / ' || t.max_grade as description,
-          t.category as category,
+          t.title || ': ' || sg.score || ' / ' || t.max_score as description,
+          t.noor_category as category,
           'completed' as status
-        FROM smart_tracker_student_grades sg
-        JOIN smart_tracker_tasks t ON sg.task_id = t.id
-        JOIN smart_tracker_student_states ss ON sg.student_state_id = ss.id
-        JOIN smart_tracker_sessions s ON ss.session_id = s.id
-        LEFT JOIN users u ON s.teacher_id = u.id
-        WHERE ss.student_id = ${id}
+        FROM smart_grade_records_v2 sg
+        JOIN smart_tasks_v2 t ON sg.task_id = t.id
+        JOIN students s ON sg.student_national_id = s.national_id
+        LEFT JOIN users u ON sg.teacher_id = u.id
+        WHERE s.id = ${id}
 
         UNION ALL
 
@@ -1879,23 +1893,22 @@ async function startServer() {
         ORDER BY r.created_at DESC
       `;
 
-      // 5. Smart Tracker Data
+      // 5. Smart Tracker Data (V2)
       const trackerData = await sql`
         SELECT 
-          s.subject, 
-          s.date, 
-          t.name as task_name, 
-          t.max_grade, 
-          sg.grade as student_grade,
-          st.attendance as attendance_status,
+          t.subject, 
+          sg.updated_at as date, 
+          t.title as task_name, 
+          t.max_score as max_grade, 
+          sg.score as student_grade,
+          t.noor_category as task_category,
           u.name as teacher_name
-        FROM smart_tracker_sessions s
-        JOIN smart_tracker_tasks t ON s.id = t.session_id
-        JOIN smart_tracker_student_states st ON s.id = st.session_id
-        JOIN smart_tracker_student_grades sg ON st.id = sg.student_state_id AND sg.task_id = t.id
-        LEFT JOIN users u ON s.teacher_id = u.id
-        WHERE st.student_id = ${id}
-        ORDER BY s.date DESC
+        FROM smart_grade_records_v2 sg
+        JOIN smart_tasks_v2 t ON sg.task_id = t.id
+        JOIN students s ON sg.student_national_id = s.national_id
+        LEFT JOIN users u ON sg.teacher_id = u.id
+        WHERE s.id = ${id}
+        ORDER BY sg.updated_at DESC
       `;
 
       res.json({ 
@@ -2454,6 +2467,63 @@ async function startServer() {
       res.json(data);
     } catch (err) {
       res.status(500).json({ error: "Failed to fetch referral status" });
+    }
+  });
+
+  app.get("/api/principal/dashboard-stats", async (req, res) => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const now = new Date();
+      const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      // 1. Attendance Stats (Today) - Unique students
+      const attendance = await sql`
+        SELECT 
+          COUNT(DISTINCT student_id) FILTER (WHERE status = 'حاضر') as present,
+          COUNT(DISTINCT student_id) FILTER (WHERE status = 'غائب') as absent,
+          COUNT(DISTINCT student_id) FILTER (WHERE status = 'متأخر') as late
+        FROM attendance_records
+        WHERE date = ${today}
+      `;
+
+      // 2. Referral Stats
+      const referrals = await sql`
+        SELECT 
+          COUNT(*) as total,
+          COUNT(*) FILTER (WHERE status IN ('resolved', 'closed')) as resolved,
+          COUNT(*) FILTER (WHERE status NOT IN ('resolved', 'closed')) as pending,
+          COUNT(*) FILTER (WHERE created_at >= ${firstDayOfMonth}) as this_month
+        FROM referrals
+      `;
+
+      // 3. Smart Tracker Stats (Today)
+      const tracker = await sql`
+        SELECT 
+          (SELECT COUNT(*) FROM smart_tracker_sessions WHERE date = ${today}) as sessions,
+          (SELECT COUNT(*) FROM smart_tracker_student_states ss JOIN smart_tracker_sessions s ON ss.session_id = s.id WHERE s.date = ${today}) as behavior_entries,
+          (SELECT COUNT(*) FROM smart_grade_records_v2 WHERE updated_at::date = ${today}::date) as grade_entries
+      `;
+
+      // 4. Top Active Teachers (Today)
+      const topTeachers = await sql`
+        SELECT u.name, COUNT(ar.id) as activity_count
+        FROM users u
+        JOIN attendance_records ar ON u.id = ar.teacher_id
+        WHERE ar.date = ${today}
+        GROUP BY u.id, u.name
+        ORDER BY activity_count DESC
+        LIMIT 5
+      `;
+
+      res.json({
+        attendance: attendance[0] || { present: 0, absent: 0, late: 0 },
+        referrals: referrals[0] || { total: 0, resolved: 0, pending: 0, this_month: 0 },
+        tracker: tracker[0] || { sessions: 0, behavior_entries: 0, grade_entries: 0 },
+        topTeachers: topTeachers || []
+      });
+    } catch (err) {
+      console.error("Failed to fetch principal dashboard stats:", err);
+      res.status(500).json({ error: "Failed to fetch dashboard stats" });
     }
   });
 
@@ -3547,6 +3617,31 @@ async function startServer() {
   });
 
   // 3. Get Live Radar Data (VP Interface)
+  app.get("/api/attendance/absences", async (req, res) => {
+    try {
+      const records = await sql`
+        SELECT 
+          ar.id,
+          s.name as student_name,
+          s.grade,
+          s.section,
+          TO_CHAR(ar.date, 'YYYY-MM-DD') as date,
+          ar.period,
+          ar.status,
+          u.name as teacher_name
+        FROM attendance_records ar
+        JOIN students s ON ar.student_id = s.id
+        LEFT JOIN users u ON ar.teacher_id = u.id
+        WHERE ar.status IN ('غائب', 'متأخر')
+        ORDER BY ar.date DESC, ar.period ASC
+      `;
+      res.json(records);
+    } catch (err) {
+      console.error("Failed to fetch absences:", err);
+      res.status(500).json({ error: "Failed to fetch absences" });
+    }
+  });
+
   app.get("/api/attendance/student/:id/today", async (req, res) => {
     try {
       const records = await sql`
@@ -3908,6 +4003,30 @@ async function startServer() {
   });
 
   // --- Smart Tracker Endpoints ---
+  app.get("/api/tracker/attendance-history", async (req, res) => {
+    const { teacher_id, grade, section, subject } = req.query;
+    try {
+      const history = await sql`
+        SELECT 
+          s.id as session_id,
+          s.date as session_date,
+          st.student_id,
+          st.attendance
+        FROM smart_tracker_sessions s
+        JOIN smart_tracker_student_states st ON s.id = st.session_id
+        WHERE s.teacher_id = ${teacher_id} 
+          AND s.grade = ${grade} 
+          AND s.section = ${section} 
+          AND s.subject = ${subject}
+        ORDER BY s.date ASC
+      `;
+      res.json(history);
+    } catch (err) {
+      console.error("[GET ATTENDANCE HISTORY] Error:", err);
+      res.status(500).json({ error: "Failed to fetch attendance history" });
+    }
+  });
+
   app.get("/api/tracker/history", async (req, res) => {
     const { teacher_id, grade, section, subject } = req.query;
     try {

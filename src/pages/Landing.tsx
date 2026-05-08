@@ -77,29 +77,43 @@ const Landing: React.FC = () => {
           </div>
 
           {/* Buttons Container */}
-          <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6 w-full max-w-3xl pt-4 md:pt-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 w-full max-w-6xl pt-4 md:pt-8">
             <motion.a
               href="https://sites.google.com/view/ummal/%D8%A7%D9%84%D8%B5%D9%81%D8%AD%D8%A9-%D8%A7%D9%84%D8%B1%D8%A6%D9%8A%D8%B3%D9%8A%D8%A9?authuser=0"
               target="_blank"
               rel="noopener noreferrer"
               whileHover={{ y: -5, scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              className="w-full md:flex-1 bg-white text-slate-800 border-2 border-slate-100 py-5 md:py-6 px-4 md:px-6 rounded-2xl md:rounded-[2rem] font-bold text-base md:text-lg shadow-xl shadow-slate-200/50 flex items-center justify-center gap-3 hover:border-emerald-500/30 hover:text-emerald-700 transition-all group"
+              className="w-full bg-white text-slate-800 border-2 border-slate-100 py-5 md:py-6 px-4 md:px-6 rounded-2xl md:rounded-[2rem] font-bold text-base md:text-lg shadow-xl shadow-slate-200/50 flex flex-col items-center justify-center gap-3 hover:border-emerald-500/30 hover:text-emerald-700 transition-all group text-center"
             >
-              <span className="w-8 h-8 md:w-10 md:h-10 bg-emerald-50 text-emerald-600 rounded-lg md:rounded-xl flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-colors shrink-0">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="md:w-6 md:h-6"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <span className="w-12 h-12 md:w-14 md:h-14 bg-emerald-50 text-emerald-600 rounded-xl md:rounded-2xl flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-colors shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="md:w-7 md:h-7"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
               </span>
               <span className="whitespace-nowrap">الوثائق المدرسية</span>
+            </motion.a>
+
+            <motion.a
+              href="https://taqweem1.lovable.app"
+              target="_blank"
+              rel="noopener noreferrer"
+              whileHover={{ y: -5, scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="w-full bg-white text-slate-800 border-2 border-slate-100 py-5 md:py-6 px-4 md:px-6 rounded-2xl md:rounded-[2rem] font-bold text-base md:text-lg shadow-xl shadow-slate-200/50 flex flex-col items-center justify-center gap-3 hover:border-amber-500/30 hover:text-amber-700 transition-all group text-center"
+            >
+              <span className="w-12 h-12 md:w-14 md:h-14 bg-amber-50 text-amber-600 rounded-xl md:rounded-2xl flex items-center justify-center group-hover:bg-amber-600 group-hover:text-white transition-colors shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="md:w-7 md:h-7"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              </span>
+              <span className="whitespace-nowrap">منصة التقويم الذاتي</span>
             </motion.a>
 
             <motion.button
               onClick={() => navigate('/parent-login')}
               whileHover={{ y: -5, scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              className="w-full md:flex-1 bg-white text-slate-800 border-2 border-slate-100 py-5 md:py-6 px-4 md:px-6 rounded-2xl md:rounded-[2rem] font-bold text-base md:text-lg shadow-xl shadow-slate-200/50 flex items-center justify-center gap-3 hover:border-indigo-500/30 hover:text-indigo-700 transition-all group"
+              className="w-full bg-white text-slate-800 border-2 border-slate-100 py-5 md:py-6 px-4 md:px-6 rounded-2xl md:rounded-[2rem] font-bold text-base md:text-lg shadow-xl shadow-slate-200/50 flex flex-col items-center justify-center gap-3 hover:border-indigo-500/30 hover:text-indigo-700 transition-all group text-center"
             >
-              <span className="w-8 h-8 md:w-10 md:h-10 bg-indigo-50 text-indigo-600 rounded-lg md:rounded-xl flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors shrink-0">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="md:w-6 md:h-6"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <span className="w-12 h-12 md:w-14 md:h-14 bg-indigo-50 text-indigo-600 rounded-xl md:rounded-2xl flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="md:w-7 md:h-7"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
               </span>
               <span className="whitespace-nowrap">بوابة ولي الأمر</span>
             </motion.button>
@@ -108,10 +122,10 @@ const Landing: React.FC = () => {
               onClick={handleSystemClick}
               whileHover={{ y: -5, scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              className="w-full md:flex-1 bg-white text-slate-800 border-2 border-slate-100 py-5 md:py-6 px-4 md:px-6 rounded-2xl md:rounded-[2rem] font-bold text-base md:text-lg shadow-xl shadow-slate-200/50 flex items-center justify-center gap-3 hover:border-blue-500/30 hover:text-blue-700 transition-all group"
+              className="w-full bg-white text-slate-800 border-2 border-slate-100 py-5 md:py-6 px-4 md:px-6 rounded-2xl md:rounded-[2rem] font-bold text-base md:text-lg shadow-xl shadow-slate-200/50 flex flex-col items-center justify-center gap-3 hover:border-blue-500/30 hover:text-blue-700 transition-all group text-center"
             >
-              <span className="w-8 h-8 md:w-10 md:h-10 bg-blue-50 text-blue-600 rounded-lg md:rounded-xl flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors shrink-0">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="md:w-6 md:h-6"><path d="m12 19 7-7 3 3-7 7-3-3z"/><path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="m2 2 7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+              <span className="w-12 h-12 md:w-14 md:h-14 bg-blue-50 text-blue-600 rounded-xl md:rounded-2xl flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="md:w-7 md:h-7"><path d="m12 19 7-7 3 3-7 7-3-3z"/><path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="m2 2 7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
               </span>
               <span className="whitespace-nowrap">بوابة تكامل</span>
             </motion.button>

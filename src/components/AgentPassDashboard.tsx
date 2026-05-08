@@ -10,7 +10,6 @@ import {
   XCircle,
   History,
   ExternalLink,
-  RefreshCw,
   Filter,
   Printer,
   QrCode,
@@ -97,6 +96,18 @@ const AgentPassDashboard: React.FC = () => {
   const [isPrintingPass, setIsPrintingPass] = useState(false);
   const [showAbsentWarningModal, setShowAbsentWarningModal] = useState(false);
   const [pendingPassData, setPendingPassData] = useState<any>(null);
+  const [passTemplate, setPassTemplate] = useState('');
+
+  const defaultPassTemplate = `*إشعار إذن تحرك طالب* 🎫
+--------------------------
+*الطالب:* {اسم_الطالب}
+*الإجراء:* {الاجراء}
+*السبب:* {السبب}
+--------------------------
+*رابط التأكيد السريع:*
+{رابط_التأكيد}
+
+الرجاء النقر على الرابط لتأكيد الحالة.`;
 
   // Derived data for filters
   const grades = Array.from(new Set(students.map(s => s.grade))).filter(Boolean).sort();
@@ -113,9 +124,10 @@ const AgentPassDashboard: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [studentsRes, teachersRes] = await Promise.all([
+        const [studentsRes, teachersRes, settingsRes] = await Promise.all([
           fetch('/api/students'),
-          fetch('/api/admin/users')
+          fetch('/api/admin/users'),
+          fetch('/api/settings')
         ]);
         
         if (studentsRes.ok) {
@@ -128,8 +140,20 @@ const AgentPassDashboard: React.FC = () => {
           // Filter only teachers
           setTeachers(teachersData.filter((u: any) => u.role === 'teacher'));
         }
+
+        if (settingsRes.ok) {
+          const settingsData = await settingsRes.json();
+          if (settingsData.pass_template) {
+            setPassTemplate(settingsData.pass_template);
+          } else {
+            setPassTemplate(defaultPassTemplate);
+          }
+        } else {
+          setPassTemplate(defaultPassTemplate);
+        }
       } catch (error) {
-        console.error('Failed to fetch students/teachers:', error);
+        console.error('Failed to fetch data:', error);
+        setPassTemplate(defaultPassTemplate);
       } finally {
         setLoadingData(false);
       }
@@ -163,6 +187,12 @@ const AgentPassDashboard: React.FC = () => {
       agentName: 'وكيل المدرسة',
     };
 
+    let message = passTemplate;
+    message = message.replace(/{اسم_الطالب}/g, student?.name || '');
+    message = message.replace(/{الاجراء}/g, type?.label || '');
+    message = message.replace(/{السبب}/g, newPass.reason || 'غير محدد');
+    message = message.replace(/{رابط_التأكيد}/g, confirmUrl);
+
     if (passType === 'exit') {
       try {
         const res = await fetch(`/api/attendance/student/${selectedStudent}/today`);
@@ -170,7 +200,7 @@ const AgentPassDashboard: React.FC = () => {
           const records = await res.json();
           const isAbsent = records.some((r: any) => r.status === 'غائب');
           if (isAbsent) {
-            setPendingPassData({ newPass, student, teacher, type, confirmUrl });
+            setPendingPassData({ newPass, student, teacher, type, confirmUrl, message: message.trim() });
             setShowAbsentWarningModal(true);
             return;
           }
@@ -180,10 +210,10 @@ const AgentPassDashboard: React.FC = () => {
       }
     }
 
-    await executeIssuePass(newPass, student, teacher, type, confirmUrl);
+    await executeIssuePass(newPass, student, teacher, type, confirmUrl, message.trim());
   };
 
-  const executeIssuePass = async (newPass: any, student: any, teacher: any, type: any, confirmUrl: string) => {
+  const executeIssuePass = async (newPass: any, student: any, teacher: any, type: any, confirmUrl: string, customMessage: string) => {
     try {
       await addPass(newPass);
     } catch (error: any) {
@@ -192,19 +222,6 @@ const AgentPassDashboard: React.FC = () => {
     }
     setLastIssuedPass({ ...newPass, timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) });
     setShowPrintModal(true);
-
-    const message = `
-*إشعار إذن تحرك طالب* 🎫
---------------------------
-*الطالب:* ${student?.name}
-*الإجراء:* ${type?.label}
-*السبب:* ${newPass.reason || 'غير محدد'}
---------------------------
-*رابط التأكيد السريع:*
-${confirmUrl}
-
-الرجاء النقر على الرابط لتأكيد الحالة.
-    `;
 
     // Send via WhatsApp
     if (teacher?.phone_number) {
@@ -219,18 +236,18 @@ ${confirmUrl}
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             phoneNumber: phone,
-            message: message.trim()
+            message: customMessage
           })
         });
         
         if (!response.ok) {
           console.warn('WhatsApp API failed, falling back to wa.me link');
-          const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message.trim())}`;
+          const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(customMessage)}`;
           window.open(whatsappUrl, '_blank');
         }
       } catch (err) {
         console.error('Failed to send WhatsApp message:', err);
-        const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message.trim())}`;
+        const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(customMessage)}`;
         window.open(whatsappUrl, '_blank');
       }
     } else {
@@ -430,7 +447,8 @@ ${confirmUrl}
                           pendingPassData.student,
                           pendingPassData.teacher,
                           pendingPassData.type,
-                          pendingPassData.confirmUrl
+                          pendingPassData.confirmUrl,
+                          pendingPassData.message
                         );
                       }
                     }}
@@ -588,7 +606,7 @@ ${confirmUrl}
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 no-print">
         <div>
-          <h2 className="text-2xl font-black text-slate-900 mb-1">إصدار إذن تحرك طالب</h2>
+          <h2 className="text-2xl font-black text-slate-900 mb-1">إصدار إذن لطالب</h2>
           <p className="text-slate-500 text-sm font-medium">نظام التصاريح الذكية للمدرسة</p>
         </div>
         <LiveClock />
@@ -844,16 +862,6 @@ ${confirmUrl}
                       </td>
                       <td className="px-6 py-4 text-center no-print">
                         <div className="flex items-center justify-center gap-2">
-                          {pass.status === 'pending' && (
-                            <button 
-                              onClick={() => updatePassStatus(pass.id, 'confirmed')}
-                              className="opacity-0 group-hover:opacity-100 flex items-center gap-1.5 bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-xl text-[10px] font-black hover:bg-emerald-100 transition-all"
-                              title="محاكاة رد المعلم"
-                            >
-                              <RefreshCw className="w-3 h-3" />
-                              محاكاة رد المعلم
-                            </button>
-                          )}
                           <button 
                             onClick={() => handlePrintPass(pass)}
                             className="p-2 text-slate-400 hover:text-indigo-600 transition-colors"

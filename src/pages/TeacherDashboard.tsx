@@ -8,7 +8,11 @@ import {
   ArrowUpRight,
   Filter,
   MoreVertical,
-  Search
+  Search,
+  UserCircle,
+  Users,
+  ClipboardList,
+  FilePlus
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Referral } from '../types';
@@ -91,6 +95,27 @@ const TeacherDashboard: React.FC = () => {
 
       {activeTab === 'referrals' ? (
         <>
+          {/* Quick Access Links */}
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4 mb-8">
+            {[
+              { label: 'الملف الشامل', icon: UserCircle, link: '/dashboard/students', color: 'text-primary', bg: 'bg-primary/5' },
+              { label: 'التحضير اليومي', icon: Users, link: '/dashboard/attendance/teacher', color: 'text-emerald-600', bg: 'bg-emerald-50' },
+              { label: 'كشف المتابعة', icon: ClipboardList, link: '/dashboard/class-tracker', color: 'text-indigo-600', bg: 'bg-indigo-50' },
+              { label: 'تحويل جديد', icon: FilePlus, link: '/dashboard/referral/new', color: 'text-rose-600', bg: 'bg-rose-50' },
+            ].map((item, idx) => (
+              <Link
+                key={`link-${idx}`}
+                to={item.link}
+                className="flex flex-col items-center gap-3 p-6 bg-white rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all group"
+              >
+                <div className={`w-12 h-12 ${item.bg} ${item.color} rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform`}>
+                  <item.icon size={24} />
+                </div>
+                <span className="text-xs font-black text-slate-700">{item.label}</span>
+              </Link>
+            ))}
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
         {stats.map((stat, i) => (
           <motion.div 

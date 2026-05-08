@@ -10,8 +10,6 @@ import { SchoolProvider } from './context/SchoolContext';
 
 import { PassProvider } from './context/PassContext';
 
-export { useAuth };
-
 const Landing = lazy(() => import('./pages/Landing'));
 const Login = lazy(() => import('./pages/Login'));
 const TeacherDashboard = lazy(() => import('./pages/TeacherDashboard'));
@@ -33,7 +31,7 @@ const PrincipalDashboard = lazy(() => import('./pages/PrincipalDashboard'));
 const BehavioralViolations = lazy(() => import('./pages/BehavioralViolations'));
 const PrintTemplate = lazy(() => import('./pages/PrintTemplate'));
 const VPRadar = lazy(() => import('./pages/VPRadar'));
-const StudentRecordSearch = lazy(() => import('./pages/StudentRecordSearch'));
+const AbsenceRecord = lazy(() => import('./pages/AbsenceRecord'));
 const TeacherRollCall = lazy(() => import('./pages/TeacherRollCall'));
 const DailyAbsenceReport = lazy(() => import('./pages/DailyAbsenceReport'));
 const ParentLogin = lazy(() => import('./pages/ParentLogin'));
@@ -42,10 +40,13 @@ const Register = lazy(() => import('./pages/Register'));
 const AuditLogs = lazy(() => import('./pages/AuditLogs'));
 const SmartTracker = lazy(() => import('./pages/SmartTracker'));
 const SchoolSettings = lazy(() => import('./pages/SchoolSettings'));
+const SchoolUsers = lazy(() => import('./pages/SchoolUsers'));
 const ExtensionSetup = lazy(() => import('./pages/ExtensionSetup'));
 const SmartPassSystem = lazy(() => import('./pages/SmartPassSystem'));
 const TeacherQuickConfirmPage = lazy(() => import('./pages/TeacherQuickConfirmPage'));
 const PassVerificationPage = lazy(() => import('./pages/PassVerificationPage'));
+
+const StudentSearch = lazy(() => import('./pages/StudentSearch'));
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: string[] }> = ({ children, allowedRoles }) => {
   const { user } = useAuth();
@@ -79,7 +80,6 @@ const App: React.FC = () => {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/parent-login" element={<ParentLogin />} />
-            <Route path="/smart-pass" element={<SmartPassSystem />} />
             <Route path="/quick-confirm/:passId" element={<TeacherQuickConfirmPage />} />
             <Route path="/verify-pass/:passId" element={<PassVerificationPage />} />
             <Route path="/parent-portal" element={
@@ -118,6 +118,11 @@ const App: React.FC = () => {
               } />
               <Route path="referral/:id" element={<ReferralDetails />} />
               <Route path="student/:id" element={<StudentProfile />} />
+              <Route path="students" element={
+                <ProtectedRoute allowedRoles={['vice_principal', 'counselor', 'principal', 'admin', 'teacher']}>
+                  <StudentSearch />
+                </ProtectedRoute>
+              } />
               <Route path="student/:studentId/subject/:subjectId" element={<SubjectDetails />} />
               <Route path="attendance/teacher" element={
                 <ProtectedRoute allowedRoles={['teacher']}>
@@ -125,7 +130,7 @@ const App: React.FC = () => {
                 </ProtectedRoute>
               } />
               <Route path="class-tracker" element={
-                <ProtectedRoute allowedRoles={['teacher']}>
+                <ProtectedRoute allowedRoles={['teacher', 'principal', 'vice_principal']}>
                   <SmartTracker />
                 </ProtectedRoute>
               } />
@@ -134,14 +139,19 @@ const App: React.FC = () => {
                   <VPRadar />
                 </ProtectedRoute>
               } />
-              <Route path="student-record" element={
+              <Route path="absence-record" element={
                 <ProtectedRoute allowedRoles={['vice_principal', 'counselor', 'principal', 'admin']}>
-                  <StudentRecordSearch />
+                  <AbsenceRecord />
                 </ProtectedRoute>
               } />
               <Route path="extension-setup" element={
                 <ProtectedRoute allowedRoles={['teacher', 'vice_principal']}>
                   <ExtensionSetup />
+                </ProtectedRoute>
+              } />
+              <Route path="smart-pass" element={
+                <ProtectedRoute allowedRoles={['vice_principal', 'principal', 'admin', 'management']}>
+                  <SmartPassSystem />
                 </ProtectedRoute>
               } />
               <Route path="reports" element={<Reports />} />
@@ -170,6 +180,11 @@ const App: React.FC = () => {
               <Route path="school-settings" element={
                 <ProtectedRoute allowedRoles={['admin', 'principal']}>
                   <SchoolSettings />
+                </ProtectedRoute>
+              } />
+              <Route path="school-users" element={
+                <ProtectedRoute allowedRoles={['admin', 'principal', 'vice_principal']}>
+                  <SchoolUsers />
                 </ProtectedRoute>
               } />
               <Route path="message-center" element={
