@@ -47,6 +47,7 @@ const TeacherQuickConfirmPage = lazy(() => import('./pages/TeacherQuickConfirmPa
 const PassVerificationPage = lazy(() => import('./pages/PassVerificationPage'));
 
 const StudentSearch = lazy(() => import('./pages/StudentSearch'));
+const ClassTracker = lazy(() => import('./pages/ClassTracker'));
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: string[] }> = ({ children, allowedRoles }) => {
   const { user } = useAuth();
@@ -132,6 +133,11 @@ const App: React.FC = () => {
               <Route path="class-tracker" element={
                 <ProtectedRoute allowedRoles={['teacher', 'principal', 'vice_principal']}>
                   <SmartTracker />
+                </ProtectedRoute>
+              } />
+              <Route path="class-tracker-simple" element={
+                <ProtectedRoute allowedRoles={['teacher', 'principal', 'vice_principal']}>
+                  <ClassTracker />
                 </ProtectedRoute>
               } />
               <Route path="attendance/radar" element={
