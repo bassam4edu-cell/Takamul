@@ -1772,7 +1772,13 @@ async function startServer() {
           r.id::text as event_id,
           r.created_at as event_date,
           COALESCE(u.name, 'مستخدم محذوف') as actor_name,
-          r.reason as description,
+          'إحالة سلوكية من ' || COALESCE(u.name, 'مستخدم محذوف') || ': ' || 
+          COALESCE(r.reason, 'بدون سبب محدد') || 
+          ' (النوع: ' || CASE 
+            WHEN r.type = 'behavioral' THEN 'سلوكي'
+            WHEN r.type = 'academic' THEN 'أكاديمي'
+            ELSE r.type 
+          END || ')' as description,
           r.type as category,
           r.status as status
         FROM referrals r
@@ -1800,7 +1806,13 @@ async function startServer() {
           s.id::text as event_id,
           s.created_at as event_date,
           COALESCE(u.name, 'مستخدم محذوف') as actor_name,
-          s.reason_or_evidence as description,
+          CASE 
+            WHEN s.action_type = 'deduction' THEN 'خصم نقاط سلوكية: '
+            WHEN s.action_type = 'bonus' THEN 'مكافأة سلوكية: '
+            WHEN s.action_type = 'compensation' THEN 'تعويض نقاط: '
+            ELSE 'تعديل سلوكي: '
+          END || COALESCE(s.reason_or_evidence, 'بدون سبب') || 
+          ' (النظام الرسمي - النقاط: ' || ABS(s.points_changed) || ')' as description,
           s.action_type as category,
           'completed' as status
         FROM student_score_logs s
@@ -1827,11 +1839,13 @@ async function startServer() {
 
         SELECT 
           'smart_behavior' as event_type,
-          ss.id::text as event_id,
+          ss.id::text || '_' || chip as event_id,
           s.created_at as event_date,
           COALESCE(u.name, 'مستخدم محذوف') as actor_name,
-          chip as description,
-          'behavior' as category,
+          'قام معلم ' || COALESCE(s.subject, 'مادة غير محددة') || ' ' || 
+          COALESCE(u.name, 'مستخدم محذوف') || ' بملاحظة: ' || chip || 
+          ' (الصف ' || s.grade || ' - ' || s.section || ')' as description,
+          s.subject as category,
           'completed' as status
         FROM smart_tracker_student_states ss
         CROSS JOIN LATERAL jsonb_array_elements_text(ss.behavior_chips) as chip
@@ -1928,6 +1942,212 @@ async function startServer() {
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to fetch student profile" });
+    }
+  });
+
+  // New comprehensive endpoint for Student Drawer
+  app.get("/api/student-drawer/:id", async (req, res) => {
+    const { id } = req.params;
+    try {
+      // 1. Student basic info
+      const studentResult = await sql`SELECT * FROM students WHERE id = ${id}`;
+      if (studentResult.length === 0) {
+        return res.status(404).json({ error: "Student not found" });
+      }
+      const student = studentResult[0];
+
+      // 2. All grades from SmartTracker (complete history)
+      const allGrades = await sql`
+        SELECT 
+          t.id as task_id,
+          t.title as task_name,
+          t.max_score,
+          t.noor_category,
+          t.subject,
+          t.grade,
+          t.term,
+          sg.score,
+          sg.updated_at,
+          COALESCE(u.name, 'مستخدم محذوف') as teacher_name
+        FROM smart_grade_records_v2 sg
+        JOIN smart_tasks_v2 t ON sg.task_id = t.id
+        LEFT JOIN users u ON sg.teacher_id = u.id
+        WHERE sg.student_national_id = ${student.national_id}
+        ORDER BY sg.updated_at DESC
+      `;
+
+      // 3. Complete attendance from BOTH sources
+      const attendanceFromRecords = await sql`
+        SELECT 
+          id,
+          date,
+          status,
+          is_excused,
+          period,
+          COALESCE(u.name, 'مستخدم محذوف') as teacher_name,
+          'official' as source
+        FROM attendance_records ar
+        LEFT JOIN users u ON ar.teacher_id = u.id
+        WHERE ar.student_id = ${id}
+        ORDER BY date DESC
+        LIMIT 30
+      `;
+
+      const attendanceFromTracker = await sql`
+        SELECT 
+          ss.id,
+          s.created_at as date,
+          ss.attendance as status,
+          false as is_excused,
+          1 as period,
+          COALESCE(u.name, 'مستخدم محذوف') as teacher_name,
+          'tracker' as source,
+          s.subject,
+          s.grade,
+          s.section
+        FROM smart_tracker_student_states ss
+        JOIN smart_tracker_sessions s ON ss.session_id = s.id
+        LEFT JOIN users u ON s.teacher_id = u.id
+        WHERE ss.student_id = ${id}
+        AND ss.attendance IN ('absent', 'late')
+        ORDER BY s.created_at DESC
+        LIMIT 30
+      `;
+
+      // Merge attendance from both sources
+      const allAttendance = [...attendanceFromRecords, ...attendanceFromTracker]
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        .slice(0, 30);
+
+      // 4. Timeline (already comprehensive from student-profile)
+      const timeline = await sql`
+        SELECT 
+          'referral' as event_type,
+          r.id::text as event_id,
+          r.created_at as event_date,
+          COALESCE(u.name, 'مستخدم محذوف') as actor_name,
+          'إحالة سلوكية من ' || COALESCE(u.name, 'مستخدم محذوف') || ': ' || 
+          COALESCE(r.reason, 'بدون سبب محدد') || 
+          ' (النوع: ' || CASE 
+            WHEN r.type = 'behavioral' THEN 'سلوكي'
+            WHEN r.type = 'academic' THEN 'أكاديمي'
+            ELSE r.type 
+          END || ')' as description,
+          r.type as category,
+          r.status as status
+        FROM referrals r
+        LEFT JOIN users u ON r.teacher_id = u.id
+        WHERE r.student_id = ${id}
+
+        UNION ALL
+
+        SELECT 
+          'attendance' as event_type,
+          a.id::text as event_id,
+          a.created_at as event_date,
+          COALESCE(u.name, 'مستخدم محذوف') as actor_name,
+          a.status as description,
+          CASE WHEN a.is_excused THEN 'excused' ELSE 'unexcused' END as category,
+          'completed' as status
+        FROM attendance_records a
+        LEFT JOIN users u ON a.teacher_id = u.id
+        WHERE a.student_id = ${id} AND a.status != 'حاضر'
+
+        UNION ALL
+
+        SELECT 
+          'score_log' as event_type,
+          s.id::text as event_id,
+          s.created_at as event_date,
+          COALESCE(u.name, 'مستخدم محذوف') as actor_name,
+          CASE 
+            WHEN s.action_type = 'deduction' THEN 'خصم نقاط سلوكية: '
+            WHEN s.action_type = 'bonus' THEN 'مكافأة سلوكية: '
+            WHEN s.action_type = 'compensation' THEN 'تعويض نقاط: '
+            ELSE 'تعديل سلوكي: '
+          END || COALESCE(s.reason_or_evidence, 'بدون سبب') || 
+          ' (النظام الرسمي - النقاط: ' || ABS(s.points_changed) || ')' as description,
+          s.action_type as category,
+          'completed' as status
+        FROM student_score_logs s
+        LEFT JOIN users u ON s.created_by_user_id = u.id
+        WHERE s.student_id = ${id}
+
+        UNION ALL
+
+        SELECT 
+          'smart_grade' as event_type,
+          sg.id::text as event_id,
+          sg.updated_at as event_date,
+          COALESCE(u.name, 'مستخدم محذوف') as actor_name,
+          t.title || ': ' || sg.score || ' / ' || t.max_score as description,
+          t.noor_category as category,
+          'completed' as status
+        FROM smart_grade_records_v2 sg
+        JOIN smart_tasks_v2 t ON sg.task_id = t.id
+        JOIN students s ON sg.student_national_id = s.national_id
+        LEFT JOIN users u ON sg.teacher_id = u.id
+        WHERE s.id = ${id}
+
+        UNION ALL
+
+        SELECT 
+          'smart_behavior' as event_type,
+          ss.id::text || '_' || chip as event_id,
+          s.created_at as event_date,
+          COALESCE(u.name, 'مستخدم محذوف') as actor_name,
+          'قام معلم ' || COALESCE(s.subject, 'مادة غير محددة') || ' ' || 
+          COALESCE(u.name, 'مستخدم محذوف') || ' بملاحظة: ' || chip || 
+          ' (الصف ' || s.grade || ' - ' || s.section || ')' as description,
+          s.subject as category,
+          'completed' as status
+        FROM smart_tracker_student_states ss
+        CROSS JOIN LATERAL jsonb_array_elements_text(ss.behavior_chips) as chip
+        JOIN smart_tracker_sessions s ON ss.session_id = s.id
+        LEFT JOIN users u ON s.teacher_id = u.id
+        WHERE ss.student_id = ${id} AND jsonb_array_length(ss.behavior_chips) > 0
+
+        ORDER BY event_date DESC
+        LIMIT 50
+      `;
+
+      // 5. Calculate scores
+      const absencesResult = await sql`
+        SELECT COUNT(*) as unexcused_absences 
+        FROM attendance_records 
+        WHERE student_id = ${id} AND status = 'غائب' AND is_excused = FALSE
+      `;
+      const unexcusedAbsences = parseInt(absencesResult[0].unexcused_absences || 0);
+      const attendanceScore = Math.max(0, 100 - unexcusedAbsences);
+
+      const scoreLogs = await sql`
+        SELECT action_type, SUM(points_changed) as total_points
+        FROM student_score_logs
+        WHERE student_id = ${id}
+        GROUP BY action_type
+      `;
+      let behaviorDeductions = 0;
+      let reinforcementPoints = 0;
+      scoreLogs.forEach((log: any) => {
+        if (log.action_type === 'deduction') behaviorDeductions += parseInt(log.total_points || 0);
+        if (log.action_type === 'bonus' || log.action_type === 'compensation') reinforcementPoints += parseInt(log.total_points || 0);
+      });
+      const behaviorScore = Math.max(0, 100 - behaviorDeductions);
+
+      res.json({
+        student: {
+          ...student,
+          live_attendance_score: attendanceScore,
+          live_behavior_score: behaviorScore,
+          reinforcement_points: reinforcementPoints
+        },
+        allGrades,
+        allAttendance,
+        timeline
+      });
+    } catch (err) {
+      console.error('Failed to fetch student drawer data:', err);
+      res.status(500).json({ error: "Failed to fetch student drawer data" });
     }
   });
 
