@@ -1,20 +1,50 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# 🎓 نظام إدارة مدرسي متكامل
 
-# Run and deploy your AI Studio app
+نظام شامل لإدارة المدارس مع تتبع الحضور، الدرجات، السلوك، والنسخ الاحتياطية التلقائية.
 
-This contains everything you need to run your app locally.
+## ✨ الميزات الرئيسية
 
-View your app in AI Studio: https://ai.studio/apps/ae7666dc-6949-4426-ba20-dee443a9dd91
+### 📊 إدارة الطلاب
+- ✅ SmartTracker - كشف المتابعة الذكي
+- ✅ ClassTracker - المتابعة المبسطة  
+- ✅ رادار التحضير
+- ✅ الملف الشامل للطالب
 
-## Run Locally
+### 🔒 النسخ الاحتياطية (جديد!)
+- ✅ نسخ احتياطي يومي تلقائي (2:00 صباحاً)
+- ✅ نسخ احتياطي يدوي من واجهة Admin
+- ✅ الاحتفاظ بآخر 30 نسخة
 
-**Prerequisites:**  Node.js
+### 🛡️ الأمان وسلامة البيانات
+- ✅ Transaction system كامل
+- ✅ Foreign keys محسنة مع CASCADE
+- ✅ 15+ Indexes للأداء
 
+---
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## 🚀 التثبيت
+
+```bash
+# 1. تثبيت Dependencies
+npm install
+
+# 2. إعداد قاعدة البيانات
+psql your_db < migrations/001_fix_critical_issues.sql
+
+# 3. إعداد .env
+cp .env.example .env
+
+# 4. إنشاء مجلد Backups
+sudo mkdir -p /var/backups/school-db
+sudo chown $USER /var/backups/school-db
+
+# 5. تشغيل
+npm run dev
+```
+
+راجع `/docs/SETUP_GUIDE.md` للتفاصيل الكاملة.
+
+---
+
+**الإصدار:** 2.0.0  
+**الحالة:** جاهز للإنتاج ✅
